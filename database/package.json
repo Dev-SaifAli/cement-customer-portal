@@ -1,0 +1,13 @@
+{
+  "name": "database",
+  "private": true,
+  "scripts": {
+    "migrate:up": "node-pg-migrate up -m migrations",
+    "migrate:down": "node-pg-migrate down -m migrations"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.1",
+    "node-pg-migrate": "^8.0.3",
+    "pg": "^8.16.3"
+  }
+}

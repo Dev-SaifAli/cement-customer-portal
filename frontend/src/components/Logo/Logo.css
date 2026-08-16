@@ -1,0 +1,31 @@
+.logo-mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logo-glyph {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--purple-tint);
+  color: var(--purple);
+}
+.logo-glyph svg {
+  width: 24px;
+  height: 24px;
+}
+.logo-mark--sm .logo-glyph {
+  width: 32px;
+  height: 32px;
+}
+.logo-mark--sm .logo-glyph svg {
+  width: 19px;
+  height: 19px;
+}
+.logo-mark--sm .logo-word {
+  font-size: 17px;
+}

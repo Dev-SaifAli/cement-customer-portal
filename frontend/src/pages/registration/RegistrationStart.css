@@ -1,0 +1,360 @@
+.registration-start {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(380px, 51%) minmax(520px, 49%);
+  background: #ffffff;
+  overflow: hidden;
+}
+
+/* =========================
+   LEFT HERO
+========================= */
+
+.registration-hero {
+  position: relative;
+  min-height: 100vh;
+  background-image: url('/images/cement-plant.jpg');
+  background-size: cover;
+  background-position: center;
+  isolation: isolate;
+}
+
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(25, 25, 25, 0.08) 0%,
+    rgba(25, 25, 25, 0.15) 45%,
+    rgba(20, 20, 20, 0.78) 100%
+  );
+  z-index: -1;
+}
+
+.hero-content {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-end;
+  padding: 56px 54px;
+  color: #ffffff;
+}
+
+.hero-content h1 {
+  margin: 0 0 12px;
+  font-size: clamp(38px, 4vw, 52px);
+  line-height: 1.05;
+  font-weight: 700;
+  letter-spacing: -1.5px;
+}
+
+.hero-content p {
+  max-width: 500px;
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+/* =========================
+   RIGHT CONTENT
+========================= */
+
+.registration-content {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  overflow-y: auto;
+  background: #ffffff;
+}
+
+.registration-inner {
+  width: 100%;
+  max-width: 650px;
+  padding: 76px 54px 56px;
+}
+
+/* Header */
+
+.registration-header h2 {
+  margin: 0;
+  color: #242424;
+  font-size: clamp(32px, 3vw, 42px);
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -1px;
+}
+
+.registration-header p {
+  margin: 16px 0 0;
+  color: #66615f;
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+/* =========================
+   REVIEW NOTICE
+========================= */
+
+.review-notice {
+  display: flex;
+  gap: 15px;
+  margin-top: 42px;
+  padding: 18px 20px;
+  border: 1px solid #d9cbdc;
+  border-radius: 4px;
+  background: #fbf9fb;
+}
+
+.notice-icon {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5b2c82;
+}
+
+.review-notice h3 {
+  margin: 0 0 5px;
+  color: #2c2a2a;
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+.review-notice p {
+  margin: 0;
+  color: #686361;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* =========================
+   PROCESS
+========================= */
+
+.process-section {
+  margin-top: 42px;
+}
+
+.process-title {
+  margin: 0 0 25px;
+  color: #5e5957;
+  font-size: 14px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.process-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.process-item {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  column-gap: 14px;
+  min-height: 74px;
+}
+
+.process-marker-wrapper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.process-marker {
+  position: relative;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dbcddd;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #5b2c82;
+}
+
+.process-line {
+  position: absolute;
+  top: 36px;
+  bottom: -1px;
+  width: 1px;
+  background: #ded6df;
+}
+
+.process-content {
+  padding-top: 1px;
+  padding-bottom: 22px;
+}
+
+.process-content h4 {
+  margin: 0 0 4px;
+  color: #292727;
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+.process-content p {
+  margin: 0;
+  color: #6c6765;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+/* =========================
+   PRIMARY BUTTON
+========================= */
+
+.start-registration-button {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 18px;
+  padding: 0 22px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+
+  border: 0;
+  border-radius: 3px;
+
+  background: #5b2c82;
+  color: #ffffff;
+
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.start-registration-button:hover {
+  background: #4d246f;
+  box-shadow: 0 4px 12px rgba(91, 44, 130, 0.18);
+}
+
+.start-registration-button:active {
+  transform: translateY(1px);
+}
+
+.start-registration-button:focus-visible {
+  outline: 3px solid rgba(91, 44, 130, 0.25);
+  outline-offset: 3px;
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
+
+@media (max-width: 1000px) {
+  .registration-start {
+    grid-template-columns: 42% 58%;
+  }
+
+  .hero-content {
+    padding: 40px 32px;
+  }
+
+  .registration-inner {
+    padding: 54px 38px 44px;
+  }
+}
+
+@media (max-width: 760px) {
+  .registration-start {
+    display: block;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  .registration-hero {
+    min-height: 300px;
+    height: 300px;
+  }
+
+  .hero-content {
+    min-height: 300px;
+    padding: 32px 28px;
+  }
+
+  .hero-content h1 {
+    font-size: 36px;
+  }
+
+  .hero-content p {
+    font-size: 15px;
+  }
+
+  .registration-content {
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .registration-inner {
+    max-width: none;
+    padding: 42px 24px 40px;
+  }
+
+  .registration-header h2 {
+    font-size: 32px;
+  }
+
+  .review-notice {
+    margin-top: 30px;
+  }
+
+  .process-section {
+    margin-top: 34px;
+  }
+}
+
+@media (max-width: 480px) {
+  .registration-hero {
+    min-height: 250px;
+    height: 250px;
+  }
+
+  .hero-content {
+    min-height: 250px;
+    padding: 26px 22px;
+  }
+
+  .hero-content h1 {
+    font-size: 30px;
+  }
+
+  .registration-inner {
+    padding: 32px 18px 30px;
+  }
+
+  .registration-header p {
+    font-size: 15px;
+  }
+
+  .review-notice {
+    padding: 16px;
+  }
+
+  .process-item {
+    grid-template-columns: 34px 1fr;
+    column-gap: 12px;
+  }
+
+  .process-marker {
+    width: 32px;
+    height: 32px;
+  }
+}
