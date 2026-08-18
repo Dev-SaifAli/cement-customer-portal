@@ -3,7 +3,7 @@ import { vi } from 'vitest';
 
 vi.stubGlobal(
   'fetch',
-  vi.fn((input: RequestInfo | URL) => {
+  vi.fn((input: RequestInfo | URL, options?: RequestInit) => {
     const url = String(input);
 
     if (url.endsWith('/auth/captcha')) {
@@ -25,6 +25,52 @@ vi.stubGlobal(
       );
     }
 
+    if (url.endsWith('/registrations') && options?.method === 'POST') {
+      const payload = options?.body ? JSON.parse(String(options.body)) : {};
+      return Promise.resolve(registrationResponse(payload));
+    }
+
+    if (/\/registrations\/[0-9a-f-]+\/submit$/.test(url) && options?.method === 'POST') {
+      return Promise.resolve(
+        registrationResponse({
+          reference: 'APP-2026-123456',
+          status: 'PENDING_SALES_REVIEW',
+          submittedAt: new Date().toISOString(),
+        }),
+      );
+    }
+
+    if (/\/registrations\/[0-9a-f-]+$/.test(url)) {
+      const payload = options?.body ? JSON.parse(String(options.body)) : {};
+      return Promise.resolve(registrationResponse(payload));
+    }
+
     return Promise.reject(new Error(`Unhandled fetch request: ${url}`));
   }),
 );
+
+function registrationResponse(overrides: Record<string, unknown> = {}) {
+  return new Response(
+    JSON.stringify({
+      success: true,
+      registration: {
+        id: '11111111-1111-4111-8111-111111111111',
+        reference: null,
+        status: 'DRAFT',
+        currentStep: 1,
+        company: {},
+        contact: {},
+        documents: { cr: {}, vat: {} },
+        deliveryLocations: [],
+        administrator: {},
+        submittedAt: null,
+        updatedAt: new Date().toISOString(),
+        ...overrides,
+      },
+    }),
+    {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    },
+  );
+}

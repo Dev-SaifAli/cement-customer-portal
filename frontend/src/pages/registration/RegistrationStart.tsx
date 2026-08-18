@@ -8,6 +8,8 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { SaveStatus } from '../../components/registration/SaveStatus';
+import { useRegistration } from '../../context/RegistrationContext';
 import './RegistrationStart.css';
 
 interface RegistrationStartProps {
@@ -44,14 +46,15 @@ const registrationSteps = [
 
 export default function RegistrationStart({ onStart }: RegistrationStartProps) {
   const navigate = useNavigate();
+  const { currentStep, isLoadingDraft, resetRegistration, saveStatus, submittedApplication } =
+    useRegistration();
 
   const handleStart = () => {
-    if (onStart) {
-      onStart();
-      return;
-    }
-
-    navigate('/register/company');
+    if (onStart) onStart();
+    else if (submittedApplication) {
+      resetRegistration();
+      navigate('/register/company');
+    } else navigate(getRegistrationStepPath(currentStep));
   };
 
   return (
@@ -129,12 +132,39 @@ export default function RegistrationStart({ onStart }: RegistrationStartProps) {
           </section>
 
           {/* Primary action */}
-          <button type="button" className="start-registration-button" onClick={handleStart}>
-            <span>Start Registration</span>
+          <div className="mb-3 text-right">
+            <SaveStatus />
+          </div>
+          <button
+            type="button"
+            className="start-registration-button"
+            onClick={handleStart}
+            disabled={isLoadingDraft || saveStatus === 'saving'}
+          >
+            <span>
+              {isLoadingDraft
+                ? 'Preparing registration...'
+                : currentStep > 1
+                  ? 'Continue Registration'
+                  : 'Start Registration'}
+            </span>
             <ArrowRight size={20} strokeWidth={2.2} />
           </button>
         </div>
       </main>
     </div>
   );
+}
+
+function getRegistrationStepPath(step: number) {
+  const paths: Record<number, string> = {
+    1: '/register/company',
+    2: '/register/contact',
+    3: '/register/documents',
+    4: '/register/locations',
+    5: '/register/admin',
+    6: '/register/review',
+  };
+
+  return paths[step] ?? '/register/company';
 }

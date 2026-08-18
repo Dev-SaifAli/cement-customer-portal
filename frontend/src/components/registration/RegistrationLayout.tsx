@@ -1,4 +1,3 @@
-import { X } from 'lucide-react';
 import { type ReactNode } from 'react';
 import { RegistrationProgress } from './RegistrationProgress';
 
@@ -12,7 +11,7 @@ export function RegistrationLayout({
   return (
     <div className="min-h-screen bg-[#f8f7f7] text-[#292929]">
       <header className="h-[68px] border-b border-[#e4dfe5] bg-white">
-        <div className="mx-auto flex h-full max-w-[1280px] items-center justify-between px-6">
+        <div className="mx-auto flex h-full max-w-[1280px] items-center px-6">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#5b2a7a] text-white">
               <span className="text-lg font-bold">A</span>
@@ -26,14 +25,6 @@ export function RegistrationLayout({
               </div>
             </div>
           </div>
-
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 text-sm font-semibold text-[#625d63] transition hover:text-[#5b2d7d]"
-          >
-            <X size={18} />
-            Exit
-          </button>
         </div>
       </header>
 

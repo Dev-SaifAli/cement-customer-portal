@@ -1,6 +1,12 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useEffect } from 'react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SaveDraftButton } from '../components/registration/SaveDraftButton';
+import { RegistrationProvider, useRegistration } from '../context/RegistrationContext';
+import ApplicationSubmitted from '../pages/registration/ApplicationSubmitted';
+import CustomerAdmin from '../pages/registration/CustomerAdmin';
+import ReviewSubmit from '../pages/registration/ReviewSubmit';
 import { AppRoutes } from './AppRoutes';
 
 const routes = [
@@ -11,8 +17,16 @@ const routes = [
   ['/reset-password/success', 'Password Reset Successfully'],
 ] as const;
 
+beforeEach(() => {
+  window.localStorage.clear();
+  window.sessionStorage.clear();
+});
+
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
+  vi.mocked(fetch).mockClear();
 });
 
 describe('authentication routes', () => {
@@ -26,7 +40,7 @@ describe('authentication routes', () => {
     expect(screen.getByRole('heading', { name: heading, level: 1 })).toBeInTheDocument();
   });
 
-  it('navigates from the login registration link to the registration start page', () => {
+  it('navigates from the login registration link to the registration start page', async () => {
     render(
       <MemoryRouter initialEntries={['/login']}>
         <AppRoutes />
@@ -38,19 +52,329 @@ describe('authentication routes', () => {
     expect(
       screen.getByRole('heading', { name: 'Register Your Organization', level: 2 }),
     ).toBeInTheDocument();
+    await screen.findByRole('button', { name: /start registration/i });
+
+    const registrationCalls = vi
+      .mocked(fetch)
+      .mock.calls.filter(([input]) => String(input).includes('/registrations'));
+
+    expect(registrationCalls).toHaveLength(0);
   });
 
-  it('navigates from the registration start page to company information', () => {
+  it('does not create a draft until the user explicitly saves company information', async () => {
     render(
       <MemoryRouter initialEntries={['/register']}>
         <AppRoutes />
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /start registration/i }));
+    const startButton = await screen.findByRole('button', { name: /start registration/i });
+    await waitFor(() => expect(startButton).toBeEnabled());
 
     expect(
-      screen.getByRole('heading', { name: 'Company Information', level: 1 }),
+      vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes('/registrations')),
+    ).toHaveLength(0);
+
+    fireEvent.click(startButton);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: 'Company Information', level: 1 }),
+      ).toBeInTheDocument();
+    });
+
+    expect(
+      vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes('/registrations')),
+    ).toHaveLength(0);
+
+    expect(screen.getByRole('button', { name: /save draft/i })).toBeDisabled();
+
+    fireEvent.change(screen.getByPlaceholderText(/arabian construction/i), {
+      target: { value: 'AlSafwa Test Customer' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/10-digit number/i), {
+      target: { value: '1234567890' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/15-digit number/i), {
+      target: { value: '123456789012345' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/building number/i), {
+      target: { value: '123 Cement Road' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/jeddah/i), {
+      target: { value: 'Jeddah' },
+    });
+
+    const regionSelect = screen.getAllByRole('combobox')[0];
+    expect(regionSelect).toBeDefined();
+    fireEvent.change(regionSelect!, {
+      target: { value: 'Makkah Province' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/5-digit code/i), {
+      target: { value: '12345' },
+    });
+
+    expect(screen.getByRole('button', { name: /save draft/i })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /save draft/i }));
+
+    await waitFor(() => {
+      expect(
+        vi.mocked(fetch).mock.calls.filter(([input]) => String(input).endsWith('/registrations')),
+      ).toHaveLength(1);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /saved/i })).toBeDisabled();
+    });
+
+    await waitFor(() => {
+      expect(
+        vi.mocked(fetch).mock.calls.filter(([, options]) => options?.method === 'PATCH'),
+      ).toHaveLength(0);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: 'Primary Contact Information', level: 1 }),
+      ).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /save draft/i })).toBeDisabled();
+    });
+
+    const registrationCalls = vi
+      .mocked(fetch)
+      .mock.calls.filter(([input]) => String(input).endsWith('/registrations'));
+    const updateCalls = vi
+      .mocked(fetch)
+      .mock.calls.filter(([, options]) => options?.method === 'PATCH');
+
+    expect(registrationCalls).toHaveLength(1);
+    expect(updateCalls).toHaveLength(0);
+  });
+
+  it('keeps customer administrator save draft disabled until data changes and disables it after save', async () => {
+    render(
+      <MemoryRouter>
+        <RegistrationProvider>
+          <CustomerAdmin />
+        </RegistrationProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /save draft/i })).toBeDisabled();
+    });
+
+    const fields = screen.getAllByRole('textbox');
+
+    fireEvent.change(fields[0]!, {
+      target: { value: 'Sara Admin' },
+    });
+    fireEvent.change(fields[1]!, {
+      target: { value: 'Portal Administrator' },
+    });
+    fireEvent.change(fields[2]!, {
+      target: { value: 'sara.admin@example.com' },
+    });
+    fireEvent.change(fields[3]!, {
+      target: { value: '512345678' },
+    });
+
+    const passwordFields = document.querySelectorAll<HTMLInputElement>('input[type="password"]');
+
+    fireEvent.change(passwordFields[0]!, {
+      target: { value: 'Password1' },
+    });
+    fireEvent.change(passwordFields[1]!, {
+      target: { value: 'Password1' },
+    });
+
+    expect(screen.getByRole('button', { name: /save draft/i })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /save draft/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /saved/i })).toBeDisabled();
+    });
+  });
+
+  it('allows save draft after an earlier no-op save attempt', async () => {
+    function NoOpSaveThenCompanyUpdate() {
+      const { saveDraft, updateCompany } = useRegistration();
+
+      return (
+        <>
+          <button type="button" onClick={() => void saveDraft()}>
+            No-op save
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              updateCompany({
+                companyName: 'AlSafwa Test Customer',
+                crNumber: '1234567890',
+                vatNumber: '123456789012345',
+                streetAddress: '123 Cement Road',
+                city: 'Jeddah',
+                region: 'Makkah Province',
+                postalCode: '12345',
+              })
+            }
+          >
+            Enter company data
+          </button>
+          <SaveDraftButton className="rounded-md border border-gray-400 bg-white px-6 py-3 text-sm font-semibold text-gray-600 disabled:opacity-60" />
+        </>
+      );
+    }
+
+    render(
+      <MemoryRouter>
+        <RegistrationProvider>
+          <NoOpSaveThenCompanyUpdate />
+        </RegistrationProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /no-op save/i }));
+    fireEvent.click(screen.getByRole('button', { name: /enter company data/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /save draft/i })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /save draft/i }));
+
+    await waitFor(() => {
+      expect(
+        vi.mocked(fetch).mock.calls.filter(([input]) => String(input).endsWith('/registrations')),
+      ).toHaveLength(1);
+    });
+  });
+
+  it('renders the submitted screen from stored submitted confirmation', async () => {
+    window.sessionStorage.setItem(
+      'alsafwa_submitted_application',
+      JSON.stringify({
+        reference: 'APP-2026-123456',
+        status: 'UNDER_REVIEW',
+        statusLabel: 'Pending Sales Review',
+        submittedAt: new Date().toISOString(),
+      }),
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/register/submitted']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: 'Application Submitted', level: 1 }),
     ).toBeInTheDocument();
+    expect(screen.getByText('APP-2026-123456')).toBeInTheDocument();
+  });
+
+  it('navigates from review submit to the submitted confirmation screen', async () => {
+    render(
+      <MemoryRouter initialEntries={['/register/review']}>
+        <RegistrationProvider>
+          <Routes>
+            <Route
+              path="/register/review"
+              element={
+                <>
+                  <SeedCompleteRegistration />
+                  <ReviewSubmit />
+                </>
+              }
+            />
+            <Route path="/register/submitted" element={<ApplicationSubmitted />} />
+          </Routes>
+        </RegistrationProvider>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('AlSafwa Test Customer');
+
+    fireEvent.click(screen.getByRole('button', { name: /submit application/i }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Application Submitted', level: 1 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('APP-2026-123456')).toBeInTheDocument();
   });
 });
+
+function SeedCompleteRegistration() {
+  const {
+    setDeliveryLocations,
+    updateAdministrator,
+    updateCompany,
+    updateContact,
+    updateDocuments,
+  } = useRegistration();
+
+  useEffect(() => {
+    updateCompany({
+      companyName: 'AlSafwa Test Customer',
+      crNumber: '1234567890',
+      vatNumber: '123456789012345',
+      streetAddress: '123 Cement Road',
+      city: 'Jeddah',
+      region: 'Makkah Province',
+      postalCode: '12345',
+    });
+    updateContact({
+      fullName: 'Sara Contact',
+      jobTitle: 'Procurement Manager',
+      email: 'sara.contact@example.com',
+      phone: '512345678',
+    });
+    updateDocuments({
+      cr: {
+        file: null,
+        fileName: 'cr.pdf',
+        fileSize: 1024,
+        fileType: 'application/pdf',
+        expiryDate: '2099-12-31',
+      },
+      vat: {
+        file: null,
+        fileName: 'vat.pdf',
+        fileSize: 1024,
+        fileType: 'application/pdf',
+        expiryDate: '2099-12-31',
+      },
+    });
+    setDeliveryLocations([
+      {
+        id: 'location-1',
+        name: 'Main Site',
+        siteId: 'SITE-1',
+        streetAddress: '456 Project Road',
+        city: 'Jeddah',
+        region: 'Makkah Province',
+        country: 'Saudi Arabia',
+        postalCode: '23456',
+        contactPerson: 'Ali Site',
+        contactPhone: '512345679',
+      },
+    ]);
+    updateAdministrator({
+      fullName: 'Sara Admin',
+      jobTitle: 'Portal Administrator',
+      email: 'sara.admin@example.com',
+      phone: '512345680',
+      password: 'Password1',
+      confirmPassword: 'Password1',
+    });
+  }, [setDeliveryLocations, updateAdministrator, updateCompany, updateContact, updateDocuments]);
+
+  return null;
+}

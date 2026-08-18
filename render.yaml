@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: cement-customer-portal-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build -w backend
+    startCommand: npm run start -w backend
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_URL
+        sync: false
+      - key: API_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: FILE_STORAGE_DRIVER
+        value: local

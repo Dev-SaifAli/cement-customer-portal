@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -8,11 +8,12 @@ import {
   RefreshCw,
   Trash2,
   Upload,
-  X,
   AlertCircle,
   CalendarDays,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { SaveDraftButton } from '../../components/registration/SaveDraftButton';
+import { SaveStatus } from '../../components/registration/SaveStatus';
 import {
   isAcceptedDocumentFile,
   isDocumentValid as isRegistrationDocumentValid,
@@ -37,15 +38,14 @@ const ACCEPTED_EXTENSIONS = '.pdf,.jpg,.jpeg,.png';
 
 export default function Documents() {
   const navigate = useNavigate();
-  const { data, updateDocuments } = useRegistration();
+  const { continueRegistration, data, setCurrentStep, updateDocuments } = useRegistration();
   const documents = data.documents;
 
   const [errors, setErrors] = useState<{
     cr?: string | undefined;
     vat?: string | undefined;
   }>({});
-
-  const [isSaving, setIsSaving] = useState(false);
+  useEffect(() => setCurrentStep(3), [setCurrentStep]);
 
   const crInputRef = useRef<HTMLInputElement>(null);
   const vatInputRef = useRef<HTMLInputElement>(null);
@@ -107,7 +107,14 @@ export default function Documents() {
       fileError = 'File size must not exceed 10 MB.';
     }
 
-    updateDocuments({ [type]: { file } });
+    updateDocuments({
+      [type]: {
+        file,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+      },
+    });
 
     setErrors((previous) => ({
       ...previous,
@@ -140,9 +147,10 @@ export default function Documents() {
   const handleExpiryChange = (type: DocumentType, expiryDate: string) => {
     updateDocuments({ [type]: { expiryDate } });
 
-    const file = documents[type].file;
+    const document = documents[type];
+    const file = document.file;
 
-    if (!file) {
+    if (!file && !document.fileName) {
       setErrors((previous) => ({
         ...previous,
         [type]: 'Please upload the required document.',
@@ -151,7 +159,11 @@ export default function Documents() {
       return;
     }
 
-    const validationError = validateDocument(type, file, expiryDate);
+    const validationError = file
+      ? validateDocument(type, file, expiryDate)
+      : isRegistrationDocumentValid({ ...document, expiryDate })
+        ? ''
+        : 'Expiry date must be a future date.';
 
     setErrors((previous) => ({
       ...previous,
@@ -166,6 +178,9 @@ export default function Documents() {
     updateDocuments({
       [type]: {
         file: null,
+        fileName: undefined,
+        fileSize: undefined,
+        fileType: undefined,
         expiryDate: '',
       },
     });
@@ -181,9 +196,13 @@ export default function Documents() {
   const canContinue = isDocumentValid('cr') && isDocumentValid('vat');
 
   const handleContinue = () => {
-    const crError = validateDocument('cr', documents.cr.file, documents.cr.expiryDate);
+    const crError = isRegistrationDocumentValid(documents.cr)
+      ? ''
+      : 'Company CR document and a future expiry date are required.';
 
-    const vatError = validateDocument('vat', documents.vat.file, documents.vat.expiryDate);
+    const vatError = isRegistrationDocumentValid(documents.vat)
+      ? ''
+      : 'VAT Certificate document and a future expiry date are required.';
 
     setErrors({
       cr: crError || undefined,
@@ -194,21 +213,7 @@ export default function Documents() {
       return;
     }
 
-    navigate('/register/delivery-locations');
-  };
-
-  const handleSaveDraft = async () => {
-    setIsSaving(true);
-
-    console.log('Saving document draft:', documents);
-
-    // TODO:
-    // Upload files through API
-    // POST /api/v1/customer-registration/documents
-
-    await new Promise((resolve) => setTimeout(resolve, 700));
-
-    setIsSaving(false);
+    void continueRegistration(() => navigate('/register/locations'));
   };
 
   const handleBack = () => {
@@ -222,7 +227,7 @@ export default function Documents() {
       ===================================================== */}
 
       <header className="border-b border-[#e4dfe5] bg-white">
-        <div className="mx-auto flex min-h-[68px] max-w-[1440px] items-center justify-between px-6 sm:px-8 lg:px-10">
+        <div className="mx-auto flex min-h-[68px] max-w-[1440px] items-center px-6 sm:px-8 lg:px-10">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-sm bg-[#5b2d7d] text-white">
               <span className="text-sm font-bold">AS</span>
@@ -238,14 +243,6 @@ export default function Documents() {
               </div>
             </div>
           </div>
-
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 text-sm font-semibold text-[#625d63] transition hover:text-[#5b2d7d]"
-          >
-            <X size={18} />
-            Exit
-          </button>
         </div>
       </header>
 
@@ -326,14 +323,10 @@ export default function Documents() {
             </button>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center">
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                disabled={isSaving}
-                className="min-h-[46px] rounded-md px-6 text-[15px] font-semibold text-[#625d63] transition hover:text-[#5b2d7d] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isSaving ? 'Saving...' : 'Save Draft'}
-              </button>
+              <SaveStatus />
+              <SaveDraftButton className="min-h-[46px] rounded-md px-6 text-[15px] font-semibold text-[#625d63] transition hover:text-[#5b2d7d] disabled:cursor-not-allowed disabled:opacity-60">
+                Save Draft
+              </SaveDraftButton>
 
               <button
                 type="button"
@@ -397,7 +390,9 @@ function DocumentCard({
   onExpiryChange,
   isExpired,
 }: DocumentCardProps) {
-  const hasFile = !!document.file;
+  const hasFile = !!document.file || !!document.fileName;
+  const fileName = document.file?.name ?? document.fileName ?? '';
+  const fileSize = document.file?.size ?? document.fileSize;
 
   return (
     <article className="rounded-lg border border-[#dbcbdc] bg-white p-6 sm:p-7">
@@ -454,7 +449,7 @@ function DocumentCard({
           UPLOADED FILE
       ===================================================== */}
 
-      {hasFile && document.file && (
+      {hasFile && (
         <div className="mt-5 rounded-md border border-[#dbcbdc] bg-[#fcfbfc] p-5">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             {/* File */}
@@ -465,13 +460,11 @@ function DocumentCard({
               </div>
 
               <div className="min-w-0">
-                <p className="truncate text-[15px] font-semibold text-[#302c31]">
-                  {document.file.name}
-                </p>
+                <p className="truncate text-[15px] font-semibold text-[#302c31]">{fileName}</p>
 
-                <p className="mt-1 text-[13px] text-[#716b72]">
-                  {formatFileSize(document.file.size)}
-                </p>
+                {fileSize !== undefined && (
+                  <p className="mt-1 text-[13px] text-[#716b72]">{formatFileSize(fileSize)}</p>
+                )}
               </div>
             </div>
 

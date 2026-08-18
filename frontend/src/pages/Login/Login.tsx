@@ -170,9 +170,9 @@ export default function Login() {
         </p>
         <p>
           Already submitted an application?{' '}
-          <a href="#application-status" className="link-purple">
+          <Link to="/register/status" className="link-purple">
             Check Application Status
-          </a>
+          </Link>
         </p>
       </div>
     </AuthLayout>

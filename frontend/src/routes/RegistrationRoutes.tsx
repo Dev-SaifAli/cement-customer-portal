@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import {
   areDeliveryLocationsValid,
   areDocumentsValid,
@@ -6,10 +6,13 @@ import {
   isCompanyValid,
   isContactValid,
   isRegistrationComplete,
+  getStoredSubmittedApplication,
   RegistrationProvider,
   useRegistration,
 } from '../context/RegistrationContext';
+import type { SubmittedApplication } from '../context/RegistrationContext';
 import ApplicationSubmitted from '../pages/registration/ApplicationSubmitted';
+import ApplicationStatus from '../pages/registration/ApplicationStatus';
 import CompanyInfo from '../pages/registration/CompanyInfo';
 import ContactInfo from '../pages/registration/ContactInfo';
 import CustomerAdmin from '../pages/registration/CustomerAdmin';
@@ -28,7 +31,14 @@ function GuardedRegistrationRoute({
   children: React.ReactNode;
   step: RegistrationStep;
 }) {
-  const { data } = useRegistration();
+  const { data, isLoadingDraft, submittedApplication } = useRegistration();
+  const location = useLocation();
+  const submittedApplicationFromLocation = isSubmittedApplicationLocationState(location.state)
+    ? location.state.submittedApplication
+    : null;
+  const storedSubmittedApplication = getStoredSubmittedApplication();
+
+  if (isLoadingDraft) return null;
 
   if (step === 'contact' && !isCompanyValid(data.company)) {
     return <Navigate to="/register/company" replace />;
@@ -43,18 +53,36 @@ function GuardedRegistrationRoute({
   }
 
   if (step === 'customerAdmin' && !areDeliveryLocationsValid(data.deliveryLocations)) {
-    return <Navigate to="/register/delivery-locations" replace />;
+    return <Navigate to="/register/locations" replace />;
   }
 
   if (step === 'review' && !isAdministratorValid(data.administrator)) {
-    return <Navigate to="/register/customer-admin" replace />;
+    return <Navigate to="/register/admin" replace />;
   }
 
-  if (step === 'submitted' && !isRegistrationComplete(data)) {
+  if (
+    step === 'submitted' &&
+    !submittedApplication?.reference &&
+    !submittedApplicationFromLocation?.reference &&
+    !storedSubmittedApplication?.reference &&
+    !isRegistrationComplete(data)
+  ) {
     return <Navigate to="/register/review" replace />;
   }
 
   return children;
+}
+
+function isSubmittedApplicationLocationState(
+  state: unknown,
+): state is { submittedApplication: SubmittedApplication } {
+  return Boolean(
+    state &&
+    typeof state === 'object' &&
+    'submittedApplication' in state &&
+    typeof (state as { submittedApplication?: { reference?: unknown } }).submittedApplication
+      ?.reference === 'string',
+  );
 }
 
 function RegistrationRouteSet() {
@@ -79,21 +107,23 @@ function RegistrationRouteSet() {
         }
       />
       <Route
-        path="/delivery-locations"
+        path="/locations"
         element={
           <GuardedRegistrationRoute step="deliveryLocations">
             <DeliveryLocations />
           </GuardedRegistrationRoute>
         }
       />
+      <Route path="/delivery-locations" element={<Navigate to="/register/locations" replace />} />
       <Route
-        path="/customer-admin"
+        path="/admin"
         element={
           <GuardedRegistrationRoute step="customerAdmin">
             <CustomerAdmin />
           </GuardedRegistrationRoute>
         }
       />
+      <Route path="/customer-admin" element={<Navigate to="/register/admin" replace />} />
       <Route
         path="/review"
         element={
@@ -110,6 +140,7 @@ function RegistrationRouteSet() {
           </GuardedRegistrationRoute>
         }
       />
+      <Route path="/status" element={<ApplicationStatus />} />
       <Route path="*" element={<Navigate to="/register" replace />} />
     </Routes>
   );

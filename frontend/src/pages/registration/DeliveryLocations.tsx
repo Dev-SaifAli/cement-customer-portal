@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,11 +9,15 @@ import {
   Plus,
   Trash2,
   Edit3,
-  X,
   Save,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { SaveDraftButton } from '../../components/registration/SaveDraftButton';
+import { SaveStatus } from '../../components/registration/SaveStatus';
 import {
+  formatSaudiPhoneNumber,
+  getSaudiPhoneDigitsRemaining,
+  getSaudiPhoneLocalDigits,
   isSaudiPhoneNumber,
   useRegistration,
   type DeliveryLocation,
@@ -32,12 +36,14 @@ const emptyForm = {
 
 export default function DeliveryLocations() {
   const navigate = useNavigate();
-  const { data, setDeliveryLocations } = useRegistration();
+  const { continueRegistration, data, setCurrentStep, setDeliveryLocations } = useRegistration();
   const locations = data.deliveryLocations;
 
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => setCurrentStep(4), [setCurrentStep]);
 
   const updateField = (field: keyof typeof emptyForm, value: string) => {
     setForm((prev) => ({
@@ -63,7 +69,7 @@ export default function DeliveryLocations() {
     if (!form.contactPerson.trim()) newErrors.contactPerson = 'Contact person is required.';
     if (!form.contactPhone.trim()) newErrors.contactPhone = 'Contact phone is required.';
     else if (!isSaudiPhoneNumber(form.contactPhone)) {
-      newErrors.contactPhone = 'Enter a valid Saudi phone number.';
+      newErrors.contactPhone = 'Enter a valid Saudi mobile number.';
     }
 
     setErrors(newErrors);
@@ -156,13 +162,13 @@ export default function DeliveryLocations() {
       return;
     }
 
-    navigate('/register/customer-admin');
+    void continueRegistration(() => navigate('/register/admin'));
   };
 
   return (
     <div className="min-h-screen bg-[#fafafa] text-[#292929]">
       {/* Header */}
-      <header className="h-[68px] border-b border-[#e5e0e5] bg-white px-6 lg:px-10 flex items-center justify-between">
+      <header className="h-[68px] border-b border-[#e5e0e5] bg-white px-6 lg:px-10 flex items-center">
         <div className="flex items-center gap-5">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-sm bg-[#54247a] flex items-center justify-center">
@@ -178,11 +184,6 @@ export default function DeliveryLocations() {
 
           <span className="text-[16px] text-[#625c62]">Vendor Registration Portal</span>
         </div>
-
-        <button className="flex items-center gap-2 text-[#625c62] hover:text-[#54247a] transition-colors">
-          <X size={21} />
-          <span className="font-medium">Exit</span>
-        </button>
       </header>
 
       {/* Progress */}
@@ -293,7 +294,8 @@ export default function DeliveryLocations() {
                     <FormInput
                       label="Contact Phone"
                       required
-                      placeholder="+966 5X XXX XXXX"
+                      isPhone
+                      placeholder="5XX XXX XXX"
                       value={form.contactPhone}
                       error={errors.contactPhone}
                       onChange={(value) => updateField('contactPhone', value)}
@@ -378,12 +380,10 @@ export default function DeliveryLocations() {
           </button>
 
           <div className="flex items-center gap-4">
-            <button
-              type="button"
-              className="px-7 py-3 border border-[#817782] rounded-md bg-white text-[#494349] font-semibold hover:bg-[#faf7fb]"
-            >
+            <SaveStatus />
+            <SaveDraftButton className="px-7 py-3 border border-[#817782] rounded-md bg-white text-[#494349] font-semibold hover:bg-[#faf7fb] disabled:cursor-not-allowed disabled:opacity-60">
               Save Draft
-            </button>
+            </SaveDraftButton>
 
             <button
               type="button"
@@ -545,6 +545,7 @@ function FormInput({
   value,
   error,
   disabled,
+  isPhone,
   onChange,
 }: {
   label: string;
@@ -553,8 +554,14 @@ function FormInput({
   value: string;
   error?: string | undefined;
   disabled?: boolean | undefined;
+  isPhone?: boolean | undefined;
   onChange: (value: string) => void;
 }) {
+  const digitsRemaining = isPhone ? getSaudiPhoneDigitsRemaining(value) : 0;
+  const hasInvalidPhonePrefix = Boolean(
+    isPhone && digitsRemaining === 0 && !isSaudiPhoneNumber(value),
+  );
+
   return (
     <div>
       <label className="block text-[14px] font-semibold mb-2">
@@ -562,27 +569,55 @@ function FormInput({
         {required && <span className="text-red-600 ml-1">*</span>}
       </label>
 
-      <input
-        type="text"
-        value={value}
-        disabled={disabled}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        className={`
-          w-full h-[43px] px-3 rounded-sm border outline-none
-          text-[15px]
-          placeholder:text-[#b6adb6]
-          transition-colors
-          ${
-            error
-              ? 'border-red-500 focus:ring-2 focus:ring-red-100'
-              : 'border-[#d6cbd7] focus:border-[#54247a] focus:ring-2 focus:ring-[#54247a]/10'
+      <div
+        className={`flex h-[43px] overflow-hidden rounded-sm border bg-white transition-colors ${
+          error
+            ? 'border-red-500 focus-within:ring-2 focus-within:ring-red-100'
+            : 'border-[#d6cbd7] focus-within:border-[#54247a] focus-within:ring-2 focus-within:ring-[#54247a]/10'
+        } ${disabled ? 'bg-[#f1efef] text-[#6e696e] cursor-not-allowed' : ''}`}
+      >
+        {isPhone && (
+          <div className="flex items-center border-r border-[#d6cbd7] bg-[#f8f7f7] px-3 text-[15px] text-[#625c62]">
+            +966
+          </div>
+        )}
+
+        <input
+          type={isPhone ? 'tel' : 'text'}
+          inputMode={isPhone ? 'numeric' : undefined}
+          maxLength={isPhone ? 11 : undefined}
+          value={isPhone ? formatSaudiPhoneNumber(value) : value}
+          disabled={disabled}
+          placeholder={placeholder}
+          onChange={(e) =>
+            onChange(isPhone ? getSaudiPhoneLocalDigits(e.target.value) : e.target.value)
           }
-          ${disabled ? 'bg-[#f1efef] text-[#6e696e] cursor-not-allowed' : 'bg-white'}
-        `}
-      />
+          className={`
+            min-w-0 flex-1 px-3 text-[15px] outline-none
+            placeholder:text-[#b6adb6]
+            ${disabled ? 'cursor-not-allowed bg-[#f1efef]' : 'bg-white'}
+          `}
+        />
+      </div>
 
       {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+      {isPhone && !error && (
+        <p
+          className={`mt-1 text-xs font-medium ${
+            hasInvalidPhonePrefix
+              ? 'text-red-600'
+              : digitsRemaining === 0
+                ? 'text-[#008c68]'
+                : 'text-[#777177]'
+          }`}
+        >
+          {hasInvalidPhonePrefix
+            ? 'Saudi mobile number must start with 5.'
+            : digitsRemaining === 0
+              ? 'Phone number complete.'
+              : `${digitsRemaining} digit${digitsRemaining === 1 ? '' : 's'} remaining after +966.`}
+        </p>
+      )}
     </div>
   );
 }

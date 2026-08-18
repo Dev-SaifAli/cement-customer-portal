@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, ChevronDown, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { SaveDraftButton } from '../../components/registration/SaveDraftButton';
+import { SaveStatus } from '../../components/registration/SaveStatus';
 import { useRegistration, type CompanyInfoData } from '../../context/RegistrationContext';
 
 interface CompanyInfoProps {
@@ -21,10 +23,12 @@ const regions = [
 
 const CompanyInfo: React.FC<CompanyInfoProps> = ({ onBack, onContinue }) => {
   const navigate = useNavigate();
-  const { data, updateCompany } = useRegistration();
+  const { continueRegistration, data, setCurrentStep, updateCompany } = useRegistration();
   const form = data.company;
 
   const [errors, setErrors] = useState<Partial<Record<keyof CompanyInfoData, string>>>({});
+
+  useEffect(() => setCurrentStep(1), [setCurrentStep]);
 
   const updateField = (field: keyof CompanyInfoData, value: string) => {
     updateCompany({ [field]: value });
@@ -84,12 +88,10 @@ const CompanyInfo: React.FC<CompanyInfoProps> = ({ onBack, onContinue }) => {
   const handleContinue = () => {
     if (!validate()) return;
 
-    if (onContinue) {
-      onContinue(form);
-      return;
-    }
-
-    navigate('/register/contact');
+    void continueRegistration(() => {
+      if (onContinue) onContinue(form);
+      else navigate('/register/contact');
+    });
   };
 
   const handleBack = () => {
@@ -357,12 +359,10 @@ const CompanyInfo: React.FC<CompanyInfoProps> = ({ onBack, onContinue }) => {
             </button>
 
             <div className="flex items-center gap-4">
-              <button
-                type="button"
-                className="rounded-md border border-gray-400 bg-white px-6 py-3 text-sm font-semibold text-gray-600 transition hover:bg-gray-50"
-              >
+              <SaveStatus />
+              <SaveDraftButton className="rounded-md border border-gray-400 bg-white px-6 py-3 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60">
                 Save Draft
-              </button>
+              </SaveDraftButton>
 
               <button
                 type="button"

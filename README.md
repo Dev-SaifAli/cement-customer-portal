@@ -70,7 +70,17 @@ Only `VITE_*` values are exposed to browser code. See `.env.example` for the com
 | `npm run migrate:up`   | Apply pending PostgreSQL migrations     |
 | `npm run migrate:down` | Roll back the most recent migration     |
 
-Migration commands read `DATABASE_URL`. The first migration creates only the `pgcrypto` infrastructure extension and migration bookkeeping; domain schema is intentionally deferred.
+Migration commands load the root `.env` file and read `DATABASE_URL`. The first migration creates only the `pgcrypto` infrastructure extension and migration bookkeeping; domain schema is intentionally deferred.
+
+## Deployment
+
+Use `DEPLOYMENT.md` for the recommended production setup:
+
+- Frontend on Vercel
+- Backend API on Render
+- PostgreSQL on Neon
+
+The deployment guide lists the exact build commands, output directory, environment variables, migration command, and production verification steps.
 
 ## Architecture
 

@@ -1,14 +1,36 @@
 import { ArrowLeft, CheckCircle2, Pencil, Send } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RegistrationLayout } from '../../components/registration/RegistrationLayout';
 import { useRegistration } from '../../context/RegistrationContext';
+import { RegistrationServiceError } from '../../services/registrationService';
 
 export default function ReviewSubmit() {
   const navigate = useNavigate();
-  const { data } = useRegistration();
+  const { data, setCurrentStep, submitApplication } = useRegistration();
+  const [submitError, setSubmitError] = useState('');
+  const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = () => {
-    navigate('/register/submitted');
+  useEffect(() => setCurrentStep(6), [setCurrentStep]);
+
+  const handleSubmit = async () => {
+    setSubmitError('');
+    setSubmitErrors({});
+    setIsSubmitting(true);
+    try {
+      const submitted = await submitApplication();
+      navigate('/register/submitted', {
+        state: { submittedApplication: submitted },
+      });
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Unable to submit application.');
+      if (error instanceof RegistrationServiceError) {
+        setSubmitErrors(error.errors ?? {});
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -44,15 +66,15 @@ export default function ReviewSubmit() {
           <SummarySection title="Documents" editPath="/register/documents">
             <SummaryItem
               label="Company CR"
-              value={`${data.documents.cr.file?.name ?? 'Not uploaded'} - Expiry: ${data.documents.cr.expiryDate}`}
+              value={`${data.documents.cr.file?.name ?? data.documents.cr.fileName ?? 'Not uploaded'} - Expiry: ${data.documents.cr.expiryDate}`}
             />
             <SummaryItem
               label="VAT Certificate"
-              value={`${data.documents.vat.file?.name ?? 'Not uploaded'} - Expiry: ${data.documents.vat.expiryDate}`}
+              value={`${data.documents.vat.file?.name ?? data.documents.vat.fileName ?? 'Not uploaded'} - Expiry: ${data.documents.vat.expiryDate}`}
             />
           </SummarySection>
 
-          <SummarySection title="Delivery Locations" editPath="/register/delivery-locations">
+          <SummarySection title="Delivery Locations" editPath="/register/locations">
             <div className="space-y-3">
               {data.deliveryLocations.map((location) => (
                 <div key={location.id} className="rounded-md border border-[#e5dfe5] p-4">
@@ -68,7 +90,7 @@ export default function ReviewSubmit() {
             </div>
           </SummarySection>
 
-          <SummarySection title="Customer Administrator" editPath="/register/customer-admin">
+          <SummarySection title="Customer Administrator" editPath="/register/admin">
             <SummaryItem label="Full Name" value={data.administrator.fullName} />
             <SummaryItem label="Job Title" value={data.administrator.jobTitle} />
             <SummaryItem label="Email" value={data.administrator.email} />
@@ -79,10 +101,23 @@ export default function ReviewSubmit() {
 
         <div className="mx-8 border-t border-gray-200" />
 
+        {submitError && (
+          <div className="mx-8 mt-5 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            <p>{submitError}</p>
+            {Object.keys(submitErrors).length > 0 && (
+              <ul className="mt-2 list-disc space-y-1 pl-5 font-medium">
+                {Object.entries(submitErrors).map(([field, message]) => (
+                  <li key={field}>{message}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center justify-between px-8 py-6">
           <button
             type="button"
-            onClick={() => navigate('/register/customer-admin')}
+            onClick={() => navigate('/register/admin')}
             className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
           >
             <ArrowLeft size={18} />
@@ -92,9 +127,10 @@ export default function ReviewSubmit() {
           <button
             type="button"
             onClick={handleSubmit}
-            className="inline-flex items-center gap-2 rounded-md bg-[#5b2a7a] px-7 py-3 text-sm font-semibold text-white transition hover:bg-[#492060]"
+            disabled={isSubmitting}
+            className="inline-flex items-center gap-2 rounded-md bg-[#5b2a7a] px-7 py-3 text-sm font-semibold text-white transition hover:bg-[#492060] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Submit Application
+            {isSubmitting ? 'Submitting...' : 'Submit Application'}
             <Send size={18} />
           </button>
         </div>

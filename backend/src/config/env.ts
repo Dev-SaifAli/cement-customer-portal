@@ -1,5 +1,20 @@
-import 'dotenv/config';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 import { z } from 'zod';
+
+const configDirectory = path.dirname(fileURLToPath(import.meta.url));
+const rootEnvPath = path.resolve(configDirectory, '../../../.env');
+const backendEnvPath = path.resolve(configDirectory, '../../.env');
+
+if (existsSync(rootEnvPath)) {
+  dotenv.config({ path: rootEnvPath });
+}
+
+if (existsSync(backendEnvPath)) {
+  dotenv.config({ path: backendEnvPath, override: true });
+}
 
 const booleanFromString = z.enum(['true', 'false']).transform((value) => value === 'true');
 

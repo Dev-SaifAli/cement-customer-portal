@@ -1,9 +1,14 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { RegistrationLayout } from '../../components/registration/RegistrationLayout';
+import { SaveDraftButton } from '../../components/registration/SaveDraftButton';
+import { SaveStatus } from '../../components/registration/SaveStatus';
 import {
   emailPattern,
+  formatSaudiPhoneNumber,
+  getSaudiPhoneDigitsRemaining,
+  getSaudiPhoneLocalDigits,
   isSaudiPhoneNumber,
   useRegistration,
   type AdministratorData,
@@ -13,10 +18,13 @@ type AdminErrors = Partial<Record<keyof AdministratorData, string>>;
 
 export default function CustomerAdmin() {
   const navigate = useNavigate();
-  const { data, updateAdministrator } = useRegistration();
+  const { continueRegistration, data, setCurrentStep, updateAdministrator } = useRegistration();
   const [errors, setErrors] = useState<AdminErrors>({});
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const admin = data.administrator;
+
+  useEffect(() => setCurrentStep(5), [setCurrentStep]);
 
   const updateField = (field: keyof AdministratorData, value: string) => {
     updateAdministrator({ [field]: value });
@@ -37,7 +45,7 @@ export default function CustomerAdmin() {
     else if (!emailPattern.test(admin.email.trim())) next.email = 'Enter a valid email address.';
     if (!admin.phone.trim()) next.phone = 'Phone is required.';
     else if (!isSaudiPhoneNumber(admin.phone)) {
-      next.phone = 'Enter a valid Saudi phone number.';
+      next.phone = 'Enter a valid Saudi mobile number.';
     }
     if (!admin.password) next.password = 'Password is required.';
     else if (admin.password.length < 8) next.password = 'Password must be at least 8 characters.';
@@ -57,7 +65,7 @@ export default function CustomerAdmin() {
 
   const handleContinue = () => {
     if (!validate()) return;
-    navigate('/register/review');
+    void continueRegistration(() => navigate('/register/review'));
   };
 
   return (
@@ -101,6 +109,7 @@ export default function CustomerAdmin() {
           <Field
             label="Phone"
             type="tel"
+            isPhone
             value={admin.phone}
             error={errors.phone}
             onChange={(value) => updateField('phone', value)}
@@ -124,10 +133,20 @@ export default function CustomerAdmin() {
           />
           <Field
             label="Confirm Password"
-            type={showPassword ? 'text' : 'password'}
+            type={showConfirmPassword ? 'text' : 'password'}
             value={admin.confirmPassword}
             error={errors.confirmPassword}
             onChange={(value) => updateField('confirmPassword', value)}
+            action={
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((current) => !current)}
+                className="text-gray-500 hover:text-[#5b2a7a]"
+                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+              >
+                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            }
           />
         </div>
 
@@ -136,21 +155,27 @@ export default function CustomerAdmin() {
         <div className="flex items-center justify-between px-8 py-6">
           <button
             type="button"
-            onClick={() => navigate('/register/delivery-locations')}
+            onClick={() => navigate('/register/locations')}
             className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
           >
             <ArrowLeft size={18} />
             Back
           </button>
 
-          <button
-            type="button"
-            onClick={handleContinue}
-            className="inline-flex items-center gap-2 rounded-md bg-[#5b2a7a] px-7 py-3 text-sm font-semibold text-white transition hover:bg-[#492060]"
-          >
-            Continue to Review
-            <ArrowRight size={18} />
-          </button>
+          <div className="flex items-center gap-4">
+            <SaveStatus />
+            <SaveDraftButton className="rounded-md border border-gray-400 bg-white px-6 py-3 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60">
+              Save Draft
+            </SaveDraftButton>
+            <button
+              type="button"
+              onClick={handleContinue}
+              className="inline-flex items-center gap-2 rounded-md bg-[#5b2a7a] px-7 py-3 text-sm font-semibold text-white transition hover:bg-[#492060]"
+            >
+              Continue to Review
+              <ArrowRight size={18} />
+            </button>
+          </div>
         </div>
       </section>
     </RegistrationLayout>
@@ -162,35 +187,74 @@ function Field({
   error,
   label,
   onChange,
+  isPhone,
   type = 'text',
   value,
 }: {
   action?: ReactNode;
   error?: string | undefined;
+  isPhone?: boolean | undefined;
   label: string;
   onChange: (value: string) => void;
   type?: string;
   value: string;
 }) {
+  const digitsRemaining = isPhone ? getSaudiPhoneDigitsRemaining(value) : 0;
+  const hasInvalidPhonePrefix = Boolean(
+    isPhone && digitsRemaining === 0 && !isSaudiPhoneNumber(value),
+  );
+
   return (
     <div>
       <label className="mb-2 block text-sm font-semibold">
         {label} <span className="text-red-500">*</span>
       </label>
-      <div className="relative">
+      <div
+        className={`relative flex h-12 overflow-hidden rounded-md border bg-white transition ${
+          error
+            ? 'border-red-500 focus-within:ring-2 focus-within:ring-red-100'
+            : 'border-[#d9c9df] focus-within:border-[#5b2a7a] focus-within:ring-2 focus-within:ring-[#5b2a7a]/10'
+        }`}
+      >
+        {isPhone && (
+          <div className="flex items-center border-r border-[#d9c9df] bg-[#f8f7f7] px-4 text-[15px] text-gray-600">
+            +966
+          </div>
+        )}
+
         <input
           type={type}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          className={`h-12 w-full rounded-md border bg-white px-4 text-[15px] outline-none transition ${
-            error
-              ? 'border-red-500 focus:ring-2 focus:ring-red-100'
-              : 'border-[#d9c9df] focus:border-[#5b2a7a] focus:ring-2 focus:ring-[#5b2a7a]/10'
-          } ${action ? 'pr-11' : ''}`}
+          inputMode={isPhone ? 'numeric' : undefined}
+          maxLength={isPhone ? 11 : undefined}
+          value={isPhone ? formatSaudiPhoneNumber(value) : value}
+          onChange={(event) =>
+            onChange(isPhone ? getSaudiPhoneLocalDigits(event.target.value) : event.target.value)
+          }
+          placeholder={isPhone ? '5XX XXX XXX' : undefined}
+          className={`min-w-0 flex-1 bg-white px-4 text-[15px] outline-none ${
+            action ? 'pr-11' : ''
+          }`}
         />
         {action && <div className="absolute right-4 top-1/2 -translate-y-1/2">{action}</div>}
       </div>
       {error && <p className="mt-1.5 text-xs font-medium text-red-600">{error}</p>}
+      {isPhone && !error && (
+        <p
+          className={`mt-1.5 text-xs font-medium ${
+            hasInvalidPhonePrefix
+              ? 'text-red-600'
+              : digitsRemaining === 0
+                ? 'text-[#008c68]'
+                : 'text-gray-500'
+          }`}
+        >
+          {hasInvalidPhonePrefix
+            ? 'Saudi mobile number must start with 5.'
+            : digitsRemaining === 0
+              ? 'Phone number complete.'
+              : `${digitsRemaining} digit${digitsRemaining === 1 ? '' : 's'} remaining after +966.`}
+        </p>
+      )}
     </div>
   );
 }

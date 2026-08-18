@@ -1,7 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { isSaudiPhoneNumber, useRegistration } from '../../context/RegistrationContext';
+import { SaveDraftButton } from '../../components/registration/SaveDraftButton';
+import { SaveStatus } from '../../components/registration/SaveStatus';
+import {
+  formatSaudiPhoneNumber,
+  getSaudiPhoneDigitsRemaining,
+  getSaudiPhoneLocalDigits,
+  isSaudiPhoneNumber,
+  useRegistration,
+} from '../../context/RegistrationContext';
 
 export interface ContactInfoData {
   fullName: string;
@@ -17,7 +25,7 @@ interface ContactInfoProps {
 
 const ContactInfo: React.FC<ContactInfoProps> = ({ onBack, onContinue }) => {
   const navigate = useNavigate();
-  const { data, updateContact } = useRegistration();
+  const { continueRegistration, data, setCurrentStep, updateContact } = useRegistration();
   const form: ContactInfoData = {
     fullName: data.contact.fullName,
     jobTitle: data.contact.jobTitle,
@@ -26,6 +34,8 @@ const ContactInfo: React.FC<ContactInfoProps> = ({ onBack, onContinue }) => {
   };
 
   const [errors, setErrors] = useState<Partial<Record<keyof ContactInfoData, string>>>({});
+
+  useEffect(() => setCurrentStep(2), [setCurrentStep]);
 
   const updateField = (field: keyof ContactInfoData, value: string) => {
     if (field === 'workEmail') updateContact({ email: value });
@@ -60,7 +70,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({ onBack, onContinue }) => {
     if (!form.phoneNumber.trim()) {
       newErrors.phoneNumber = 'Phone number is required';
     } else if (!isSaudiPhoneNumber(form.phoneNumber)) {
-      newErrors.phoneNumber = 'Enter a valid Saudi phone number';
+      newErrors.phoneNumber = 'Enter a valid Saudi mobile number';
     }
 
     setErrors(newErrors);
@@ -71,12 +81,10 @@ const ContactInfo: React.FC<ContactInfoProps> = ({ onBack, onContinue }) => {
   const handleContinue = () => {
     if (!validate()) return;
 
-    if (onContinue) {
-      onContinue(form);
-      return;
-    }
-
-    navigate('/register/documents');
+    void continueRegistration(() => {
+      if (onContinue) onContinue(form);
+      else navigate('/register/documents');
+    });
   };
 
   const handleBack = () => {
@@ -94,6 +102,8 @@ const ContactInfo: React.FC<ContactInfoProps> = ({ onBack, onContinue }) => {
         ? 'border-red-500 focus:ring-2 focus:ring-red-100'
         : 'border-[#d9c9df] focus:border-[#5b2a7a] focus:ring-2 focus:ring-[#5b2a7a]/10'
     }`;
+
+  const phoneDigitsRemaining = getSaudiPhoneDigitsRemaining(form.phoneNumber);
 
   return (
     <div className="min-h-screen bg-[#f8f7f7] text-[#292929]">
@@ -210,15 +220,21 @@ const ContactInfo: React.FC<ContactInfoProps> = ({ onBack, onContinue }) => {
                   <input
                     type="tel"
                     inputMode="numeric"
-                    maxLength={9}
-                    value={form.phoneNumber}
-                    onChange={(e) => updateField('phoneNumber', e.target.value.replace(/\D/g, ''))}
-                    placeholder="5X XXX XXXX"
+                    maxLength={11}
+                    value={formatSaudiPhoneNumber(form.phoneNumber)}
+                    onChange={(e) =>
+                      updateField('phoneNumber', getSaudiPhoneLocalDigits(e.target.value))
+                    }
+                    placeholder="5XX XXX XXX"
                     className="min-w-0 flex-1 px-4 text-[15px] outline-none"
                   />
                 </div>
 
-                {errors.phoneNumber && <ErrorMessage message={errors.phoneNumber} />}
+                {errors.phoneNumber ? (
+                  <ErrorMessage message={errors.phoneNumber} />
+                ) : (
+                  <PhoneHelper digitsRemaining={phoneDigitsRemaining} value={form.phoneNumber} />
+                )}
               </div>
             </div>
 
@@ -247,12 +263,10 @@ const ContactInfo: React.FC<ContactInfoProps> = ({ onBack, onContinue }) => {
             </button>
 
             <div className="flex items-center gap-4">
-              <button
-                type="button"
-                className="rounded-md border border-gray-400 bg-white px-6 py-3 text-sm font-semibold text-gray-600 transition hover:bg-gray-50"
-              >
+              <SaveStatus />
+              <SaveDraftButton className="rounded-md border border-gray-400 bg-white px-6 py-3 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60">
                 Save Draft
-              </button>
+              </SaveDraftButton>
 
               <button
                 type="button"
@@ -339,5 +353,27 @@ const Required = () => <span className="ml-1 text-red-500">*</span>;
 const ErrorMessage = ({ message }: { message: string }) => (
   <p className="mt-1.5 text-xs font-medium text-red-600">{message}</p>
 );
+
+const PhoneHelper = ({ digitsRemaining, value }: { digitsRemaining: number; value: string }) => {
+  const hasInvalidPrefix = digitsRemaining === 0 && !isSaudiPhoneNumber(value);
+
+  return (
+    <p
+      className={`mt-1.5 text-xs font-medium ${
+        hasInvalidPrefix
+          ? 'text-red-600'
+          : digitsRemaining === 0
+            ? 'text-[#008c68]'
+            : 'text-gray-500'
+      }`}
+    >
+      {hasInvalidPrefix
+        ? 'Saudi mobile number must start with 5.'
+        : digitsRemaining === 0
+          ? 'Phone number complete.'
+          : `${digitsRemaining} digit${digitsRemaining === 1 ? '' : 's'} remaining after +966.`}
+    </p>
+  );
+};
 
 export default ContactInfo;

@@ -8,8 +8,9 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['database/migrations/**/*.cjs'],
-    languageOptions: { globals: globals.commonjs },
+    files: ['database/migrations/**/*.cjs', 'database/scripts/**/*.cjs'],
+    languageOptions: { globals: { ...globals.commonjs, ...globals.node } },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
   {
     files: ['**/*.{ts,tsx}'],
