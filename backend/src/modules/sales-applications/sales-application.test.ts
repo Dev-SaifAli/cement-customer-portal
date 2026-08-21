@@ -1,4 +1,6 @@
 import request from 'supertest';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.hoisted(() => {
@@ -26,6 +28,8 @@ import { salesTokenService } from '../sales-auth/sales-token.service.js';
 
 const salesUserId = '22222222-2222-4222-8222-222222222222';
 const applicationId = '11111111-1111-4111-8111-111111111111';
+const documentStorageKey = `registrations/${applicationId}/documents/cr-test.pdf`;
+const documentStoragePath = path.resolve(process.cwd(), 'storage', documentStorageKey);
 
 const salesUserRow = {
   id: salesUserId,
@@ -55,6 +59,8 @@ const applicationRow = {
       fileSize: 1024,
       fileType: 'application/pdf',
       expiryDate: '2027-01-01',
+      uploadedAt: '2026-08-20T09:00:00.000Z',
+      storageKey: documentStorageKey,
     },
   },
   delivery_locations: [
@@ -230,7 +236,14 @@ describe('sales applications API', () => {
         id: applicationId,
         company: applicationRow.company,
         contact: applicationRow.contact,
-        documents: applicationRow.documents,
+        documents: {
+          cr: {
+            fileName: 'cr.pdf',
+            fileType: 'application/pdf',
+            hasFile: true,
+            uploadedAt: '2026-08-20T09:00:00.000Z',
+          },
+        },
         deliveryLocations: applicationRow.delivery_locations,
         statusHistory: [
           {
@@ -266,6 +279,123 @@ describe('sales applications API', () => {
       expect(JSON.stringify(response.body)).not.toContain('plain-password');
       expect(JSON.stringify(response.body)).not.toContain('passwordHash');
       expect(JSON.stringify(response.body)).not.toContain('password_hash');
+    });
+
+    it('does not expose internal document storage keys', async () => {
+      mockAuthenticatedSalesUser();
+      query.mockResolvedValueOnce({ rows: [applicationRow] });
+      query.mockResolvedValueOnce({ rows: [] });
+
+      const response = await request(createApp())
+        .get(`/api/v1/sales/applications/${applicationId}`)
+        .set('Authorization', authHeader());
+
+      expect(response.status).toBe(200);
+      expect(JSON.stringify(response.body)).not.toContain('storageKey');
+      expect(JSON.stringify(response.body)).not.toContain(documentStorageKey);
+    });
+  });
+
+  describe('GET /api/v1/sales/applications/:id/documents/:documentId', () => {
+    beforeEach(async () => {
+      await rm(path.resolve(process.cwd(), 'storage', 'registrations', applicationId), {
+        recursive: true,
+        force: true,
+      });
+    });
+
+    it('streams a stored document for an authenticated Sales user', async () => {
+      await mkdir(path.dirname(documentStoragePath), { recursive: true });
+      await writeFile(documentStoragePath, Buffer.from('%PDF-1.4 test document'));
+
+      mockAuthenticatedSalesUser();
+      query.mockResolvedValueOnce({
+        rows: [
+          {
+            id: applicationId,
+            status: 'PENDING_SALES_REVIEW',
+            documents: applicationRow.documents,
+          },
+        ],
+      });
+
+      const response = await request(createApp())
+        .get(`/api/v1/sales/applications/${applicationId}/documents/cr`)
+        .set('Authorization', authHeader());
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toContain('application/pdf');
+      expect(response.headers['content-disposition']).toContain('inline');
+      expect(response.headers['content-disposition']).toContain('cr.pdf');
+      expect(Buffer.from(response.body).toString()).toContain('%PDF-1.4 test document');
+    });
+
+    it('forces attachment disposition when download is requested', async () => {
+      await mkdir(path.dirname(documentStoragePath), { recursive: true });
+      await writeFile(documentStoragePath, Buffer.from('%PDF-1.4 test document'));
+
+      mockAuthenticatedSalesUser();
+      query.mockResolvedValueOnce({
+        rows: [
+          {
+            id: applicationId,
+            status: 'PENDING_SALES_REVIEW',
+            documents: applicationRow.documents,
+          },
+        ],
+      });
+
+      const response = await request(createApp())
+        .get(`/api/v1/sales/applications/${applicationId}/documents/cr?download=1`)
+        .set('Authorization', authHeader());
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-disposition']).toContain('attachment');
+    });
+
+    it('rejects unauthenticated document access', async () => {
+      const response = await request(createApp()).get(
+        `/api/v1/sales/applications/${applicationId}/documents/cr`,
+      );
+
+      expect(response.status).toBe(401);
+      expect(response.body.error.code).toBe('SALES_AUTH_REQUIRED');
+    });
+
+    it('rejects invalid application and document combinations', async () => {
+      mockAuthenticatedSalesUser();
+      query.mockResolvedValueOnce({
+        rows: [{ id: applicationId, status: 'PENDING_SALES_REVIEW', documents: {} }],
+      });
+
+      const response = await request(createApp())
+        .get(`/api/v1/sales/applications/${applicationId}/documents/cr`)
+        .set('Authorization', authHeader());
+
+      expect(response.status).toBe(404);
+      expect(response.body.error.code).toBe('DOCUMENT_FILE_NOT_FOUND');
+    });
+
+    it('returns a safe 404 when the stored file is missing', async () => {
+      mockAuthenticatedSalesUser();
+      query.mockResolvedValueOnce({
+        rows: [
+          {
+            id: applicationId,
+            status: 'PENDING_SALES_REVIEW',
+            documents: applicationRow.documents,
+          },
+        ],
+      });
+
+      const response = await request(createApp())
+        .get(`/api/v1/sales/applications/${applicationId}/documents/cr`)
+        .set('Authorization', authHeader());
+
+      expect(response.status).toBe(404);
+      expect(response.body.error.code).toBe('DOCUMENT_FILE_NOT_FOUND');
+      expect(JSON.stringify(response.body)).not.toContain('storage');
+      expect(JSON.stringify(response.body)).not.toContain(documentStorageKey);
     });
   });
 

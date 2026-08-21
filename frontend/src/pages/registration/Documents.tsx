@@ -149,8 +149,9 @@ export default function Documents() {
 
     const document = documents[type];
     const file = document.file;
+    const hasPersistedFile = !!document.fileName && !!document.uploadedAt;
 
-    if (!file && !document.fileName) {
+    if (!file && !hasPersistedFile) {
       setErrors((previous) => ({
         ...previous,
         [type]: 'Please upload the required document.',
@@ -198,11 +199,11 @@ export default function Documents() {
   const handleContinue = () => {
     const crError = isRegistrationDocumentValid(documents.cr)
       ? ''
-      : 'Company CR document and a future expiry date are required.';
+      : 'Company CR document file and a future expiry date are required.';
 
     const vatError = isRegistrationDocumentValid(documents.vat)
       ? ''
-      : 'VAT Certificate document and a future expiry date are required.';
+      : 'VAT Certificate file and a future expiry date are required.';
 
     setErrors({
       cr: crError || undefined,
@@ -390,8 +391,10 @@ function DocumentCard({
   onExpiryChange,
   isExpired,
 }: DocumentCardProps) {
-  const hasFile = !!document.file || !!document.fileName;
-  const fileName = document.file?.name ?? document.fileName ?? '';
+  const hasSelectedFile = !!document.file;
+  const hasPersistedFile = !!document.fileName && !!document.uploadedAt;
+  const hasFile = hasSelectedFile || hasPersistedFile;
+  const fileName = document.file?.name ?? (hasPersistedFile ? document.fileName : '') ?? '';
   const fileSize = document.file?.size ?? document.fileSize;
 
   return (
@@ -509,7 +512,7 @@ function DocumentCard({
 
           {/* Valid */}
 
-          {!error && document.expiryDate && !isExpired && (
+          {!error && hasFile && isRegistrationDocumentValid(document) && !isExpired && (
             <div className="mt-4 flex items-center gap-2 text-[13px] font-semibold text-[#087443]">
               <Check size={16} />
 

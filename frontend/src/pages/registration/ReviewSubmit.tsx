@@ -2,7 +2,11 @@ import { ArrowLeft, CheckCircle2, Pencil, Send } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RegistrationLayout } from '../../components/registration/RegistrationLayout';
-import { useRegistration } from '../../context/RegistrationContext';
+import {
+  areDocumentsValid,
+  useRegistration,
+  type DocumentData,
+} from '../../context/RegistrationContext';
 import { RegistrationServiceError } from '../../services/registrationService';
 
 export default function ReviewSubmit() {
@@ -17,6 +21,16 @@ export default function ReviewSubmit() {
   const handleSubmit = async () => {
     setSubmitError('');
     setSubmitErrors({});
+
+    if (!areDocumentsValid(data.documents)) {
+      setSubmitError('Please re-upload both required documents and enter future expiry dates.');
+      setSubmitErrors({
+        companyCrDocument: 'Company CR document file and future expiry date are required.',
+        vatDocument: 'VAT Certificate file and future expiry date are required.',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const submitted = await submitApplication();
@@ -64,14 +78,8 @@ export default function ReviewSubmit() {
           </SummarySection>
 
           <SummarySection title="Documents" editPath="/register/documents">
-            <SummaryItem
-              label="Company CR"
-              value={`${data.documents.cr.file?.name ?? data.documents.cr.fileName ?? 'Not uploaded'} - Expiry: ${data.documents.cr.expiryDate}`}
-            />
-            <SummaryItem
-              label="VAT Certificate"
-              value={`${data.documents.vat.file?.name ?? data.documents.vat.fileName ?? 'Not uploaded'} - Expiry: ${data.documents.vat.expiryDate}`}
-            />
+            <SummaryItem label="Company CR" value={getDocumentSummary(data.documents.cr)} />
+            <SummaryItem label="VAT Certificate" value={getDocumentSummary(data.documents.vat)} />
           </SummarySection>
 
           <SummarySection title="Delivery Locations" editPath="/register/locations">
@@ -178,4 +186,12 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
       <div className="mt-1 text-sm font-medium text-[#292929]">{value || '-'}</div>
     </div>
   );
+}
+
+function getDocumentSummary(document: DocumentData) {
+  const hasPersistedFile = Boolean(document.fileName && document.uploadedAt);
+  const fileName = document.file?.name ?? (hasPersistedFile ? document.fileName : undefined);
+  const expiryDate = document.expiryDate || '-';
+
+  return `${fileName ?? 'Not uploaded'} - Expiry: ${expiryDate}`;
 }

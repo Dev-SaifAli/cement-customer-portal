@@ -44,20 +44,43 @@ function GuardedRegistrationRoute({
     return <Navigate to="/register/company" replace />;
   }
 
-  if (step === 'documents' && !isContactValid(data.contact)) {
-    return <Navigate to="/register/contact" replace />;
+  if (step === 'documents') {
+    const blockerPath = getFirstIncompleteRegistrationPath(data, ['company', 'contact']);
+
+    if (blockerPath) return <Navigate to={blockerPath} replace />;
   }
 
-  if (step === 'deliveryLocations' && !areDocumentsValid(data.documents)) {
-    return <Navigate to="/register/documents" replace />;
+  if (step === 'deliveryLocations') {
+    const blockerPath = getFirstIncompleteRegistrationPath(data, [
+      'company',
+      'contact',
+      'documents',
+    ]);
+
+    if (blockerPath) return <Navigate to={blockerPath} replace />;
   }
 
-  if (step === 'customerAdmin' && !areDeliveryLocationsValid(data.deliveryLocations)) {
-    return <Navigate to="/register/locations" replace />;
+  if (step === 'customerAdmin') {
+    const blockerPath = getFirstIncompleteRegistrationPath(data, [
+      'company',
+      'contact',
+      'documents',
+      'deliveryLocations',
+    ]);
+
+    if (blockerPath) return <Navigate to={blockerPath} replace />;
   }
 
-  if (step === 'review' && !isAdministratorValid(data.administrator)) {
-    return <Navigate to="/register/admin" replace />;
+  if (step === 'review') {
+    const blockerPath = getFirstIncompleteRegistrationPath(data, [
+      'company',
+      'contact',
+      'documents',
+      'deliveryLocations',
+      'administrator',
+    ]);
+
+    if (blockerPath) return <Navigate to={blockerPath} replace />;
   }
 
   if (
@@ -71,6 +94,30 @@ function GuardedRegistrationRoute({
   }
 
   return children;
+}
+
+type RegistrationSection =
+  'company' | 'contact' | 'documents' | 'deliveryLocations' | 'administrator';
+
+function getFirstIncompleteRegistrationPath(
+  data: ReturnType<typeof useRegistration>['data'],
+  sections: RegistrationSection[],
+) {
+  for (const section of sections) {
+    if (section === 'company' && !isCompanyValid(data.company)) return '/register/company';
+    if (section === 'contact' && !isContactValid(data.contact)) return '/register/contact';
+    if (section === 'documents' && !areDocumentsValid(data.documents)) {
+      return '/register/documents';
+    }
+    if (section === 'deliveryLocations' && !areDeliveryLocationsValid(data.deliveryLocations)) {
+      return '/register/locations';
+    }
+    if (section === 'administrator' && !isAdministratorValid(data.administrator)) {
+      return '/register/admin';
+    }
+  }
+
+  return null;
 }
 
 function isSubmittedApplicationLocationState(

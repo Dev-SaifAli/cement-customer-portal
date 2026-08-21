@@ -5,6 +5,7 @@ import Login from '../pages/Login/Login';
 import PasswordResetSuccess from '../pages/PasswordResetSuccess/PasswordResetSuccess';
 import ResetPassword from '../pages/ResetPassword/ResetPassword';
 import { RegistrationRoutes } from './RegistrationRoutes';
+import { SalesRoutes } from './SalesRoutes';
 
 export function AppRoutes() {
   return (
@@ -16,6 +17,7 @@ export function AppRoutes() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/reset-password/success" element={<PasswordResetSuccess />} />
       <Route path="/register/*" element={<RegistrationRoutes />} />
+      <Route path="/sales/*" element={<SalesRoutes />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
