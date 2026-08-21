@@ -1,5 +1,7 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler.js';
+import { registrationDocumentController } from '../registration-documents/registration-document.controller.js';
+import { maxRegistrationDocumentSizeBytes } from '../registration-documents/registration-document.constants.js';
 import { registrationController } from './registration.controller.js';
 
 export const registrationRouter = Router();
@@ -12,6 +14,15 @@ registrationRouter.post(
 registrationRouter.get(
   '/:id',
   asyncHandler((request, response) => registrationController.get(request, response)),
+);
+
+registrationRouter.put(
+  '/:id/documents/:documentType',
+  express.raw({
+    limit: maxRegistrationDocumentSizeBytes,
+    type: '*/*',
+  }),
+  asyncHandler((request, response) => registrationDocumentController.upload(request, response)),
 );
 
 registrationRouter.patch(

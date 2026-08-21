@@ -14,6 +14,7 @@ import {
   RegistrationServiceError,
   submitRegistrationDraft,
   updateRegistrationDraft,
+  uploadRegistrationDocument,
   type RegistrationDraftResponse,
 } from '../services/registrationService';
 import type { ApplicationStatus } from '../services/applicationService';
@@ -41,6 +42,7 @@ export type DocumentData = {
   fileName?: string | undefined;
   fileSize?: number | undefined;
   fileType?: string | undefined;
+  uploadedAt?: string | undefined;
   expiryDate: string;
 };
 
@@ -366,9 +368,13 @@ export function RegistrationProvider({ children }: { children: ReactNode }) {
         setSaveError('');
 
         try {
-          const draft = registrationIdRef.current
+          const savedDraft = registrationIdRef.current
             ? await updateDraft(registrationIdRef.current)
             : await createDraft();
+          registrationIdRef.current = savedDraft.id;
+          localStorage.setItem(REGISTRATION_DRAFT_STORAGE_KEY, savedDraft.id);
+
+          const draft = await uploadPendingDocuments(savedDraft.id, savedDraft, dataRef.current);
           const nextData = mergeDraftData(draft, dataRef.current);
 
           registrationIdRef.current = draft.id;
@@ -526,6 +532,24 @@ function storeSubmittedApplication(application: SubmittedApplication) {
   sessionStorage.setItem(SUBMITTED_APPLICATION_STORAGE_KEY, JSON.stringify(application));
 }
 
+async function uploadPendingDocuments(
+  draftId: string,
+  draft: RegistrationDraftResponse,
+  currentData: RegistrationData,
+) {
+  let nextDraft = draft;
+
+  if (currentData.documents.cr.file) {
+    nextDraft = await uploadRegistrationDocument(draftId, 'cr', currentData.documents.cr.file);
+  }
+
+  if (currentData.documents.vat.file) {
+    nextDraft = await uploadRegistrationDocument(draftId, 'vat', currentData.documents.vat.file);
+  }
+
+  return nextDraft;
+}
+
 export const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function normalizeSaudiPhoneNumber(phone: string) {
@@ -595,8 +619,13 @@ export function isAcceptedDocumentFile(file: File) {
 }
 
 export function isDocumentValid(document: DocumentData) {
+  const hasSelectedFile = Boolean(document.file);
+  const hasPersistedFile = Boolean(document.fileName && document.uploadedAt);
+
   return Boolean(
-    (document.file || document.fileName) &&
+    (hasSelectedFile || hasPersistedFile) &&
+    (!hasPersistedFile || document.fileSize) &&
+    (!hasPersistedFile || document.fileType) &&
     (!document.file || isAcceptedDocumentFile(document.file)) &&
     (!document.file || document.file.size <= MAX_DOCUMENT_FILE_SIZE) &&
     document.expiryDate &&

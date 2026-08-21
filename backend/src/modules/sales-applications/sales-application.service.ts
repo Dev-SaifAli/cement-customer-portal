@@ -228,7 +228,7 @@ function mapApplicationDetails(row: SalesApplicationRow, events: SalesApplicatio
     currentStep: row.current_step,
     company: row.company,
     contact: row.contact,
-    documents: row.documents,
+    documents: safeDocuments(row.documents),
     deliveryLocations: row.delivery_locations,
     administrator: safeAdministrator(row.administrator),
     submittedAt: dateOrNull(row.submitted_at),
@@ -259,6 +259,24 @@ function safeAdministrator(administrator: Record<string, unknown>) {
   void _passwordHashSnake;
 
   return safe;
+}
+
+function safeDocuments(documents: Record<string, unknown>) {
+  return Object.entries(documents).reduce<Record<string, unknown>>((safe, [documentId, value]) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      safe[documentId] = value;
+      return safe;
+    }
+
+    const { storageKey: _storageKey, ...documentMetadata } = value as Record<string, unknown>;
+    void _storageKey;
+    safe[documentId] = {
+      documentId,
+      ...documentMetadata,
+      hasFile: Boolean(_storageKey),
+    };
+    return safe;
+  }, {});
 }
 
 function dateString(value: Date | string) {

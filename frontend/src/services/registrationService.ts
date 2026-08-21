@@ -102,6 +102,16 @@ export const updateRegistrationDraft = (
     body: JSON.stringify(toApiDraftPayload(payload)),
   });
 
+export const uploadRegistrationDocument = (id: string, documentType: 'cr' | 'vat', file: File) =>
+  requestRegistration(`/registrations/${id}/documents/${documentType}`, {
+    method: 'PUT',
+    headers: {
+      'content-type': file.type,
+      'x-file-name': file.name,
+    },
+    body: file,
+  });
+
 export const submitRegistrationDraft = async (id: string): Promise<SubmittedApplication> => {
   const registration = await requestRegistration(`/registrations/${id}/submit`, {
     method: 'POST',

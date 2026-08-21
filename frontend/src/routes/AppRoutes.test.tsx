@@ -342,6 +342,7 @@ function SeedCompleteRegistration() {
         fileName: 'cr.pdf',
         fileSize: 1024,
         fileType: 'application/pdf',
+        uploadedAt: '2026-08-20T10:00:00.000Z',
         expiryDate: '2099-12-31',
       },
       vat: {
@@ -349,6 +350,7 @@ function SeedCompleteRegistration() {
         fileName: 'vat.pdf',
         fileSize: 1024,
         fileType: 'application/pdf',
+        uploadedAt: '2026-08-20T10:00:00.000Z',
         expiryDate: '2099-12-31',
       },
     });

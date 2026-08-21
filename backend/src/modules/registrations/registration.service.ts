@@ -4,14 +4,19 @@ import { AppError } from '../../errors/app-error.js';
 import type { RegistrationDraft } from './registration.types.js';
 import type { UpdateRegistrationInput } from './registration.validation.js';
 
-const mapRegistration = (row: Record<string, unknown>): RegistrationDraft => ({
+const mapRegistration = (
+  row: Record<string, unknown>,
+  options: { includeStorageKey?: boolean } = {},
+): RegistrationDraft => ({
   id: String(row.id),
   reference: row.reference ? String(row.reference) : null,
   status: row.status as RegistrationDraft['status'],
   currentStep: Number(row.current_step),
   company: (row.company ?? {}) as Record<string, unknown>,
   contact: (row.contact ?? {}) as Record<string, unknown>,
-  documents: (row.documents ?? {}) as Record<string, unknown>,
+  documents: options.includeStorageKey
+    ? ((row.documents ?? {}) as Record<string, unknown>)
+    : safeDocuments((row.documents ?? {}) as Record<string, unknown>),
   deliveryLocations: (row.delivery_locations ?? []) as unknown[],
   administrator: (row.administrator ?? {}) as Record<string, unknown>,
   submittedAt: row.submitted_at ? new Date(String(row.submitted_at)).toISOString() : null,
@@ -85,8 +90,27 @@ export class RegistrationService {
     return mapRegistration(draft);
   }
 
+  private async getInternalDraft(id: string) {
+    const result = await pool.query('select * from registration_drafts where id = $1', [id]);
+    const draft = result.rows[0];
+
+    if (!draft) {
+      throw new AppError('Registration draft was not found.', 404, 'REGISTRATION_NOT_FOUND');
+    }
+
+    return mapRegistration(draft, { includeStorageKey: true });
+  }
+
   async updateDraft(id: string, input: UpdateRegistrationInput) {
     const current = await this.getDraft(id);
+    const currentDatabaseResult = await pool.query(
+      'select documents from registration_drafts where id = $1',
+      [id],
+    );
+    const mergedDocuments = mergeDocuments(
+      (currentDatabaseResult.rows[0]?.documents ?? {}) as Record<string, unknown>,
+      input.documents,
+    );
     const administrator = safeAdministrator(input.administrator);
     const password = input.administrator?.password;
     const passwordHash = password ? await bcrypt.hash(password, 12) : undefined;
@@ -96,7 +120,7 @@ export class RegistrationService {
        set current_step = coalesce($2, current_step),
            company = company || $3::jsonb,
            contact = contact || $4::jsonb,
-           documents = documents || $5::jsonb,
+           documents = $5::jsonb,
            delivery_locations = coalesce($6::jsonb, delivery_locations),
            administrator = administrator || $7::jsonb,
            admin_password_hash = coalesce($8, admin_password_hash),
@@ -108,7 +132,7 @@ export class RegistrationService {
         input.currentStep,
         JSON.stringify(input.company ?? {}),
         JSON.stringify(input.contact ?? {}),
-        JSON.stringify(input.documents ?? {}),
+        JSON.stringify(mergedDocuments),
         input.deliveryLocations ? JSON.stringify(input.deliveryLocations) : null,
         JSON.stringify(administrator ?? {}),
         passwordHash,
@@ -119,7 +143,7 @@ export class RegistrationService {
   }
 
   async submitDraft(id: string) {
-    const draft = await this.getDraft(id);
+    const draft = await this.getInternalDraft(id);
 
     if (draft.status !== 'DRAFT') {
       if (!draft.reference || !draft.submittedAt) {
@@ -211,11 +235,10 @@ export class RegistrationService {
     }
 
     if (!isDocumentMetadataComplete(documents.cr)) {
-      errors.companyCrDocument =
-        'Company CR document metadata and future expiry date are required.';
+      errors.companyCrDocument = 'Company CR document file and future expiry date are required.';
     }
     if (!isDocumentMetadataComplete(documents.vat)) {
-      errors.vatDocument = 'VAT Certificate metadata and future expiry date are required.';
+      errors.vatDocument = 'VAT Certificate file and future expiry date are required.';
     }
 
     if (!Array.isArray(draft.deliveryLocations) || draft.deliveryLocations.length === 0) {
@@ -277,6 +300,55 @@ function isDocumentMetadataComplete(document: Record<string, unknown> | undefine
     typeof document.fileSize === 'number' &&
     document.fileSize > 0 &&
     isNonEmptyString(document.fileType) &&
+    isNonEmptyString(document.storageKey) &&
+    isNonEmptyString(document.uploadedAt) &&
     isFutureDate(document.expiryDate),
   );
+}
+
+function mergeDocuments(
+  currentDocuments: Record<string, unknown>,
+  nextDocuments: UpdateRegistrationInput['documents'],
+) {
+  if (!nextDocuments) return currentDocuments;
+
+  return {
+    ...currentDocuments,
+    ...(nextDocuments.cr
+      ? {
+          cr: {
+            ...toRecord(currentDocuments.cr),
+            ...nextDocuments.cr,
+          },
+        }
+      : {}),
+    ...(nextDocuments.vat
+      ? {
+          vat: {
+            ...toRecord(currentDocuments.vat),
+            ...nextDocuments.vat,
+          },
+        }
+      : {}),
+  };
+}
+
+function safeDocuments(documents: Record<string, unknown>) {
+  return Object.entries(documents).reduce<Record<string, unknown>>((safe, [documentId, value]) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      safe[documentId] = value;
+      return safe;
+    }
+
+    const { storageKey: _storageKey, ...documentMetadata } = value as Record<string, unknown>;
+    void _storageKey;
+    safe[documentId] = documentMetadata;
+    return safe;
+  }, {});
+}
+
+function toRecord(value: unknown) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
