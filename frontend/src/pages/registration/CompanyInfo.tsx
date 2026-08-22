@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, ChevronDown, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { BrandHeader } from '../../components/registration/BrandHeader';
 import { SaveDraftButton } from '../../components/registration/SaveDraftButton';
 import { SaveStatus } from '../../components/registration/SaveStatus';
 import { useRegistration, type CompanyInfoData } from '../../context/RegistrationContext';
@@ -114,24 +115,7 @@ const CompanyInfo: React.FC<CompanyInfoProps> = ({ onBack, onContinue }) => {
   return (
     <div className="min-h-screen bg-[#f8f7f7] text-[#292929]">
       {/* Header */}
-      <header className="h-[68px] border-b border-[#e4dfe5] bg-white">
-        <div className="mx-auto flex h-full max-w-[1280px] items-center px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#5b2a7a] text-white">
-              <span className="text-lg font-bold">A</span>
-            </div>
-
-            <div>
-              <div className="text-[20px] font-bold leading-none text-[#5b2a7a]">
-                AlSafwa Cement
-              </div>
-              <div className="mt-1 text-[11px] uppercase tracking-[0.08em] text-gray-500">
-                Customer Portal Registration
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+      <BrandHeader />
 
       {/* Progress */}
       <div className="mx-auto max-w-[1100px] px-6 pt-9">

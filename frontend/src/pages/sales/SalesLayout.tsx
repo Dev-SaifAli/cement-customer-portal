@@ -1,6 +1,7 @@
-import { BarChart3, ClipboardList, LogOut, Menu, ShieldCheck, X } from 'lucide-react';
+import { BarChart3, ClipboardList, LogOut, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import Logo from '../../components/Logo/Logo';
 import { useSalesAuth } from '../../context/SalesAuthContext';
 import type { ReactNode } from 'react';
 
@@ -23,15 +24,7 @@ export function SalesLayout() {
       >
         <div className="flex h-16 items-center justify-between border-b border-slate-200 px-5">
           <Link to="/sales/dashboard" className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#4b2c71] text-white">
-              <ShieldCheck size={20} />
-            </div>
-            <div>
-              <p className="text-sm font-extrabold text-[#4b2c71]">AlSafwa Cement</p>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Sales Portal
-              </p>
-            </div>
+            <Logo size="sm" />
           </Link>
           <button
             className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:hidden"

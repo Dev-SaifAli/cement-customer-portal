@@ -12,6 +12,7 @@ import {
   CalendarDays,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { BrandHeader } from '../../components/registration/BrandHeader';
 import { SaveDraftButton } from '../../components/registration/SaveDraftButton';
 import { SaveStatus } from '../../components/registration/SaveStatus';
 import {
@@ -227,25 +228,7 @@ export default function Documents() {
           HEADER
       ===================================================== */}
 
-      <header className="border-b border-[#e4dfe5] bg-white">
-        <div className="mx-auto flex min-h-[68px] max-w-[1440px] items-center px-6 sm:px-8 lg:px-10">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-sm bg-[#5b2d7d] text-white">
-              <span className="text-sm font-bold">AS</span>
-            </div>
-
-            <div className="leading-none">
-              <div className="text-[20px] font-bold tracking-[-0.02em] text-[#5b2d7d]">
-                AlSafwa Cement
-              </div>
-
-              <div className="mt-1 text-[11px] font-medium tracking-[0.08em] text-[#625c63]">
-                CUSTOMER PORTAL REGISTRATION
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+      <BrandHeader />
 
       {/* =====================================================
           MAIN

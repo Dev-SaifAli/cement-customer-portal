@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
-  Building2,
   MapPin,
   Map,
   UserRound,
@@ -12,6 +11,7 @@ import {
   Save,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { BrandHeader } from '../../components/registration/BrandHeader';
 import { SaveDraftButton } from '../../components/registration/SaveDraftButton';
 import { SaveStatus } from '../../components/registration/SaveStatus';
 import {
@@ -168,23 +168,7 @@ export default function DeliveryLocations() {
   return (
     <div className="min-h-screen bg-[#fafafa] text-[#292929]">
       {/* Header */}
-      <header className="h-[68px] border-b border-[#e5e0e5] bg-white px-6 lg:px-10 flex items-center">
-        <div className="flex items-center gap-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-sm bg-[#54247a] flex items-center justify-center">
-              <Building2 className="w-6 h-6 text-white" />
-            </div>
-
-            <span className="text-[25px] font-bold tracking-tight text-[#54247a]">
-              AlSafwa Cement
-            </span>
-          </div>
-
-          <div className="h-8 w-px bg-[#ddd6df]" />
-
-          <span className="text-[16px] text-[#625c62]">Vendor Registration Portal</span>
-        </div>
-      </header>
+      <BrandHeader />
 
       {/* Progress */}
       <RegistrationProgress />

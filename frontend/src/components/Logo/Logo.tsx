@@ -1,16 +1,10 @@
-import { Building2 } from 'lucide-react';
 import './Logo.css';
+import companyLogo from '../../assets/login/AlSafwa Cement Company Logo.png';
 
-export default function Logo({ size = 'md' }: { size?: 'sm' | 'md' }) {
+export default function Logo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
   return (
     <div className={`logo-mark logo-mark--${size}`}>
-      <span className="logo-glyph">
-        <Building2 strokeWidth={1.75} />
-      </span>
-      <div className="logo-text-block">
-        <div className="logo-word">ALSAFWA</div>
-        <div className="logo-sub">Cement Company</div>
-      </div>
+      <img className="logo-image" src={companyLogo} alt="AlSafwa Cement Company" />
     </div>
   );
 }
