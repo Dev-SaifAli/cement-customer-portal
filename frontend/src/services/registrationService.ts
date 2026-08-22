@@ -1,6 +1,6 @@
 import type { RegistrationData, SubmittedApplication } from '../context/RegistrationContext';
 
-const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
+const apiBaseUrl = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 export interface RegistrationDraftResponse {
   id: string;
