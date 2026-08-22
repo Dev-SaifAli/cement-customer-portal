@@ -13,3 +13,4 @@ coverage/
 frontend/public/uploads/
 storage/
 claude-reference
+backend/logs/*.log
