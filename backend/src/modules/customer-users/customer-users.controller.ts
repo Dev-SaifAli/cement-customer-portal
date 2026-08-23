@@ -20,9 +20,9 @@ export class CustomerUsersController {
     requireCustomerAdmin(customerUser);
 
     const input = createCustomerUserSchema.parse(request.body);
-    const user = await customerUsersService.create(customerUser, input);
+    const result = await customerUsersService.create(customerUser, input);
 
-    response.status(201).json({ success: true, data: { user } });
+    response.status(201).json({ success: true, data: result });
   }
 
   async show(request: CustomerAuthenticatedRequest, response: Response) {

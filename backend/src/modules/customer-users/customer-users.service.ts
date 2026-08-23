@@ -1,4 +1,6 @@
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
+import { env } from '../../config/env.js';
 import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import type { CustomerUser } from '../customer-auth/customer-auth.types.js';
@@ -13,8 +15,10 @@ interface CustomerUserRow {
   customer_account_id: string;
   name: string;
   email: string;
+  phone: string | null;
   role: CustomerUser['role'];
   is_active: boolean;
+  password_must_change: boolean;
   created_at: Date | string;
   updated_at: Date | string;
 }
@@ -24,6 +28,7 @@ const customerUserNotFoundError = new AppError(
   404,
   'CUSTOMER_USER_NOT_FOUND',
 );
+const passwordHashRounds = env.NODE_ENV === 'test' ? 4 : 12;
 
 export class CustomerUsersService {
   async list(customerUser: CustomerUser) {
@@ -33,8 +38,10 @@ export class CustomerUsersService {
          customer_account_id,
          name,
          email,
+         phone,
          role,
          is_active,
+         password_must_change,
          created_at,
          updated_at
        from customer_users
@@ -47,7 +54,8 @@ export class CustomerUsersService {
   }
 
   async create(customerUser: CustomerUser, input: CreateCustomerUserInput) {
-    const passwordHash = await bcrypt.hash(input.password, 12);
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, passwordHashRounds);
 
     try {
       const result = await pool.query<CustomerUserRow>(
@@ -55,24 +63,29 @@ export class CustomerUsersService {
            customer_account_id,
            name,
            email,
+           phone,
            password_hash,
            role,
-           is_active
+           is_active,
+           password_must_change
          )
-         values ($1, $2, $3, $4, $5, $6)
+         values ($1, $2, $3, $4, $5, $6, $7, true)
          returning
            id,
            customer_account_id,
            name,
            email,
+           phone,
            role,
            is_active,
+           password_must_change,
            created_at,
            updated_at`,
         [
           customerUser.account.id,
           input.name,
           input.email,
+          input.phone,
           passwordHash,
           input.role ?? 'CUSTOMER_ADMIN',
           input.isActive ?? true,
@@ -84,7 +97,10 @@ export class CustomerUsersService {
         throw new AppError('Customer user could not be created.', 503, 'CUSTOMER_USER_CREATE_FAILED');
       }
 
-      return mapCustomerUser(row);
+      return {
+        user: mapCustomerUser(row),
+        temporaryPassword,
+      };
     } catch (error) {
       if (isUniqueEmailViolation(error)) {
         throw new AppError('A customer user with this email already exists.', 409, 'EMAIL_IN_USE');
@@ -108,8 +124,9 @@ export class CustomerUsersService {
         `update customer_users
          set name = $3,
              email = $4,
-             role = $5,
-             is_active = $6,
+             phone = $5,
+             role = $6,
+             is_active = $7,
              updated_at = now()
          where id = $2
            and customer_account_id = $1
@@ -118,8 +135,10 @@ export class CustomerUsersService {
            customer_account_id,
            name,
            email,
+           phone,
            role,
            is_active,
+           password_must_change,
            created_at,
            updated_at`,
         [
@@ -127,6 +146,7 @@ export class CustomerUsersService {
           userId,
           input.name ?? current.name,
           input.email ?? current.email,
+          input.phone ?? current.phone,
           input.role ?? current.role,
           input.isActive ?? current.is_active,
         ],
@@ -154,8 +174,10 @@ export class CustomerUsersService {
          customer_account_id,
          name,
          email,
+         phone,
          role,
          is_active,
+         password_must_change,
          created_at,
          updated_at
        from customer_users
@@ -181,12 +203,19 @@ function mapCustomerUser(row: CustomerUserRow) {
     id: row.id,
     name: row.name,
     email: row.email,
+    phone: row.phone,
     role: row.role,
     roleLabel: customerRoleLabels[row.role],
     isActive: row.is_active,
+    passwordMustChange: row.password_must_change,
     createdAt: dateString(row.created_at),
     updatedAt: dateString(row.updated_at),
   };
+}
+
+function generateTemporaryPassword() {
+  const secret = randomBytes(18).toString('base64url');
+  return `Asf-${secret}`;
 }
 
 function dateString(value: Date | string) {

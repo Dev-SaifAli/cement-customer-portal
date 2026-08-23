@@ -13,8 +13,10 @@ export interface CustomerUser {
   customerAccountId: string;
   name: string;
   email: string;
+  phone: string | null;
   role: CustomerRole;
   isActive: boolean;
+  passwordMustChange: boolean;
   account: CustomerAccount;
 }
 

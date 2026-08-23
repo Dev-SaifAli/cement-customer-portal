@@ -4,11 +4,15 @@ import { customerRoles } from '../customer-auth/customer-roles.js';
 const emailSchema = z.string().trim().email('A valid email address is required.').toLowerCase();
 
 const nameSchema = z.string().trim().min(2, 'Name is required.');
+const saudiPhoneSchema = z
+  .string()
+  .trim()
+  .regex(/^\+9665\d{8}$/, 'Phone number must use +9665XXXXXXXX format');
 
 export const createCustomerUserSchema = z.object({
   name: nameSchema,
   email: emailSchema,
-  password: z.string().min(8, 'Password must be at least 8 characters.'),
+  phone: saudiPhoneSchema,
   role: z.enum(customerRoles).optional(),
   isActive: z.boolean().optional(),
 });
@@ -17,6 +21,7 @@ export const updateCustomerUserSchema = z
   .object({
     name: nameSchema.optional(),
     email: emailSchema.optional(),
+    phone: saudiPhoneSchema.optional(),
     role: z.enum(customerRoles).optional(),
     isActive: z.boolean().optional(),
   })
@@ -24,6 +29,7 @@ export const updateCustomerUserSchema = z
     (value) =>
       value.name !== undefined ||
       value.email !== undefined ||
+      value.phone !== undefined ||
       value.role !== undefined ||
       value.isActive !== undefined,
     {

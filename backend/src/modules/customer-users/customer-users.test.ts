@@ -25,9 +25,11 @@ const authenticatedCustomerUserRow = {
   customer_account_id: customerAccountId,
   name: 'Customer Admin',
   email: 'admin@example.com',
+  phone: '+966555000111',
   password_hash: 'hashed-password',
   role: 'CUSTOMER_ADMIN',
   is_active: true,
+  password_must_change: false,
   registration_id: '33333333-3333-4333-8333-333333333333',
   company_name: 'Activated Cement Customer',
   account_status: 'ACTIVE',
@@ -39,8 +41,10 @@ const safeCustomerUserRow = {
   customer_account_id: customerAccountId,
   name: 'Operations User',
   email: 'operations@example.com',
+  phone: '+966555111222',
   role: 'PURCHASER',
   is_active: true,
+  password_must_change: true,
   created_at: '2026-08-23T08:00:00.000Z',
   updated_at: '2026-08-23T08:00:00.000Z',
 };
@@ -103,9 +107,11 @@ describe('customer users API', () => {
             id: safeCustomerUserRow.id,
             name: 'Operations User',
             email: 'operations@example.com',
+            phone: '+966555111222',
             role: 'PURCHASER',
             roleLabel: 'Purchaser',
             isActive: true,
+            passwordMustChange: true,
             createdAt: '2026-08-23T08:00:00.000Z',
             updatedAt: '2026-08-23T08:00:00.000Z',
           },
@@ -128,7 +134,7 @@ describe('customer users API', () => {
       .send({
         name: 'Operations User',
         email: 'OPERATIONS@EXAMPLE.COM',
-        password: 'new-password',
+        phone: '+966555111222',
         role: 'PURCHASER',
       });
 
@@ -136,9 +142,24 @@ describe('customer users API', () => {
     expect(query).toHaveBeenNthCalledWith(
       2,
       expect.stringContaining('insert into customer_users'),
-      expect.arrayContaining([customerAccountId, 'Operations User', 'operations@example.com']),
+      expect.arrayContaining([
+        customerAccountId,
+        'Operations User',
+        'operations@example.com',
+        '+966555111222',
+        'PURCHASER',
+      ]),
     );
-    expect(JSON.stringify(response.body)).not.toContain('password');
+    const createdPasswordHash = query.mock.calls[1]?.[1]?.[4] as string;
+    expect(createdPasswordHash).toEqual(expect.any(String));
+    expect(createdPasswordHash).not.toBe(response.body.data.temporaryPassword);
+    expect(response.body.data.temporaryPassword).toEqual(expect.stringMatching(/^Asf-/));
+    expect(response.body.data.user).toMatchObject({
+      email: 'operations@example.com',
+      phone: '+966555111222',
+      role: 'PURCHASER',
+      passwordMustChange: true,
+    });
     expect(JSON.stringify(response.body)).not.toContain('password_hash');
     expect(JSON.stringify(response.body)).not.toContain('passwordHash');
   });
@@ -172,7 +193,7 @@ describe('customer users API', () => {
       .send({
         name: 'Viewer User',
         email: 'viewer@example.com',
-        password: 'new-password',
+        phone: '+966555333444',
         role: 'VIEWER',
       });
 
@@ -203,6 +224,7 @@ describe('customer users API', () => {
           {
             ...safeCustomerUserRow,
             name: 'Updated User',
+            phone: '+966555999888',
             role: 'FINANCE_USER',
             is_active: false,
             updated_at: '2026-08-23T09:00:00.000Z',
@@ -213,7 +235,12 @@ describe('customer users API', () => {
     const response = await request(createApp())
       .patch(`/api/v1/customer/users/${safeCustomerUserRow.id}`)
       .set({ Cookie: `customer_session=${createValidCustomerToken()}` })
-      .send({ name: 'Updated User', role: 'FINANCE_USER', isActive: false });
+      .send({
+        name: 'Updated User',
+        phone: '+966555999888',
+        role: 'FINANCE_USER',
+        isActive: false,
+      });
 
     expect(response.status).toBe(200);
     expect(query).toHaveBeenNthCalledWith(
@@ -224,6 +251,7 @@ describe('customer users API', () => {
         safeCustomerUserRow.id,
         'Updated User',
         'operations@example.com',
+        '+966555999888',
         'FINANCE_USER',
         false,
       ],
@@ -231,6 +259,7 @@ describe('customer users API', () => {
     expect(response.body.data.user).toMatchObject({
       id: safeCustomerUserRow.id,
       name: 'Updated User',
+      phone: '+966555999888',
       role: 'FINANCE_USER',
       roleLabel: 'Finance User',
       isActive: false,

@@ -49,9 +49,11 @@ export class CustomerAuthService {
          customer_users.customer_account_id,
          customer_users.name,
          customer_users.email,
+         customer_users.phone,
          customer_users.password_hash,
          customer_users.role,
          customer_users.is_active,
+         customer_users.password_must_change,
          customer_accounts.registration_id,
          customer_accounts.company_name,
          customer_accounts.status as account_status,
@@ -74,9 +76,11 @@ export class CustomerAuthService {
          customer_users.customer_account_id,
          customer_users.name,
          customer_users.email,
+         customer_users.phone,
          customer_users.password_hash,
          customer_users.role,
          customer_users.is_active,
+         customer_users.password_must_change,
          customer_accounts.registration_id,
          customer_accounts.company_name,
          customer_accounts.status as account_status,
@@ -100,9 +104,11 @@ interface CustomerUserRow {
   customer_account_id: string;
   name: string;
   email: string;
+  phone: string | null;
   password_hash: string;
   role: CustomerRole;
   is_active: boolean;
+  password_must_change: boolean;
   registration_id: string;
   company_name: string;
   account_status: string;
@@ -117,9 +123,11 @@ function mapCustomerUserRecord(row: CustomerUserRow): CustomerUserRecord {
     customerAccountId: row.customer_account_id,
     name: row.name,
     email: row.email,
+    phone: row.phone,
     passwordHash: row.password_hash,
     role,
     isActive: row.is_active,
+    passwordMustChange: row.password_must_change,
     accountIsActive: row.account_status === 'ACTIVE',
     applicationStatus: row.application_status,
     account: {
@@ -141,8 +149,10 @@ function toSafeCustomerUser(user: CustomerUserRecord): CustomerUser {
     customerAccountId: user.customerAccountId,
     name: user.name,
     email: user.email,
+    phone: user.phone,
     role: user.role,
     isActive: user.isActive,
+    passwordMustChange: user.passwordMustChange,
     account: user.account,
   };
 }
