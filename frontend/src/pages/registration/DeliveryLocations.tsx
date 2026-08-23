@@ -12,8 +12,10 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { BrandHeader } from '../../components/registration/BrandHeader';
+import { LocationPickerMap } from '../../components/registration/LocationPickerMap';
 import { SaveDraftButton } from '../../components/registration/SaveDraftButton';
 import { SaveStatus } from '../../components/registration/SaveStatus';
+import { formatCoordinates, isValidCoordinates } from '../../config/map';
 import {
   formatSaudiPhoneNumber,
   getSaudiPhoneDigitsRemaining,
@@ -23,7 +25,20 @@ import {
   type DeliveryLocation,
 } from '../../context/RegistrationContext';
 
-const emptyForm = {
+type DeliveryLocationForm = {
+  name: string;
+  streetAddress: string;
+  city: string;
+  region: string;
+  country: string;
+  postalCode: string;
+  contactPerson: string;
+  contactPhone: string;
+  latitude?: number | undefined;
+  longitude?: number | undefined;
+};
+
+const emptyForm: DeliveryLocationForm = {
   name: '',
   streetAddress: '',
   city: '',
@@ -42,10 +57,11 @@ export default function DeliveryLocations() {
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [mapOpen, setMapOpen] = useState(false);
 
   useEffect(() => setCurrentStep(4), [setCurrentStep]);
 
-  const updateField = (field: keyof typeof emptyForm, value: string) => {
+  const updateField = (field: keyof DeliveryLocationForm, value: string) => {
     setForm((prev) => ({
       ...prev,
       [field]: value,
@@ -70,6 +86,9 @@ export default function DeliveryLocations() {
     if (!form.contactPhone.trim()) newErrors.contactPhone = 'Contact phone is required.';
     else if (!isSaudiPhoneNumber(form.contactPhone)) {
       newErrors.contactPhone = 'Enter a valid Saudi mobile number.';
+    }
+    if (!areOptionalCoordinatesValid(form)) {
+      newErrors.coordinates = 'Selected map coordinates are invalid.';
     }
 
     setErrors(newErrors);
@@ -100,6 +119,8 @@ export default function DeliveryLocations() {
                 postalCode: form.postalCode,
                 contactPerson: form.contactPerson,
                 contactPhone: form.contactPhone,
+                latitude: form.latitude,
+                longitude: form.longitude,
               }
             : location,
         ),
@@ -118,6 +139,8 @@ export default function DeliveryLocations() {
         postalCode: form.postalCode,
         contactPerson: form.contactPerson,
         contactPhone: form.contactPhone,
+        latitude: form.latitude,
+        longitude: form.longitude,
       };
 
       setDeliveryLocations([...locations, newLocation]);
@@ -138,6 +161,8 @@ export default function DeliveryLocations() {
       postalCode: location.postalCode,
       contactPerson: location.contactPerson,
       contactPhone: location.contactPhone,
+      latitude: location.latitude,
+      longitude: location.longitude,
     });
 
     window.scrollTo({
@@ -253,6 +278,38 @@ export default function DeliveryLocations() {
                     value={form.postalCode}
                     onChange={(value) => updateField('postalCode', value)}
                   />
+                </div>
+
+                <div className="rounded-md border border-[#e5dfe5] bg-[#fbfafb] p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="text-[14px] font-semibold text-[#3f3940]">
+                        Exact Map Location
+                      </h2>
+                      <p className="mt-1 text-sm text-[#6c666c]">
+                        Optional, but recommended for accurate cement deliveries.
+                      </p>
+                      {getFormCoordinates(form) ? (
+                        <p className="mt-2 text-sm font-semibold text-[#087443]">
+                          Selected: {formatCoordinates(getFormCoordinates(form)!)}
+                        </p>
+                      ) : (
+                        <p className="mt-2 text-sm text-[#777177]">No map location selected.</p>
+                      )}
+                      {errors.coordinates && (
+                        <p className="mt-1 text-xs text-red-600">{errors.coordinates}</p>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setMapOpen(true)}
+                      className="inline-flex w-fit items-center gap-2 rounded-md border border-[#7c6e7d] bg-white px-5 py-2.5 text-sm font-semibold text-[#625c62] transition-colors hover:bg-[#faf7fb]"
+                    >
+                      <MapPin size={17} />
+                      {getFormCoordinates(form) ? 'Edit Map Location' : 'Open Map'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Site Contact */}
@@ -381,8 +438,42 @@ export default function DeliveryLocations() {
           </div>
         </div>
       </main>
+
+      {mapOpen && (
+        <LocationPickerMap
+          initialCoordinates={getFormCoordinates(form) ?? undefined}
+          locationLabel={form.name || form.city || undefined}
+          onCancel={() => setMapOpen(false)}
+          onConfirm={(coordinates) => {
+            setForm((current) => ({
+              ...current,
+              latitude: coordinates.latitude,
+              longitude: coordinates.longitude,
+            }));
+            setErrors((current) => ({ ...current, coordinates: '' }));
+            setMapOpen(false);
+          }}
+        />
+      )}
     </div>
   );
+}
+
+function getFormCoordinates(location: Pick<DeliveryLocation, 'latitude' | 'longitude'>) {
+  if (typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
+    return null;
+  }
+
+  return {
+    latitude: location.latitude,
+    longitude: location.longitude,
+  };
+}
+
+function areOptionalCoordinatesValid(location: Pick<DeliveryLocation, 'latitude' | 'longitude'>) {
+  const coordinates = getFormCoordinates(location);
+
+  return coordinates === null || isValidCoordinates(coordinates);
 }
 
 /* -------------------------------------------------------
@@ -513,6 +604,13 @@ function LocationCard({
             {location.contactPerson} • {location.contactPhone}
           </span>
         </div>
+
+        {getFormCoordinates(location) && (
+          <div className="flex gap-2 text-[#087443]">
+            <MapPin size={17} className="mt-0.5 shrink-0" />
+            <span>Map location selected: {formatCoordinates(getFormCoordinates(location)!)}</span>
+          </div>
+        )}
       </div>
     </div>
   );

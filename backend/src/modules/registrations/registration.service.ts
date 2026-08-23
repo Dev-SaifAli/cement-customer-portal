@@ -46,6 +46,10 @@ const isFutureDate = (date: unknown) => {
 };
 
 const isNonEmptyString = (value: unknown) => typeof value === 'string' && value.trim().length > 0;
+const isValidOptionalLatitude = (value: unknown) =>
+  value === undefined || (typeof value === 'number' && value >= -90 && value <= 90);
+const isValidOptionalLongitude = (value: unknown) =>
+  value === undefined || (typeof value === 'number' && value >= -180 && value <= 180);
 
 export class RegistrationService {
   async createDraft(input: UpdateRegistrationInput = {}) {
@@ -267,6 +271,13 @@ export class RegistrationService {
         if (!saudiMobilePattern.test(String(item.contactPhone ?? ''))) {
           errors[`deliveryLocations.${index}.contactPhone`] =
             'Contact phone must be a valid Saudi mobile number.';
+        }
+        if (!isValidOptionalLatitude(item.latitude)) {
+          errors[`deliveryLocations.${index}.latitude`] = 'Latitude must be between -90 and 90.';
+        }
+        if (!isValidOptionalLongitude(item.longitude)) {
+          errors[`deliveryLocations.${index}.longitude`] =
+            'Longitude must be between -180 and 180.';
         }
       });
     }

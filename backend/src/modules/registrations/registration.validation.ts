@@ -61,6 +61,8 @@ const deliveryLocationSchema = z.object({
   postalCode: z.string().optional(),
   contactPerson: z.string().trim().min(1, 'Contact person is required'),
   contactPhone: z.string().regex(/^\+9665\d{8}$/, 'Phone number must use +9665XXXXXXXX format'),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
 });
 
 const administratorSchema = z

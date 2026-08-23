@@ -1,5 +1,5 @@
 import './Logo.css';
-import companyLogo from '../../assets/login/AlSafwa Cement Company Logo.png';
+import companyLogo from '../../../../frontend/public/favicon.png';
 
 export default function Logo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
   return (

@@ -62,6 +62,8 @@ export type DeliveryLocation = {
   postalCode: string;
   contactPerson: string;
   contactPhone: string;
+  latitude?: number | undefined;
+  longitude?: number | undefined;
 };
 
 export type AdministratorData = {
