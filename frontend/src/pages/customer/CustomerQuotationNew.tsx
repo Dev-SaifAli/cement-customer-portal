@@ -2,7 +2,6 @@ import {
   AlertCircle,
   CalendarDays,
   CheckCircle2,
-  ChevronRight,
   Loader2,
   MapPin,
   PackagePlus,
@@ -398,7 +397,16 @@ export function CustomerQuotationNew() {
               </button>
             </div>
 
-            <div className="mt-3 space-y-3">
+            <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200">
+              <div className="hidden grid-cols-[44px_minmax(260px,1fr)_120px_120px_90px_190px_52px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.08em] text-slate-500 xl:grid">
+                <span>#</span>
+                <span>Product</span>
+                <span>Quantity</span>
+                <span>Packaging</span>
+                <span>UOM</span>
+                <span>Pallet</span>
+                <span></span>
+              </div>
               {form.items.map((item, index) => (
                 <ProductLine
                   key={item.key}
@@ -547,16 +555,17 @@ function ProductLine({
   onRemove: () => void;
 }) {
   const isBagProduct = item.product?.packagingType.toLowerCase().includes('bag') ?? false;
+  const [pickerOpen, setPickerOpen] = useState(!item.product);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-bold text-slate-950">Product {index + 1}</h3>
+    <div className="grid gap-3 border-b border-slate-100 bg-white px-4 py-4 last:border-b-0 xl:grid-cols-[44px_minmax(260px,1fr)_120px_120px_90px_190px_52px] xl:items-start">
+      <div className="flex items-center justify-between gap-3 xl:block xl:pt-3">
+        <h3 className="text-sm font-bold text-slate-500 xl:text-slate-500">{index + 1}</h3>
         {canRemove && (
           <button
             type="button"
             onClick={onRemove}
-            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-red-600 hover:bg-red-50"
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-red-600 hover:bg-red-50 xl:hidden"
           >
             <Trash2 size={14} />
             Remove
@@ -564,63 +573,97 @@ function ProductLine({
         )}
       </div>
 
-      <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px]">
-        <div>
-          <input
-            value={productSearch}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search product name or code"
-            className={fieldClass}
-          />
-          <div className="mt-2 max-h-72 overflow-y-auto rounded-2xl border border-slate-200">
-            {productsLoading ? (
-              <div className="flex items-center gap-2 p-3 text-sm font-semibold text-slate-500">
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                Loading products...
+      <div className="grid gap-3 xl:contents">
+        <div className="min-w-0">
+          {item.product && !pickerOpen ? (
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2">
+              <ProductImage
+                image={item.product.image}
+                productName={item.product.productName}
+                size="thumbnail"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-slate-950">
+                  {item.product.productName}
+                </p>
+                <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
+                  {item.product.productCode}
+                </p>
               </div>
-            ) : products.length === 0 ? (
-              <p className="p-3 text-sm font-semibold text-slate-500">No active products found.</p>
-            ) : (
-              products.map((product) => {
-                const selected = item.product?.id === product.id;
-                return (
-                  <button
-                    key={product.id}
-                    type="button"
-                    onClick={() =>
-                      onChange({
-                        product,
-                        palletRequired: product.packagingType.toLowerCase().includes('bag')
-                          ? item.palletRequired
-                          : false,
-                      })
-                    }
-                    className={`flex w-full items-center gap-3 border-b border-slate-100 p-3 text-left last:border-b-0 hover:bg-[#fdfafd] ${
-                      selected ? 'bg-[#f6f2fa]' : 'bg-white'
-                    }`}
-                  >
-                    <ProductImage
-                      image={product.image}
-                      productName={product.productName}
-                      size="thumbnail"
-                    />
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-bold text-slate-950">
-                        {product.productName}
-                      </span>
-                      <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">
-                        {product.productCode} · {product.packagingType} · {product.uom}
-                      </span>
-                    </span>
-                    {selected && <ChevronRight className="ml-auto h-4 w-4 text-[#54247a]" />}
-                  </button>
-                );
-              })
-            )}
-          </div>
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="rounded-lg px-2 py-1 text-xs font-bold text-[#54247a] hover:bg-white"
+              >
+                Change
+              </button>
+            </div>
+          ) : (
+            <div className="relative">
+              <input
+                value={productSearch}
+                onChange={(event) => {
+                  onSearchChange(event.target.value);
+                  setPickerOpen(true);
+                }}
+                onFocus={() => setPickerOpen(true)}
+                placeholder="Search product name or code"
+                className={fieldClass}
+              />
+              <div className="absolute left-0 right-0 top-12 z-20 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10">
+                {productsLoading ? (
+                  <div className="flex items-center gap-2 p-3 text-sm font-semibold text-slate-500">
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Loading products...
+                  </div>
+                ) : products.length === 0 ? (
+                  <p className="p-3 text-sm font-semibold text-slate-500">
+                    No active products found.
+                  </p>
+                ) : (
+                  products.map((product) => {
+                    const selected = item.product?.id === product.id;
+                    return (
+                      <button
+                        key={product.id}
+                        type="button"
+                        onClick={() => {
+                          onChange({
+                            product,
+                            palletRequired: product.packagingType.toLowerCase().includes('bag')
+                              ? item.palletRequired
+                              : false,
+                          });
+                          setPickerOpen(false);
+                        }}
+                        className={`flex w-full items-center gap-3 border-b border-slate-100 p-3 text-left last:border-b-0 hover:bg-[#fdfafd] ${
+                          selected ? 'bg-[#f6f2fa]' : 'bg-white'
+                        }`}
+                      >
+                        <ProductImage
+                          image={product.image}
+                          productName={product.productName}
+                          size="thumbnail"
+                        />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-bold text-slate-950">
+                            {product.productName}
+                          </span>
+                          <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">
+                            {product.productCode} · {product.packagingType} · {product.uom}
+                          </span>
+                        </span>
+                        {selected && <CheckCircle2 className="ml-auto h-4 w-4 text-[#54247a]" />}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="space-y-3">
+        <div className="grid gap-3 xl:contents">
           <Field label="Quantity">
             <input
               type="number"
@@ -638,7 +681,7 @@ function ProductLine({
       </div>
 
       {isBagProduct && (
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
             <input
               type="checkbox"
@@ -668,6 +711,23 @@ function ProductLine({
           )}
         </div>
       )}
+      {!isBagProduct && (
+        <div className="flex h-11 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-400">
+          Not applicable
+        </div>
+      )}
+      <div className="hidden justify-end pt-1 xl:flex">
+        {canRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-red-600 hover:bg-red-50"
+            aria-label={`Remove product ${index + 1}`}
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -715,9 +775,9 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 function ReadOnlyMeta({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-      <p className="text-xs font-semibold text-slate-400">{label}</p>
-      <p className="mt-0.5 text-sm font-bold text-slate-800">{value}</p>
+    <div className="flex min-h-11 flex-col justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+      <p className="text-xs font-semibold text-slate-400 xl:hidden">{label}</p>
+      <p className="text-sm font-bold text-slate-800">{value}</p>
     </div>
   );
 }
