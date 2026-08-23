@@ -247,7 +247,7 @@ describe('authentication routes', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole('link', { name: /ordinary portland cement/i }));
+    fireEvent.click(await screen.findByRole('link', { name: 'Ordinary Portland Cement' }));
 
     expect(
       await screen.findByRole('heading', { name: /ordinary portland cement/i }),

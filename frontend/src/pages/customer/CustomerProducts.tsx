@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ProductImage } from '../../components/customer/ProductImage';
 import {
   getCustomerProducts,
   type CustomerProduct,
@@ -176,6 +177,14 @@ export function CustomerProducts() {
 function ProductCard({ product }: { product: CustomerProduct }) {
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-[#decbe5] hover:bg-[#fdfafd]">
+      <Link
+        to={`/customer/products/${product.id}`}
+        className="mb-4 block focus:outline-none focus:ring-2 focus:ring-[#54247a]/20"
+        aria-label={`View ${product.productName}`}
+      >
+        <ProductImage image={product.image} productName={product.productName} />
+      </Link>
+
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <Link

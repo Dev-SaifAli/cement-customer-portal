@@ -1,6 +1,7 @@
-import { AlertCircle, ArrowLeft, ImageIcon, Package, RefreshCw } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Package, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { ProductImage } from '../../components/customer/ProductImage';
 import { getCustomerProduct, type CustomerProduct } from '../../services/customerProductsService';
 
 export function CustomerProductDetails() {
@@ -94,19 +95,8 @@ function ProductDetailsCard({ product }: { product: CustomerProduct }) {
             <Package className="h-4 w-4 text-[#54247a]" />
             Product Image
           </div>
-          <div className="mt-4 flex aspect-[4/3] items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            {product.image ? (
-              <img
-                src={product.image}
-                alt={product.productName}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-sm font-semibold text-slate-400">
-                <ImageIcon size={32} />
-                No image available
-              </div>
-            )}
+          <div className="mt-4">
+            <ProductImage image={product.image} productName={product.productName} size="detail" />
           </div>
         </div>
       </div>
