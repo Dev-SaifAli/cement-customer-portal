@@ -112,6 +112,45 @@ vi.stubGlobal(
       );
     }
 
+    if (url.includes('/customer/products')) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: {
+              items: [
+                {
+                  id: 'product-1',
+                  productCode: 'CEM-OPC-50KG',
+                  productName: 'Ordinary Portland Cement',
+                  description: null,
+                  shortDescription: 'General-purpose Portland cement.',
+                  image: null,
+                  packagingType: 'Bag',
+                  uom: '50KG_BAG',
+                  category: 'Cement',
+                  displayOrder: 10,
+                  isActive: true,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                },
+              ],
+              pagination: {
+                page: 1,
+                pageSize: 10,
+                total: 1,
+                totalPages: 1,
+              },
+            },
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+      );
+    }
+
     if (url.endsWith('/registrations') && options?.method === 'POST') {
       const payload = options?.body ? JSON.parse(String(options.body)) : {};
       return Promise.resolve(registrationResponse(payload));

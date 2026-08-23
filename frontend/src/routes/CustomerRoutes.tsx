@@ -4,6 +4,7 @@ import { CustomerLayout } from '../pages/customer/CustomerLayout';
 import { CustomerLanding } from '../pages/customer/CustomerLanding';
 import { CustomerLocations } from '../pages/customer/CustomerLocations';
 import { CustomerProfile } from '../pages/customer/CustomerProfile';
+import { CustomerProducts } from '../pages/customer/CustomerProducts';
 import { CustomerUsers } from '../pages/customer/CustomerUsers';
 
 export function CustomerRoutes() {
@@ -16,6 +17,7 @@ export function CustomerRoutes() {
             <Route path="dashboard" element={<CustomerLanding />} />
             <Route path="profile" element={<CustomerProfile />} />
             <Route path="locations" element={<CustomerLocations />} />
+            <Route path="products" element={<CustomerProducts />} />
             <Route path="users" element={<CustomerUsers />} />
           </Route>
         </Route>

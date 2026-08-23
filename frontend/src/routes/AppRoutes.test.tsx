@@ -199,22 +199,22 @@ describe('authentication routes', () => {
   it.each([
     {
       role: 'CUSTOMER_ADMIN',
-      visible: [/dashboard/i, /profile/i, /delivery locations/i, /^users$/i],
+      visible: [/dashboard/i, /profile/i, /delivery locations/i, /products/i, /^users$/i],
       hidden: [],
     },
     {
       role: 'PURCHASER',
-      visible: [/dashboard/i, /profile/i, /delivery locations/i],
+      visible: [/dashboard/i, /profile/i, /delivery locations/i, /products/i],
       hidden: [/^users$/i],
     },
     {
       role: 'FINANCE_USER',
-      visible: [/dashboard/i, /profile/i],
+      visible: [/dashboard/i, /profile/i, /products/i],
       hidden: [/delivery locations/i, /^users$/i],
     },
     {
       role: 'VIEWER',
-      visible: [/dashboard/i, /profile/i],
+      visible: [/dashboard/i, /profile/i, /products/i],
       hidden: [/delivery locations/i, /^users$/i],
     },
   ])('shows role-aware customer navigation for $role', async ({ hidden, role, visible }) => {

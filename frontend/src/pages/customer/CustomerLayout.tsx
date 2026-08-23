@@ -6,6 +6,7 @@ import {
   LogOut,
   MapPin,
   Menu,
+  PackageSearch,
   UserCircle,
   Users,
   X,
@@ -34,6 +35,12 @@ const customerNavigation = [
     label: 'Delivery Locations',
     icon: <MapPin size={18} />,
     roles: ['CUSTOMER_ADMIN', 'PURCHASER'],
+  },
+  {
+    to: '/customer/products',
+    label: 'Products',
+    icon: <PackageSearch size={18} />,
+    roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
   },
   {
     to: '/customer/users',
