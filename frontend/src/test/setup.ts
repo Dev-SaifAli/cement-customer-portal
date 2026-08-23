@@ -25,6 +25,93 @@ vi.stubGlobal(
       );
     }
 
+    if (url.endsWith('/customer/auth/me')) {
+      if (window.sessionStorage.getItem('test_customer_session') === 'active') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              success: true,
+              data: customerAuthSession(),
+            }),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            },
+          ),
+        );
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            success: false,
+            error: {
+              code: 'CUSTOMER_AUTH_REQUIRED',
+              message: 'Customer authentication is required.',
+            },
+          }),
+          {
+            status: 401,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+      );
+    }
+
+    if (url.endsWith('/customer/auth/login') && options?.method === 'POST') {
+      const payload = options?.body ? JSON.parse(String(options.body)) : {};
+
+      if (payload.email === 'admin@example.com' && payload.password === 'correct-password') {
+        window.sessionStorage.setItem('test_customer_session', 'active');
+
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              success: true,
+              data: customerAuthSession(),
+            }),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            },
+          ),
+        );
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            success: false,
+            error: {
+              code: 'CUSTOMER_AUTH_INVALID_CREDENTIALS',
+              message: 'Invalid email or password.',
+            },
+          }),
+          {
+            status: 401,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+      );
+    }
+
+    if (url.endsWith('/customer/auth/logout') && options?.method === 'POST') {
+      window.sessionStorage.removeItem('test_customer_session');
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Logged out successfully.',
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+      );
+    }
+
     if (url.endsWith('/registrations') && options?.method === 'POST') {
       const payload = options?.body ? JSON.parse(String(options.body)) : {};
       return Promise.resolve(registrationResponse(payload));
@@ -48,6 +135,21 @@ vi.stubGlobal(
     return Promise.reject(new Error(`Unhandled fetch request: ${url}`));
   }),
 );
+
+function customerAuthSession() {
+  return {
+    user: {
+      id: 'customer-user-1',
+      name: 'Customer Admin',
+      email: 'admin@example.com',
+      role: 'CUSTOMER_ADMIN',
+    },
+    account: {
+      id: 'customer-account-1',
+      companyName: 'Activated Cement Customer',
+    },
+  };
+}
 
 function registrationResponse(overrides: Record<string, unknown> = {}) {
   return new Response(

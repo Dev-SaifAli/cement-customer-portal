@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { createHmac } from 'node:crypto';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -24,6 +25,27 @@ const activeSalesUser = async () => ({
   password_hash: await bcrypt.hash('correct-password', 4),
   is_active: true,
 });
+
+function createValidCustomerToken() {
+  const now = Math.floor(Date.now() / 1000);
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' }), 'utf8').toString(
+    'base64url',
+  );
+  const payload = Buffer.from(
+    JSON.stringify({
+      sub: '22222222-2222-4222-8222-222222222222',
+      type: 'customer',
+      iat: now,
+      exp: now + 60 * 60,
+    }),
+    'utf8',
+  ).toString('base64url');
+  const signature = createHmac('sha256', process.env.JWT_SECRET ?? '')
+    .update(`${header}.${payload}`)
+    .digest('base64url');
+
+  return `${header}.${payload}.${signature}`;
+}
 
 describe('sales authentication API', () => {
   beforeEach(() => {
@@ -109,6 +131,16 @@ describe('sales authentication API', () => {
 
   it('rejects /me without Sales authentication', async () => {
     const response = await request(createApp()).get('/api/v1/sales/auth/me');
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe('SALES_AUTH_REQUIRED');
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('does not authenticate Sales APIs with a customer session cookie', async () => {
+    const response = await request(createApp())
+      .get('/api/v1/sales/auth/me')
+      .set('Cookie', `customer_session=${createValidCustomerToken()}`);
 
     expect(response.status).toBe(401);
     expect(response.body.error.code).toBe('SALES_AUTH_REQUIRED');

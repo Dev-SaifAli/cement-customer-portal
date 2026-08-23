@@ -1,53 +1,91 @@
-import { useState, type FormEvent } from 'react';
-import { ArrowRight, Mail } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState, type FormEvent } from 'react';
+import { AlertCircle, ArrowRight, Mail, RefreshCw } from 'lucide-react';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import Alert from '../../components/Alert/Alert';
 import AuthLayout, { visualPresets } from '../../components/AuthLayout/AuthLayout';
 import Button from '../../components/Button/Button';
-import Captcha from '../../components/Captcha/Captcha';
-import Checkbox from '../../components/Checkbox/Checkbox';
 import Input from '../../components/Input/Input';
 import PasswordInput from '../../components/PasswordInput/PasswordInput';
-import { AuthApiError, login } from '../../services/authService';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import { CustomerAuthApiError } from '../../services/customerAuthService';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 type LoginErrors = Partial<Record<'email' | 'password' | 'captcha', string>>;
 
+interface CaptchaChallenge {
+  left: number;
+  right: number;
+}
+
+function createCaptchaChallenge(): CaptchaChallenge {
+  return {
+    left: Math.floor(Math.random() * 8) + 2,
+    right: Math.floor(Math.random() * 8) + 2,
+  };
+}
+
+function createDifferentCaptchaChallenge(current: CaptchaChallenge): CaptchaChallenge {
+  let next = createCaptchaChallenge();
+
+  while (next.left === current.left && next.right === current.right) {
+    next = createCaptchaChallenge();
+  }
+
+  return next;
+}
+
 export default function Login() {
+  const { user, loading, login } = useCustomerAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
-  const [captchaChallengeId, setCaptchaChallengeId] = useState('');
+  const [captchaChallenge, setCaptchaChallenge] = useState<CaptchaChallenge>(() =>
+    createCaptchaChallenge(),
+  );
   const [captchaAnswer, setCaptchaAnswer] = useState('');
-  const [captchaResetKey, setCaptchaResetKey] = useState(0);
   const [errors, setErrors] = useState<LoginErrors>({});
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const resetCaptcha = () => {
-    setCaptchaChallengeId('');
-    setCaptchaAnswer('');
-    setCaptchaResetKey((current) => current + 1);
-  };
+  useEffect(() => {
+    if (user) {
+      navigate('/customer/dashboard', { replace: true });
+    }
+  }, [navigate, user]);
 
-  const clearCaptchaError = () => {
-    setErrors((current) => {
-      const next = { ...current };
-      delete next.captcha;
-      return next;
-    });
-  };
+  if (!loading && user) {
+    const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+    return (
+      <Navigate
+        to={from && from !== '/login' ? from : '/customer/dashboard'}
+        replace
+      />
+    );
+  }
 
   const validate = () => {
     const next: LoginErrors = {};
     if (!email.trim()) next.email = 'Email address is required.';
     else if (!emailPattern.test(email.trim())) next.email = 'Please enter a valid email address.';
     if (!password) next.password = 'Password is required.';
-    if (!captchaChallengeId || !captchaAnswer.trim()) {
+    if (!captchaAnswer.trim()) {
       next.captcha = 'Please complete the security verification.';
+    } else if (Number(captchaAnswer) !== captchaChallenge.left + captchaChallenge.right) {
+      next.captcha = 'Security verification answer is incorrect. Please try again.';
     }
+
+    if (next.captcha) {
+      refreshCaptcha();
+    }
+
     setErrors(next);
     return Object.keys(next).length === 0;
+  };
+
+  const refreshCaptcha = () => {
+    setCaptchaChallenge((current) => createDifferentCaptchaChallenge(current));
+    setCaptchaAnswer('');
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -57,43 +95,15 @@ export default function Login() {
 
     setSubmitting(true);
     try {
-      await login({
-        email: email.trim(),
-        password,
-        rememberMe,
-        captchaChallengeId,
-        captchaAnswer,
-      });
+      await login({ email: email.trim(), password });
+      navigate('/customer/dashboard', { replace: true });
     } catch (error) {
-      if (error instanceof AuthApiError) {
-        if (error.code === 'CAPTCHA_EXPIRED') {
-          setErrors((current) => ({
-            ...current,
-            captcha: 'Security verification expired. Please try again.',
-          }));
-          resetCaptcha();
-        } else if (error.code === 'CAPTCHA_FAILED' || error.code === 'CAPTCHA_REQUIRED') {
-          setErrors((current) => ({
-            ...current,
-            captcha: 'Please complete the security verification.',
-          }));
-          resetCaptcha();
-        } else if (error.code === 'CAPTCHA_UNAVAILABLE') {
-          setErrors((current) => ({
-            ...current,
-            captcha: 'Security verification is temporarily unavailable. Please try again later.',
-          }));
-          resetCaptcha();
-        } else if (error.code === 'AUTH_NOT_CONFIGURED') {
-          setNotice('Sign-in will be enabled when the authentication service is connected.');
-          resetCaptcha();
-        } else {
-          setNotice(error.message);
-          resetCaptcha();
-        }
+      if (error instanceof CustomerAuthApiError && error.status === 401) {
+        setNotice('Invalid email or password.');
+      } else if (error instanceof CustomerAuthApiError) {
+        setNotice(error.message);
       } else {
-        setNotice('Unable to connect. Please check your network and try again.');
-        resetCaptcha();
+        setNotice('Unable to sign in. Please try again.');
       }
     } finally {
       setSubmitting(false);
@@ -106,7 +116,7 @@ export default function Login() {
         <h1>Welcome Back</h1>
         <p>Sign in to access your AlSafwa Cement Customer Portal.</p>
       </div>
-      {notice && <Alert variant="warn">{notice}</Alert>}
+      {notice && <Alert variant="error">{notice}</Alert>}
       <form onSubmit={handleSubmit} noValidate>
         <Input
           id="loginEmail"
@@ -118,6 +128,7 @@ export default function Login() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           error={errors.email}
+          autoComplete="email"
         />
         <PasswordInput
           id="loginPassword"
@@ -127,38 +138,68 @@ export default function Login() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           error={errors.password}
+          autoComplete="current-password"
         />
-        <Captcha
-          id="loginCaptchaAnswer"
-          challengeId={captchaChallengeId}
-          answer={captchaAnswer}
-          onChallengeChange={setCaptchaChallengeId}
-          onAnswerChange={(answer) => {
-            setCaptchaAnswer(answer);
-            if (answer.trim()) clearCaptchaError();
-          }}
-          onExpired={() =>
-            setErrors((current) => ({
-              ...current,
-              captcha: 'Security verification expired. Please try again.',
-            }))
-          }
-          error={errors.captcha}
-          resetKey={captchaResetKey}
-        />
+        <div className="field captcha-block">
+          <label htmlFor="loginCaptchaAnswer">
+            Security Verification <span className="req">*</span>
+          </label>
+          <div className={`server-captcha${errors.captcha ? ' err' : ''} active`}>
+            <div className="server-captcha-challenge">
+              <span>
+                {captchaChallenge.left} + {captchaChallenge.right} = ?
+              </span>
+              <button
+                type="button"
+                className="captcha-refresh"
+                onClick={() => {
+                  refreshCaptcha();
+                  setErrors((current) => {
+                    const next = { ...current };
+                    delete next.captcha;
+                    return next;
+                  });
+                }}
+                aria-label="Refresh security challenge"
+                title="Refresh security challenge"
+              >
+                <RefreshCw size={17} />
+              </button>
+            </div>
+            <div className="input-wrap">
+              <input
+                id="loginCaptchaAnswer"
+                type="text"
+                className={errors.captcha ? 'err' : ''}
+                placeholder="Enter answer"
+                autoComplete="off"
+                inputMode="numeric"
+                value={captchaAnswer}
+                onChange={(event) => setCaptchaAnswer(event.target.value)}
+                aria-invalid={Boolean(errors.captcha)}
+                aria-describedby={errors.captcha ? 'loginCaptchaAnswer-message' : undefined}
+              />
+            </div>
+          </div>
+          {errors.captcha && (
+            <div id="loginCaptchaAnswer-message" className="form-msg error">
+              <AlertCircle size={14} />
+              <span>{errors.captcha}</span>
+            </div>
+          )}
+        </div>
         <div className="row-between">
-          <Checkbox
-            id="rememberMe"
-            label="Remember Me"
-            checked={rememberMe}
-            onChange={setRememberMe}
-          />
           <Link to="/forgot-password" className="link-purple">
             Forgot Password?
           </Link>
         </div>
-        <Button type="submit" icon={<ArrowRight size={17} />} disabled={submitting}>
-          {submitting ? 'Signing In...' : 'Sign In'}
+        <Button
+          type="submit"
+          icon={<ArrowRight size={17} />}
+          loading={submitting}
+          loadingText="Signing In..."
+        >
+          Sign In
         </Button>
       </form>
       <div className="foot-links">
