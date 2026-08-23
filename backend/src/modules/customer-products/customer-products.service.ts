@@ -1,7 +1,13 @@
 import { pool } from '../../database/pool.js';
+import { AppError } from '../../errors/app-error.js';
 import type { ListCustomerProductsQuery } from './customer-products.validation.js';
 
 const customerProductPageSize = 10;
+const productNotFoundError = new AppError(
+  'Product was not found.',
+  404,
+  'CUSTOMER_PRODUCT_NOT_FOUND',
+);
 
 interface ProductCatalogRow {
   id: string;
@@ -20,6 +26,36 @@ interface ProductCatalogRow {
 }
 
 export class CustomerProductsService {
+  async getProduct(productId: string) {
+    const result = await pool.query<ProductCatalogRow>(
+      `select
+         id,
+         product_code,
+         product_name,
+         description,
+         short_description,
+         image,
+         packaging_type,
+         uom,
+         category,
+         display_order,
+         is_active,
+         created_at,
+         updated_at
+       from product_catalog
+       where id = $1
+         and is_active = true`,
+      [productId],
+    );
+
+    const row = result.rows[0];
+    if (!row) {
+      throw productNotFoundError;
+    }
+
+    return mapProduct(row);
+  }
+
   async listProducts(query: ListCustomerProductsQuery) {
     const offset = (query.page - 1) * customerProductPageSize;
     const filters = ['is_active = true'];

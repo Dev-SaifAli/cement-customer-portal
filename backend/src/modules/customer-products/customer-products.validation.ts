@@ -16,3 +16,5 @@ export const listCustomerProductsSchema = z.object({
 });
 
 export type ListCustomerProductsQuery = z.infer<typeof listCustomerProductsSchema>;
+
+export const customerProductIdSchema = z.string().uuid();

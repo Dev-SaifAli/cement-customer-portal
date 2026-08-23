@@ -39,6 +39,13 @@ interface CustomerProductsResponse {
   data: CustomerProductsResult;
 }
 
+interface CustomerProductResponse {
+  success: boolean;
+  data: {
+    product: CustomerProduct;
+  };
+}
+
 interface ApiErrorBody {
   error?: {
     message?: string;
@@ -82,6 +89,28 @@ export const getCustomerProducts = async (query: CustomerProductsQuery = {}) => 
   }
 
   return data.data;
+};
+
+export const getCustomerProduct = async (id: string) => {
+  let response: Response;
+
+  try {
+    response = await fetch(`${apiBaseUrl}/customer/products/${encodeURIComponent(id)}`, {
+      credentials: 'include',
+    });
+  } catch {
+    throw new CustomerProductsApiError('Unable to connect to the product catalog service.');
+  }
+
+  const data = (await response.json().catch(() => ({}))) as ApiErrorBody & CustomerProductResponse;
+
+  if (!response.ok) {
+    throw new CustomerProductsApiError(
+      data.error?.message ?? data.message ?? 'Unable to load product details.',
+    );
+  }
+
+  return data.data.product;
 };
 
 function appendFilter(searchParams: URLSearchParams, key: string, value?: string) {

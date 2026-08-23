@@ -238,6 +238,24 @@ describe('authentication routes', () => {
     });
   });
 
+  it('opens customer product details from the product catalog', async () => {
+    window.sessionStorage.setItem('test_customer_session', 'active');
+
+    render(
+      <MemoryRouter initialEntries={['/customer/products']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('link', { name: /ordinary portland cement/i }));
+
+    expect(
+      await screen.findByRole('heading', { name: /ordinary portland cement/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('CEM-OPC-50KG')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /back to products/i })).toBeInTheDocument();
+  });
+
   it('does not create a draft until the user explicitly saves company information', async () => {
     render(
       <MemoryRouter initialEntries={['/register']}>

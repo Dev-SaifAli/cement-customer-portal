@@ -11,3 +11,8 @@ customerProductsRouter.get(
   '/',
   asyncHandler(customerProductsController.list.bind(customerProductsController)),
 );
+
+customerProductsRouter.get(
+  '/:id',
+  asyncHandler(customerProductsController.show.bind(customerProductsController)),
+);

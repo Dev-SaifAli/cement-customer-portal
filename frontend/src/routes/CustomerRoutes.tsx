@@ -3,6 +3,7 @@ import { CustomerAuthProvider, useCustomerAuth } from '../context/CustomerAuthCo
 import { CustomerLayout } from '../pages/customer/CustomerLayout';
 import { CustomerLanding } from '../pages/customer/CustomerLanding';
 import { CustomerLocations } from '../pages/customer/CustomerLocations';
+import { CustomerProductDetails } from '../pages/customer/CustomerProductDetails';
 import { CustomerProfile } from '../pages/customer/CustomerProfile';
 import { CustomerProducts } from '../pages/customer/CustomerProducts';
 import { CustomerUsers } from '../pages/customer/CustomerUsers';
@@ -18,6 +19,7 @@ export function CustomerRoutes() {
             <Route path="profile" element={<CustomerProfile />} />
             <Route path="locations" element={<CustomerLocations />} />
             <Route path="products" element={<CustomerProducts />} />
+            <Route path="products/:id" element={<CustomerProductDetails />} />
             <Route path="users" element={<CustomerUsers />} />
           </Route>
         </Route>

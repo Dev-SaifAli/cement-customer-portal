@@ -137,6 +137,56 @@ describe('customer products API', () => {
     expect(JSON.stringify(response.body)).not.toContain('margin');
   });
 
+  it('returns one active customer-visible product by id', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] })
+      .mockResolvedValueOnce({ rows: [productRow] });
+
+    const response = await authenticatedProductsRequest(
+      `/api/v1/customer/products/${productRow.id}`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(query).toHaveBeenNthCalledWith(2, expect.stringContaining('and is_active = true'), [
+      productRow.id,
+    ]);
+    expect(response.body).toEqual({
+      success: true,
+      data: {
+        product: {
+          id: productRow.id,
+          productCode: 'CEM-OPC-50KG',
+          productName: 'Ordinary Portland Cement',
+          description: 'General purpose cement.',
+          shortDescription: 'OPC cement',
+          image: '/products/opc.png',
+          packagingType: 'Bag',
+          uom: 'TON',
+          category: 'Cement',
+          displayOrder: 10,
+          isActive: true,
+          createdAt: '2026-08-23T08:00:00.000Z',
+          updatedAt: '2026-08-23T09:00:00.000Z',
+        },
+      },
+    });
+    expect(JSON.stringify(response.body)).not.toContain('cost');
+    expect(JSON.stringify(response.body)).not.toContain('margin');
+  });
+
+  it('returns 404 when the requested product is inactive or missing', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const response = await authenticatedProductsRequest(
+      `/api/v1/customer/products/${productRow.id}`,
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe('CUSTOMER_PRODUCT_NOT_FOUND');
+  });
+
   it('supports search, category, packaging type and uom filters', async () => {
     query
       .mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] })

@@ -7,6 +7,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   getCustomerProducts,
   type CustomerProduct,
@@ -177,10 +178,18 @@ function ProductCard({ product }: { product: CustomerProduct }) {
     <article className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-[#decbe5] hover:bg-[#fdfafd]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="truncate text-base font-bold text-slate-950">{product.productName}</h2>
-          <p className="mt-1 text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+          <Link
+            to={`/customer/products/${product.id}`}
+            className="block truncate text-base font-bold text-slate-950 transition hover:text-[#54247a]"
+          >
+            {product.productName}
+          </Link>
+          <Link
+            to={`/customer/products/${product.id}`}
+            className="mt-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500 transition hover:text-[#54247a]"
+          >
             {product.productCode}
-          </p>
+          </Link>
         </div>
         <span className="inline-flex shrink-0 items-center rounded-full bg-[#f6f2fa] px-2.5 py-1 text-xs font-bold text-[#54247a]">
           {product.category}

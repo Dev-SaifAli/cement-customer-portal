@@ -112,29 +112,30 @@ vi.stubGlobal(
       );
     }
 
+    if (/\/customer\/products\/[^/?]+$/.test(url)) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: {
+              product: testProduct(),
+            },
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+      );
+    }
+
     if (url.includes('/customer/products')) {
       return Promise.resolve(
         new Response(
           JSON.stringify({
             success: true,
             data: {
-              items: [
-                {
-                  id: 'product-1',
-                  productCode: 'CEM-OPC-50KG',
-                  productName: 'Ordinary Portland Cement',
-                  description: null,
-                  shortDescription: 'General-purpose Portland cement.',
-                  image: null,
-                  packagingType: 'Bag',
-                  uom: '50KG_BAG',
-                  category: 'Cement',
-                  displayOrder: 10,
-                  isActive: true,
-                  createdAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
-                },
-              ],
+              items: [testProduct()],
               pagination: {
                 page: 1,
                 pageSize: 10,
@@ -189,6 +190,24 @@ function customerAuthSession() {
       id: 'customer-account-1',
       companyName: 'Activated Cement Customer',
     },
+  };
+}
+
+function testProduct() {
+  return {
+    id: 'product-1',
+    productCode: 'CEM-OPC-50KG',
+    productName: 'Ordinary Portland Cement',
+    description: 'General-purpose Portland cement for concrete applications.',
+    shortDescription: 'General-purpose Portland cement.',
+    image: null,
+    packagingType: 'Bag',
+    uom: '50KG_BAG',
+    category: 'Cement',
+    displayOrder: 10,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 }
 
