@@ -94,7 +94,11 @@ export class CustomerUsersService {
 
       const row = result.rows[0];
       if (!row) {
-        throw new AppError('Customer user could not be created.', 503, 'CUSTOMER_USER_CREATE_FAILED');
+        throw new AppError(
+          'Customer user could not be created.',
+          503,
+          'CUSTOMER_USER_CREATE_FAILED',
+        );
       }
 
       return {
@@ -118,15 +122,23 @@ export class CustomerUsersService {
 
   async update(customerUser: CustomerUser, userId: string, input: UpdateCustomerUserInput) {
     const current = await this.findScopedUser(customerUser, userId);
+    const nextRole = input.role ?? current.role;
+    const nextIsActive = input.isActive ?? current.is_active;
+
+    if (current.role === 'CUSTOMER_ADMIN' && current.is_active) {
+      const remainsActiveAdmin = nextRole === 'CUSTOMER_ADMIN' && nextIsActive;
+      if (!remainsActiveAdmin) {
+        await this.ensureAnotherActiveCustomerAdmin(customerUser, userId);
+      }
+    }
 
     try {
       const result = await pool.query<CustomerUserRow>(
         `update customer_users
          set name = $3,
-             email = $4,
-             phone = $5,
-             role = $6,
-             is_active = $7,
+             phone = $4,
+             role = $5,
+             is_active = $6,
              updated_at = now()
          where id = $2
            and customer_account_id = $1
@@ -145,10 +157,9 @@ export class CustomerUsersService {
           customerUser.account.id,
           userId,
           input.name ?? current.name,
-          input.email ?? current.email,
           input.phone ?? current.phone,
-          input.role ?? current.role,
-          input.isActive ?? current.is_active,
+          nextRole,
+          nextIsActive,
         ],
       );
 
@@ -193,6 +204,27 @@ export class CustomerUsersService {
     }
 
     return row;
+  }
+
+  private async ensureAnotherActiveCustomerAdmin(customerUser: CustomerUser, userId: string) {
+    const result = await pool.query<{ active_admin_count: string }>(
+      `select count(*)::text as active_admin_count
+       from customer_users
+       where customer_account_id = $1
+         and id <> $2
+         and role = 'CUSTOMER_ADMIN'
+         and is_active = true`,
+      [customerUser.account.id, userId],
+    );
+
+    const count = Number(result.rows[0]?.active_admin_count ?? 0);
+    if (count < 1) {
+      throw new AppError(
+        'At least one active Customer Administrator is required.',
+        409,
+        'LAST_ACTIVE_CUSTOMER_ADMIN_REQUIRED',
+      );
+    }
   }
 }
 

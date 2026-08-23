@@ -20,7 +20,6 @@ export const createCustomerUserSchema = z.object({
 export const updateCustomerUserSchema = z
   .object({
     name: nameSchema.optional(),
-    email: emailSchema.optional(),
     phone: saudiPhoneSchema.optional(),
     role: z.enum(customerRoles).optional(),
     isActive: z.boolean().optional(),
@@ -28,7 +27,6 @@ export const updateCustomerUserSchema = z
   .refine(
     (value) =>
       value.name !== undefined ||
-      value.email !== undefined ||
       value.phone !== undefined ||
       value.role !== undefined ||
       value.isActive !== undefined,

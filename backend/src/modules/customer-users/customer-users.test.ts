@@ -71,9 +71,11 @@ function createValidCustomerToken() {
 }
 
 function authenticatedRequest() {
-  return request(createApp()).get('/api/v1/customer/users').set({
-    Cookie: `customer_session=${createValidCustomerToken()}`,
-  });
+  return request(createApp())
+    .get('/api/v1/customer/users')
+    .set({
+      Cookie: `customer_session=${createValidCustomerToken()}`,
+    });
 }
 
 describe('customer users API', () => {
@@ -174,11 +176,10 @@ describe('customer users API', () => {
       .set({ Cookie: `customer_session=${createValidCustomerToken()}` });
 
     expect(response.status).toBe(200);
-    expect(query).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining('where id = $2'),
-      [customerAccountId, safeCustomerUserRow.id],
-    );
+    expect(query).toHaveBeenNthCalledWith(2, expect.stringContaining('where id = $2'), [
+      customerAccountId,
+      safeCustomerUserRow.id,
+    ]);
     expect(response.body.data.user.email).toBe('operations@example.com');
   });
 
@@ -250,7 +251,6 @@ describe('customer users API', () => {
         customerAccountId,
         safeCustomerUserRow.id,
         'Updated User',
-        'operations@example.com',
         '+966555999888',
         'FINANCE_USER',
         false,
@@ -278,6 +278,81 @@ describe('customer users API', () => {
 
     expect(response.status).toBe(403);
     expect(response.body.error.code).toBe('CUSTOMER_ADMIN_REQUIRED');
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it('prevents deactivating the last active customer administrator', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            ...safeCustomerUserRow,
+            id: customerUserId,
+            role: 'CUSTOMER_ADMIN',
+            is_active: true,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ active_admin_count: '0' }] });
+
+    const response = await request(createApp())
+      .patch(`/api/v1/customer/users/${customerUserId}`)
+      .set({ Cookie: `customer_session=${createValidCustomerToken()}` })
+      .send({ isActive: false });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe('LAST_ACTIVE_CUSTOMER_ADMIN_REQUIRED');
+    expect(query).toHaveBeenCalledTimes(3);
+  });
+
+  it('allows deactivating a customer administrator when another active admin exists', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            ...safeCustomerUserRow,
+            id: customerUserId,
+            role: 'CUSTOMER_ADMIN',
+            is_active: true,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ active_admin_count: '1' }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            ...safeCustomerUserRow,
+            id: customerUserId,
+            role: 'CUSTOMER_ADMIN',
+            is_active: false,
+          },
+        ],
+      });
+
+    const response = await request(createApp())
+      .patch(`/api/v1/customer/users/${customerUserId}`)
+      .set({ Cookie: `customer_session=${createValidCustomerToken()}` })
+      .send({ isActive: false });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.user).toMatchObject({
+      id: customerUserId,
+      role: 'CUSTOMER_ADMIN',
+      isActive: false,
+    });
+  });
+
+  it('keeps customer user email read-only during updates', async () => {
+    query.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
+
+    const response = await request(createApp())
+      .patch(`/api/v1/customer/users/${safeCustomerUserRow.id}`)
+      .set({ Cookie: `customer_session=${createValidCustomerToken()}` })
+      .send({ email: 'changed@example.com' });
+
+    expect(response.status).toBe(400);
     expect(query).toHaveBeenCalledTimes(1);
   });
 });

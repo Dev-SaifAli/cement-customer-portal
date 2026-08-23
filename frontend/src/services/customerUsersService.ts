@@ -23,6 +23,13 @@ export interface CreateCustomerUserPayload {
   isActive: boolean;
 }
 
+export interface UpdateCustomerUserPayload {
+  name?: string;
+  phone?: string;
+  role?: CustomerRole;
+  isActive?: boolean;
+}
+
 interface CustomerUsersResponse {
   success: boolean;
   data: {
@@ -76,6 +83,15 @@ export const createCustomerUser = async (payload: CreateCustomerUserPayload) => 
 
 export const getCustomerUser = async (id: string) => {
   const response = await requestCustomerUsers<CustomerUserResponse>(`/customer/users/${id}`);
+
+  return response.data.user;
+};
+
+export const updateCustomerUser = async (id: string, payload: UpdateCustomerUserPayload) => {
+  const response = await requestCustomerUsers<CustomerUserResponse>(`/customer/users/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
 
   return response.data.user;
 };

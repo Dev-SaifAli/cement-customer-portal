@@ -1,6 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { AlertCircle, Check, Copy, Plus, ShieldAlert, Users, X } from 'lucide-react';
+import {
+  AlertCircle,
+  Check,
+  Copy,
+  Edit3,
+  Plus,
+  Power,
+  PowerOff,
+  Save,
+  ShieldAlert,
+  Users,
+  X,
+} from 'lucide-react';
 import {
   formatSaudiPhoneNumber,
   getSaudiPhoneLocalDigits,
@@ -11,6 +23,7 @@ import type { CustomerRole } from '../../services/customerAuthService';
 import {
   createCustomerUser,
   getCustomerUsers,
+  updateCustomerUser,
   type CustomerUser,
   type CreateCustomerUserPayload,
 } from '../../services/customerUsersService';
@@ -65,9 +78,13 @@ export function CustomerUsers() {
   const [success, setSuccess] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<CustomerUser | null>(null);
+  const [editingUser, setEditingUser] = useState<CustomerUser | null>(null);
+  const [statusTarget, setStatusTarget] = useState<CustomerUser | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState('');
   const [form, setForm] = useState<UserForm>(emptyForm);
+  const [editForm, setEditForm] = useState<UserForm>(emptyForm);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [editFormErrors, setEditFormErrors] = useState<Record<string, string>>({});
   const [filters, setFilters] = useState<UserFilters>(emptyFilters);
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -148,6 +165,27 @@ export function CustomerUsers() {
     resetForm();
   };
 
+  const openEditForm = (customerUser: CustomerUser) => {
+    setSelectedUser(null);
+    setError('');
+    setSuccess('');
+    setEditForm({
+      name: customerUser.name,
+      email: customerUser.email,
+      phone: customerUser.phone ?? '',
+      role: customerUser.role,
+      isActive: customerUser.isActive,
+    });
+    setEditFormErrors({});
+    setEditingUser(customerUser);
+  };
+
+  const closeEditForm = () => {
+    setEditingUser(null);
+    setEditForm(emptyForm);
+    setEditFormErrors({});
+  };
+
   const createUser = async () => {
     if (!validateForm(form)) return;
 
@@ -173,6 +211,60 @@ export function CustomerUsers() {
     }
   };
 
+  const saveUserChanges = async () => {
+    if (!editingUser || !validateEditableForm(editForm)) return;
+
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const updatedUser = await updateCustomerUser(editingUser.id, {
+        name: editForm.name.trim(),
+        phone: toSaudiPhone(editForm.phone),
+        role: editForm.role,
+        isActive: editForm.isActive,
+      });
+      applyUpdatedUser(updatedUser);
+      closeEditForm();
+      setSuccess('Customer user updated.');
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Unable to update customer user. Please try again.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmStatusChange = async () => {
+    if (!statusTarget) return;
+
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const updatedUser = await updateCustomerUser(statusTarget.id, {
+        isActive: !statusTarget.isActive,
+      });
+      applyUpdatedUser(updatedUser);
+      setStatusTarget(null);
+      setSelectedUser(null);
+      setSuccess(updatedUser.isActive ? 'Customer user activated.' : 'Customer user deactivated.');
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Unable to update customer user status. Please try again.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const validateForm = (value: UserForm) => {
     const next: Record<string, string> = {};
     if (!value.name.trim()) next.name = 'Full name is required.';
@@ -182,6 +274,24 @@ export function CustomerUsers() {
 
     setFormErrors(next);
     return Object.keys(next).length === 0;
+  };
+
+  const validateEditableForm = (value: UserForm) => {
+    const next: Record<string, string> = {};
+    if (!value.name.trim()) next.name = 'Full name is required.';
+    if (!isSaudiPhoneNumber(value.phone)) next.phone = 'Enter a valid Saudi mobile number.';
+    if (!roleOptions.some((role) => role.value === value.role)) next.role = 'Select a valid role.';
+
+    setEditFormErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const applyUpdatedUser = (updatedUser: CustomerUser) => {
+    setUsers((current) =>
+      current.map((customerUser) =>
+        customerUser.id === updatedUser.id ? updatedUser : customerUser,
+      ),
+    );
   };
 
   const toggleRow = (id: string) => {
@@ -489,7 +599,37 @@ export function CustomerUsers() {
       </section>
 
       {selectedUser && (
-        <UserDetailsDialog user={selectedUser} onClose={() => setSelectedUser(null)} />
+        <UserDetailsDialog
+          user={selectedUser}
+          saving={saving}
+          onClose={() => setSelectedUser(null)}
+          onEdit={() => openEditForm(selectedUser)}
+          onToggleStatus={() => setStatusTarget(selectedUser)}
+        />
+      )}
+
+      {editingUser && (
+        <EditUserDialog
+          user={editingUser}
+          form={editForm}
+          errors={editFormErrors}
+          saving={saving}
+          onClose={closeEditForm}
+          onChange={(field, value) => {
+            setEditForm((current) => ({ ...current, [field]: value }));
+            setEditFormErrors((current) => ({ ...current, [field]: '' }));
+          }}
+          onSave={() => void saveUserChanges()}
+        />
+      )}
+
+      {statusTarget && (
+        <ConfirmStatusDialog
+          user={statusTarget}
+          saving={saving}
+          onCancel={() => setStatusTarget(null)}
+          onConfirm={() => void confirmStatusChange()}
+        />
       )}
     </div>
   );
@@ -679,7 +819,19 @@ function StatusDot({ active }: { active: boolean }) {
   );
 }
 
-function UserDetailsDialog({ user, onClose }: { user: CustomerUser; onClose: () => void }) {
+function UserDetailsDialog({
+  user,
+  saving,
+  onClose,
+  onEdit,
+  onToggleStatus,
+}: {
+  user: CustomerUser;
+  saving: boolean;
+  onClose: () => void;
+  onEdit: () => void;
+  onToggleStatus: () => void;
+}) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6">
       <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
@@ -709,6 +861,198 @@ function UserDetailsDialog({ user, onClose }: { user: CustomerUser; onClose: () 
             value={user.passwordMustChange ? 'Temporary password' : 'Set'}
           />
         </dl>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onToggleStatus}
+            disabled={saving}
+            className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold disabled:opacity-60 ${
+              user.isActive
+                ? 'border-red-200 text-red-700 hover:bg-red-50'
+                : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+            }`}
+          >
+            {user.isActive ? <PowerOff size={16} /> : <Power size={16} />}
+            {user.isActive ? 'Deactivate' : 'Activate'}
+          </button>
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={saving}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#54247a] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#472066] disabled:opacity-60"
+          >
+            <Edit3 size={16} />
+            Edit User
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function EditUserDialog({
+  user,
+  form,
+  errors,
+  saving,
+  onClose,
+  onChange,
+  onSave,
+}: {
+  user: CustomerUser;
+  form: UserForm;
+  errors: Record<string, string>;
+  saving: boolean;
+  onClose: () => void;
+  onChange: (field: keyof UserForm, value: string | boolean) => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6">
+      <section className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-950">Edit Customer User</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">
+              Login email is read-only for now: {user.email}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-60"
+            aria-label="Close edit user form"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="grid gap-5 px-5 py-5 md:grid-cols-2">
+          <TextInput
+            label="Full Name"
+            required
+            value={form.name}
+            error={errors.name}
+            onChange={(value) => onChange('name', value)}
+          />
+          <label className="block">
+            <span className="text-sm font-bold text-slate-900">Email</span>
+            <input
+              type="email"
+              value={form.email}
+              readOnly
+              className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-500 outline-none"
+            />
+          </label>
+          <PhoneInput
+            label="Phone"
+            required
+            value={form.phone}
+            error={errors.phone}
+            onChange={(value) => onChange('phone', value)}
+          />
+          <SelectInput
+            label="Role"
+            required
+            value={form.role}
+            error={errors.role}
+            options={roleOptions}
+            onChange={(value) => onChange('role', value as CustomerRole)}
+          />
+          <SelectInput
+            label="Status"
+            value={form.isActive ? 'active' : 'inactive'}
+            options={[
+              { value: 'active', label: 'Active' },
+              { value: 'inactive', label: 'Inactive' },
+            ]}
+            onChange={(value) => onChange('isActive', value === 'active')}
+          />
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#54247a] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#472066] disabled:opacity-60"
+          >
+            <Save size={16} />
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ConfirmStatusDialog({
+  user,
+  saving,
+  onCancel,
+  onConfirm,
+}: {
+  user: CustomerUser;
+  saving: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const isDeactivation = user.isActive;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6">
+      <section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-950/20">
+        <div className="flex items-start gap-3">
+          <div
+            className={`rounded-xl p-2 ${
+              isDeactivation ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
+            }`}
+          >
+            {isDeactivation ? <PowerOff size={20} /> : <Power size={20} />}
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-950">
+              {isDeactivation ? 'Deactivate user?' : 'Activate user?'}
+            </h2>
+            <p className="mt-2 text-sm font-medium text-slate-600">
+              {isDeactivation
+                ? `${user.name} will no longer be able to sign in to the Customer Portal.`
+                : `${user.name} will be able to sign in again if their password is valid.`}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={saving}
+            className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60 ${
+              isDeactivation ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'
+            }`}
+          >
+            {isDeactivation ? <PowerOff size={16} /> : <Power size={16} />}
+            {saving ? 'Updating...' : isDeactivation ? 'Deactivate User' : 'Activate User'}
+          </button>
+        </div>
       </section>
     </div>
   );
@@ -814,10 +1158,14 @@ function toPayload(form: UserForm): CreateCustomerUserPayload {
   return {
     name: form.name.trim(),
     email: form.email.trim().toLowerCase(),
-    phone: `+966${getSaudiPhoneLocalDigits(form.phone)}`,
+    phone: toSaudiPhone(form.phone),
     role: form.role,
     isActive: form.isActive,
   };
+}
+
+function toSaudiPhone(value: string) {
+  return `+966${getSaudiPhoneLocalDigits(value)}`;
 }
 
 function includesValue(value: string, filter: string) {
