@@ -1,4 +1,4 @@
-const initialProducts = [
+const productImageUpdates = [
   {
     productCode: 'CEM-OPC-50KG',
     productName: 'Ordinary Portland Cement',
@@ -59,37 +59,17 @@ const initialProducts = [
     category: 'Cement',
     displayOrder: 37,
   },
-  {
-    productCode: 'CEM-OPC-BULK',
-    productName: 'Ordinary Portland Cement Bulk',
-    shortDescription: 'Bulk Ordinary Portland Cement for ready-mix and large-volume customers.',
-    image: null,
-    packagingType: 'Bulk',
-    uom: 'TON',
-    category: 'Cement',
-    displayOrder: 40,
-  },
-  {
-    productCode: 'CEM-SRC-BULK',
-    productName: 'Sulphate Resistant Cement Bulk',
-    shortDescription: 'Bulk Sulphate Resistant Cement for infrastructure and industrial projects.',
-    image: null,
-    packagingType: 'Bulk',
-    uom: 'TON',
-    category: 'Cement',
-    displayOrder: 50,
-  },
 ];
 
 exports.up = (pgm) => {
-  const rows = initialProducts
+  const rows = productImageUpdates
     .map(
       (product) =>
         `(
           '${product.productCode}',
           '${product.productName.replaceAll("'", "''")}',
           '${product.shortDescription.replaceAll("'", "''")}',
-          ${product.image ? `'${product.image}'` : 'null'},
+          '${product.image}',
           '${product.packagingType}',
           '${product.uom}',
           '${product.category}',
@@ -112,10 +92,31 @@ exports.up = (pgm) => {
       is_active
     )
     values ${rows}
-    on conflict (product_code) do nothing;
+    on conflict (product_code) do update
+    set product_name = excluded.product_name,
+        short_description = excluded.short_description,
+        image = excluded.image,
+        packaging_type = excluded.packaging_type,
+        uom = excluded.uom,
+        category = excluded.category,
+        display_order = excluded.display_order,
+        is_active = excluded.is_active,
+        updated_at = now();
   `);
 };
 
 exports.down = (pgm) => {
-  pgm.sql('select 1;');
+  pgm.sql(`
+    update product_catalog
+    set image = null,
+        updated_at = now()
+    where product_code in (
+      'CEM-OPC-50KG',
+      'CEM-SRC-50KG',
+      'CEM-PPC-50KG',
+      'CEM-JADRAN-50KG',
+      'CEM-DEKOR-40KG',
+      'CEM-BREKAST-50KG'
+    );
+  `);
 };
