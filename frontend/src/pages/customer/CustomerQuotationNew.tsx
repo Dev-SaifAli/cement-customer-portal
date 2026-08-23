@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   Loader2,
   MapPin,
-  PackagePlus,
   Plus,
   RefreshCw,
   Save,
@@ -91,16 +90,27 @@ export function CustomerQuotationNew() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showValidation, setShowValidation] = useState(false);
 
   const selectedShipTo = deliveryLocations.find(
     (location) => location.id === form.shipToLocationId,
   );
-  const selectedPickup = pickupLocations.find((location) => location.id === form.pickupLocationId);
   const hasCoordinates =
     typeof selectedShipTo?.latitude === 'number' && typeof selectedShipTo.longitude === 'number';
 
   const validationErrors = useMemo(() => validateForm(form), [form]);
+  const itemTotals = useMemo(() => getItemTotals(form.items), [form.items]);
+  const requestedDateError = showValidation ? getRequestedDateError(form) : '';
+  const shipToError =
+    showValidation && !form.shipToLocationId ? 'Delivery location is required.' : '';
+  const pickupError =
+    showValidation && form.fulfilmentType === 'PICKUP' && !form.pickupLocationId
+      ? 'Pickup location is required.'
+      : '';
   const isValid = validationErrors.length === 0;
+  const isSubmitted = quotation?.status === 'PENDING_SALES_REVIEW';
+  const documentTitle = quotation?.reference ?? 'New Quotation';
+  const statusLabel = isSubmitted ? 'Pending Sales Review' : 'Draft';
 
   useEffect(() => {
     const loadFoundation = async () => {
@@ -170,31 +180,7 @@ export function CustomerQuotationNew() {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="h-5 w-48 animate-pulse rounded bg-slate-100" />
-        <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_360px]">
-          <div className="h-96 animate-pulse rounded-2xl bg-slate-100" />
-          <div className="h-96 animate-pulse rounded-2xl bg-slate-100" />
-        </div>
-      </div>
-    );
-  }
-
-  if (quotation?.status === 'PENDING_SALES_REVIEW') {
-    return (
-      <div className="mx-auto max-w-3xl rounded-2xl border border-emerald-200 bg-white p-8 text-center shadow-sm">
-        <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" />
-        <h1 className="mt-4 text-2xl font-bold text-slate-950">Quotation Submitted</h1>
-        <p className="mt-2 text-sm font-medium text-slate-600">
-          Your quotation request has been submitted for Sales review.
-        </p>
-        <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-800">
-          Reference: {quotation.reference ?? 'Pending reference'}
-        </p>
-        <Link
-          to="/customer/dashboard"
-          className="mt-6 inline-flex items-center justify-center rounded-xl bg-[#54247a] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#462064]"
-        >
-          Back to Dashboard
-        </Link>
+        <div className="mt-5 h-96 animate-pulse rounded-2xl bg-slate-100" />
       </div>
     );
   }
@@ -202,6 +188,7 @@ export function CustomerQuotationNew() {
   const saveDraft = async () => {
     setError('');
     setSuccess('');
+    setShowValidation(true);
 
     if (!isValid) {
       setError(validationErrors[0] ?? 'Please complete the quotation form.');
@@ -229,6 +216,7 @@ export function CustomerQuotationNew() {
   const submitQuotation = async () => {
     setError('');
     setSuccess('');
+    setShowValidation(true);
 
     if (!isValid) {
       setError(validationErrors[0] ?? 'Please complete the quotation form.');
@@ -281,28 +269,72 @@ export function CustomerQuotationNew() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#7c3b7e]">
-            Customer Portal
-          </p>
-          <h1 className="mt-1 text-2xl font-bold text-slate-950">New Quotation</h1>
-          <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500">
-            Select fulfilment, products, delivery location, and requested date.
-          </p>
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+              <span>Quotation</span>
+              <span className="text-slate-300">/</span>
+              <span className="text-[#7c3b7e]">{documentTitle}</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <h1 className="truncate text-xl font-bold text-slate-950">{documentTitle}</h1>
+              <StatusIndicator status={statusLabel} />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {isSubmitted ? (
+              <Link
+                to="/customer/dashboard"
+                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+              >
+                Back to Dashboard
+              </Link>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void saveDraft()}
+                  disabled={saving || submitting}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} />}
+                  {saving ? 'Saving...' : 'Save Draft'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void submitQuotation()}
+                  disabled={saving || submitting}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#54247a] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#462064] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send size={16} />}
+                  {submitting ? 'Submitting...' : 'Submit'}
+                </button>
+              </>
+            )}
+          </div>
         </div>
-        {quotationId && (
-          <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
-            Draft saved in progress
-          </span>
-        )}
-      </div>
 
-      {error && <InlineAlert tone="error" message={error} />}
-      {success && <InlineAlert tone="success" message={success} />}
+        <div className="space-y-3 px-4 pt-4 sm:px-5">
+          {error && <InlineAlert tone="error" message={error} />}
+          {success && <InlineAlert tone="success" message={success} />}
+          {isSubmitted && (
+            <InlineAlert
+              tone="success"
+              message="This quotation has been submitted for Sales review and is now read-only."
+            />
+          )}
+        </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <section className="space-y-5 p-4 sm:p-5">
+          <div>
+            <h2 className="text-base font-bold text-slate-950">Details</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">
+              Select fulfilment, delivery location, products, and requested delivery date.
+            </p>
+          </div>
+
           <div>
             <h2 className="text-base font-bold text-slate-950">Fulfilment</h2>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -311,6 +343,7 @@ export function CustomerQuotationNew() {
                 icon={<Warehouse size={17} />}
                 title="Pick-Up"
                 description="Use your own truck to collect."
+                disabled={isSubmitted}
                 onClick={() => setForm((current) => ({ ...current, fulfilmentType: 'PICKUP' }))}
               />
               <SegmentButton
@@ -318,6 +351,7 @@ export function CustomerQuotationNew() {
                 icon={<Truck size={17} />}
                 title="Delivery (Hader)"
                 description="AlSafwa ships to your site."
+                disabled={isSubmitted}
                 onClick={() => setForm((current) => ({ ...current, fulfilmentType: 'DELIVERY' }))}
               />
             </div>
@@ -327,6 +361,7 @@ export function CustomerQuotationNew() {
             <Field label="Pickup From">
               <select
                 value={form.pickupLocationId}
+                disabled={isSubmitted}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, pickupLocationId: event.target.value }))
                 }
@@ -338,6 +373,7 @@ export function CustomerQuotationNew() {
                   </option>
                 ))}
               </select>
+              {pickupError && <FieldError message={pickupError} />}
             </Field>
           )}
 
@@ -346,6 +382,7 @@ export function CustomerQuotationNew() {
           >
             <select
               value={form.shipToLocationId}
+              disabled={isSubmitted}
               onChange={(event) =>
                 setForm((current) => ({ ...current, shipToLocationId: event.target.value }))
               }
@@ -358,6 +395,7 @@ export function CustomerQuotationNew() {
                 </option>
               ))}
             </select>
+            {shipToError && <FieldError message={shipToError} />}
           </Field>
 
           {selectedShipTo && (
@@ -390,7 +428,8 @@ export function CustomerQuotationNew() {
               <button
                 type="button"
                 onClick={addProduct}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                disabled={isSubmitted}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Plus size={15} />
                 Add Product
@@ -415,12 +454,18 @@ export function CustomerQuotationNew() {
                   products={productResults}
                   productsLoading={productsLoading}
                   productSearch={productSearch}
-                  canRemove={form.items.length > 1}
+                  canRemove={form.items.length > 1 && !isSubmitted}
+                  readOnly={isSubmitted}
+                  errors={showValidation ? getItemErrors(item, index) : {}}
                   onSearchChange={setProductSearch}
                   onChange={(patch) => updateItem(item.key, patch)}
                   onRemove={() => removeItem(item.key)}
                 />
               ))}
+              <div className="flex flex-col gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+                <span>Total Items: {form.items.length}</span>
+                <span>{itemTotals.length > 0 ? itemTotals.join(' · ') : 'Total Quantity: 0'}</span>
+              </div>
             </div>
           </div>
 
@@ -432,17 +477,20 @@ export function CustomerQuotationNew() {
                   type="date"
                   min={today}
                   value={form.requestedDate}
+                  disabled={isSubmitted}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, requestedDate: event.target.value }))
                   }
                   className={`${fieldClass} pl-10`}
                 />
               </div>
+              {requestedDateError && <FieldError message={requestedDateError} />}
             </Field>
             <Field label="Notes">
               <input
                 value={form.notes}
                 maxLength={1000}
+                disabled={isSubmitted}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, notes: event.target.value }))
                 }
@@ -452,79 +500,6 @@ export function CustomerQuotationNew() {
             </Field>
           </div>
         </section>
-
-        <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-20">
-          <div className="flex items-center gap-2">
-            <PackagePlus className="h-5 w-5 text-[#54247a]" />
-            <h2 className="text-base font-bold text-slate-950">Quotation Summary</h2>
-          </div>
-
-          <dl className="mt-4 space-y-3 text-sm">
-            <SummaryRow
-              label="Fulfilment"
-              value={form.fulfilmentType === 'PICKUP' ? 'Pick-Up' : 'Delivery'}
-            />
-            {form.fulfilmentType === 'PICKUP' && (
-              <SummaryRow label="Pickup From" value={selectedPickup?.name || 'Not selected'} />
-            )}
-            <SummaryRow label="Ship-To" value={selectedShipTo?.name || 'Not selected'} />
-            <SummaryRow label="Requested Date" value={form.requestedDate || 'Not selected'} />
-          </dl>
-
-          <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
-            {form.items.map((item) => (
-              <div key={item.key} className="flex gap-3 rounded-2xl bg-slate-50 p-3">
-                <ProductImage
-                  image={item.product?.image}
-                  productName={item.product?.productName ?? 'Selected product'}
-                  size="summary"
-                />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-slate-950">
-                    {item.product?.productName ?? 'No product selected'}
-                  </p>
-                  <p className="mt-1 text-xs font-semibold text-slate-500">
-                    {item.product
-                      ? `${item.product.productCode} · ${item.product.packagingType} · ${item.product.uom}`
-                      : 'Select product to continue'}
-                  </p>
-                  <p className="mt-2 text-xs font-bold text-[#54247a]">
-                    Qty: {item.quantity || '0'} {item.product?.uom ?? ''}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {validationErrors.length > 0 && (
-            <ul className="mt-4 space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
-              {validationErrors.slice(0, 4).map((message) => (
-                <li key={message}>• {message}</li>
-              ))}
-            </ul>
-          )}
-
-          <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-            <button
-              type="button"
-              onClick={() => void saveDraft()}
-              disabled={saving || submitting}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} />}
-              {saving ? 'Saving...' : 'Save Draft'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void submitQuotation()}
-              disabled={saving || submitting}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#54247a] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#462064] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send size={16} />}
-              {submitting ? 'Submitting...' : 'Submit Quotation'}
-            </button>
-          </div>
-        </aside>
       </div>
     </div>
   );
@@ -540,6 +515,8 @@ function ProductLine({
   productsLoading,
   productSearch,
   canRemove,
+  readOnly,
+  errors,
   onSearchChange,
   onChange,
   onRemove,
@@ -550,6 +527,8 @@ function ProductLine({
   productsLoading: boolean;
   productSearch: string;
   canRemove: boolean;
+  readOnly: boolean;
+  errors: Partial<Record<'product' | 'quantity' | 'palletType' | 'palletQuantity', string>>;
   onSearchChange: (value: string) => void;
   onChange: (patch: Partial<FormItem>) => void;
   onRemove: () => void;
@@ -561,7 +540,7 @@ function ProductLine({
     <div className="grid gap-3 border-b border-slate-100 bg-white px-4 py-4 last:border-b-0 xl:grid-cols-[44px_minmax(260px,1fr)_120px_120px_90px_190px_52px] xl:items-start">
       <div className="flex items-center justify-between gap-3 xl:block xl:pt-3">
         <h3 className="text-sm font-bold text-slate-500 xl:text-slate-500">{index + 1}</h3>
-        {canRemove && (
+        {canRemove && !readOnly && (
           <button
             type="button"
             onClick={onRemove}
@@ -590,18 +569,21 @@ function ProductLine({
                   {item.product.productCode}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setPickerOpen(true)}
-                className="rounded-lg px-2 py-1 text-xs font-bold text-[#54247a] hover:bg-white"
-              >
-                Change
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen(true)}
+                  className="rounded-lg px-2 py-1 text-xs font-bold text-[#54247a] hover:bg-white"
+                >
+                  Change
+                </button>
+              )}
             </div>
           ) : (
             <div className="relative">
               <input
                 value={productSearch}
+                disabled={readOnly}
                 onChange={(event) => {
                   onSearchChange(event.target.value);
                   setPickerOpen(true);
@@ -610,57 +592,60 @@ function ProductLine({
                 placeholder="Search product name or code"
                 className={fieldClass}
               />
-              <div className="absolute left-0 right-0 top-12 z-20 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10">
-                {productsLoading ? (
-                  <div className="flex items-center gap-2 p-3 text-sm font-semibold text-slate-500">
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    Loading products...
-                  </div>
-                ) : products.length === 0 ? (
-                  <p className="p-3 text-sm font-semibold text-slate-500">
-                    No active products found.
-                  </p>
-                ) : (
-                  products.map((product) => {
-                    const selected = item.product?.id === product.id;
-                    return (
-                      <button
-                        key={product.id}
-                        type="button"
-                        onClick={() => {
-                          onChange({
-                            product,
-                            palletRequired: product.packagingType.toLowerCase().includes('bag')
-                              ? item.palletRequired
-                              : false,
-                          });
-                          setPickerOpen(false);
-                        }}
-                        className={`flex w-full items-center gap-3 border-b border-slate-100 p-3 text-left last:border-b-0 hover:bg-[#fdfafd] ${
-                          selected ? 'bg-[#f6f2fa]' : 'bg-white'
-                        }`}
-                      >
-                        <ProductImage
-                          image={product.image}
-                          productName={product.productName}
-                          size="thumbnail"
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-bold text-slate-950">
-                            {product.productName}
+              {!readOnly && (
+                <div className="absolute left-0 right-0 top-12 z-20 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10">
+                  {productsLoading ? (
+                    <div className="flex items-center gap-2 p-3 text-sm font-semibold text-slate-500">
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Loading products...
+                    </div>
+                  ) : products.length === 0 ? (
+                    <p className="p-3 text-sm font-semibold text-slate-500">
+                      No active products found.
+                    </p>
+                  ) : (
+                    products.map((product) => {
+                      const selected = item.product?.id === product.id;
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => {
+                            onChange({
+                              product,
+                              palletRequired: product.packagingType.toLowerCase().includes('bag')
+                                ? item.palletRequired
+                                : false,
+                            });
+                            setPickerOpen(false);
+                          }}
+                          className={`flex w-full items-center gap-3 border-b border-slate-100 p-3 text-left last:border-b-0 hover:bg-[#fdfafd] ${
+                            selected ? 'bg-[#f6f2fa]' : 'bg-white'
+                          }`}
+                        >
+                          <ProductImage
+                            image={product.image}
+                            productName={product.productName}
+                            size="thumbnail"
+                          />
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-bold text-slate-950">
+                              {product.productName}
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">
+                              {product.productCode} · {product.packagingType} · {product.uom}
+                            </span>
                           </span>
-                          <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">
-                            {product.productCode} · {product.packagingType} · {product.uom}
-                          </span>
-                        </span>
-                        {selected && <CheckCircle2 className="ml-auto h-4 w-4 text-[#54247a]" />}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
+                          {selected && <CheckCircle2 className="ml-auto h-4 w-4 text-[#54247a]" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
           )}
+          {errors.product && <FieldError message={errors.product} />}
         </div>
 
         <div className="grid gap-3 xl:contents">
@@ -670,10 +655,12 @@ function ProductLine({
               min="0"
               step="0.001"
               value={item.quantity}
+              disabled={readOnly}
               onChange={(event) => onChange({ quantity: event.target.value })}
-              placeholder={item.product?.uom ?? 'Qty'}
+              placeholder="0"
               className={fieldClass}
             />
+            {errors.quantity && <FieldError message={errors.quantity} />}
           </Field>
           <ReadOnlyMeta label="Packaging" value={item.product?.packagingType ?? 'Auto'} />
           <ReadOnlyMeta label="UOM" value={item.product?.uom ?? 'Auto'} />
@@ -686,6 +673,7 @@ function ProductLine({
             <input
               type="checkbox"
               checked={item.palletRequired}
+              disabled={readOnly}
               onChange={(event) => onChange({ palletRequired: event.target.checked })}
               className="h-4 w-4 rounded border-slate-300 text-[#54247a] focus:ring-[#54247a]"
             />
@@ -695,6 +683,7 @@ function ProductLine({
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <input
                 value={item.palletType}
+                disabled={readOnly}
                 onChange={(event) => onChange({ palletType: event.target.value })}
                 placeholder="Pallet type"
                 className={fieldClass}
@@ -703,11 +692,15 @@ function ProductLine({
                 type="number"
                 min="1"
                 value={item.palletQuantity}
+                disabled={readOnly}
                 onChange={(event) => onChange({ palletQuantity: event.target.value })}
                 placeholder="Pallet quantity"
                 className={fieldClass}
               />
             </div>
+          )}
+          {(errors.palletType || errors.palletQuantity) && (
+            <FieldError message={errors.palletType ?? errors.palletQuantity ?? ''} />
           )}
         </div>
       )}
@@ -717,7 +710,7 @@ function ProductLine({
         </div>
       )}
       <div className="hidden justify-end pt-1 xl:flex">
-        {canRemove && (
+        {canRemove && !readOnly && (
           <button
             type="button"
             onClick={onRemove}
@@ -737,23 +730,28 @@ function SegmentButton({
   icon,
   title,
   description,
+  disabled = false,
   onClick,
 }: {
   active: boolean;
   icon: ReactNode;
   title: string;
   description: string;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      onClick={onClick}
+      disabled={disabled}
+      onClick={() => {
+        if (!disabled) onClick();
+      }}
       className={`rounded-2xl border p-4 text-left transition ${
         active
           ? 'border-[#54247a] bg-[#f6f2fa] text-[#54247a] shadow-sm'
           : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-      }`}
+      } disabled:cursor-not-allowed disabled:opacity-60`}
     >
       <span className="flex items-center gap-2 text-sm font-bold">
         {icon}
@@ -782,13 +780,19 @@ function ReadOnlyMeta({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
+function StatusIndicator({ status }: { status: string }) {
+  const submitted = status === 'Pending Sales Review';
+
   return (
-    <div className="flex items-start justify-between gap-4">
-      <dt className="font-semibold text-slate-500">{label}</dt>
-      <dd className="text-right font-bold text-slate-900">{value}</dd>
-    </div>
+    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700">
+      <span className={`h-2 w-2 rounded-full ${submitted ? 'bg-amber-500' : 'bg-slate-400'}`} />
+      {status}
+    </span>
   );
+}
+
+function FieldError({ message }: { message: string }) {
+  return <p className="mt-1.5 text-xs font-semibold text-red-600">{message}</p>;
 }
 
 function InlineAlert({ tone, message }: { tone: 'error' | 'success'; message: string }) {
@@ -805,6 +809,44 @@ function InlineAlert({ tone, message }: { tone: 'error' | 'success'; message: st
       {message}
     </div>
   );
+}
+
+function getRequestedDateError(form: FormState) {
+  if (!form.requestedDate) return 'Requested delivery date is required.';
+  if (form.requestedDate < today) return 'Requested delivery date cannot be in the past.';
+  return '';
+}
+
+function getItemErrors(item: FormItem, index: number) {
+  const label = `Product ${index + 1}`;
+  const errors: Partial<Record<'product' | 'quantity' | 'palletType' | 'palletQuantity', string>> =
+    {};
+
+  if (!item.product) errors.product = `${label} is required.`;
+  if (!item.quantity || Number(item.quantity) <= 0) {
+    errors.quantity = 'Quantity must be greater than zero.';
+  }
+  if (item.palletRequired && !item.palletType.trim()) {
+    errors.palletType = 'Pallet type is required.';
+  }
+  if (item.palletRequired && (!item.palletQuantity || Number(item.palletQuantity) <= 0)) {
+    errors.palletQuantity = 'Pallet quantity must be greater than zero.';
+  }
+
+  return errors;
+}
+
+function getItemTotals(items: FormItem[]) {
+  const totals = new Map<string, number>();
+
+  items.forEach((item) => {
+    if (!item.product || !item.quantity || Number(item.quantity) <= 0) return;
+
+    const current = totals.get(item.product.uom) ?? 0;
+    totals.set(item.product.uom, current + Number(item.quantity));
+  });
+
+  return [...totals.entries()].map(([uom, total]) => `${total.toLocaleString()} ${uom}`);
 }
 
 function validateForm(form: FormState) {
