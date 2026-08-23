@@ -12,6 +12,7 @@ export interface RegistrationDraftResponse {
   documents: Partial<RegistrationData['documents']>;
   deliveryLocations: RegistrationData['deliveryLocations'];
   administrator: Partial<RegistrationData['administrator']>;
+  hasAdminPassword?: boolean;
   submittedAt: string | null;
   updatedAt: string;
 }

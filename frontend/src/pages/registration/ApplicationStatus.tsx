@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { AlertCircle, Check, Circle, Clock, Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useRegistration } from '../../context/RegistrationContext';
 import {
   lookupApplicationStatus,
@@ -9,7 +10,8 @@ import {
 import { RegistrationLayout } from '../../components/registration/RegistrationLayout';
 
 export default function ApplicationStatus() {
-  const { data, submittedApplication } = useRegistration();
+  const navigate = useNavigate();
+  const { data, loadApplicationForUpdate, submittedApplication } = useRegistration();
   const [reference, setReference] = useState(submittedApplication?.reference ?? '');
   const [email, setEmail] = useState(data.administrator.email || data.contact.email);
   const [application, setApplication] = useState<ApplicationStatusDetails | null>(
@@ -22,6 +24,7 @@ export default function ApplicationStatus() {
   );
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [updateLoading, setUpdateLoading] = useState(false);
 
   useEffect(() => {
     if (!submittedApplication || !email) return;
@@ -81,6 +84,28 @@ export default function ApplicationStatus() {
     void handleLookup();
   };
 
+  const handleUpdateApplication = async () => {
+    if (!application?.id) {
+      setError('Application could not be opened for updates. Please check status again.');
+      return;
+    }
+
+    setError('');
+    setUpdateLoading(true);
+    try {
+      await loadApplicationForUpdate(application.id);
+      navigate('/register/company');
+    } catch (updateError) {
+      setError(
+        updateError instanceof Error
+          ? updateError.message
+          : 'Unable to open this application for updates.',
+      );
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
   return (
     <RegistrationLayout>
       <div className="mx-auto max-w-[760px] space-y-6">
@@ -138,6 +163,24 @@ export default function ApplicationStatus() {
               <StatusItem label="Current Status" value={application.statusLabel} />
             </div>
 
+            {application.canUpdateApplication && (
+              <div className="mt-6 rounded-md border border-orange-200 bg-orange-50 px-5 py-4">
+                <div className="text-sm font-bold text-orange-800">Changes Requested</div>
+                <p className="mt-2 text-sm leading-6 text-orange-800">
+                  {application.changeReason ||
+                    'Sales Team requested updates to your application. Please review and update the required information.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleUpdateApplication}
+                  disabled={updateLoading}
+                  className="mt-4 inline-flex items-center justify-center rounded-md bg-[#5b2a7a] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#492060] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {updateLoading ? 'Opening Application...' : 'Update Application'}
+                </button>
+              </div>
+            )}
+
             <div className="mt-8">
               <h2 className="text-lg font-bold text-[#292929]">Timeline</h2>
               <div className="mt-5 space-y-5">
@@ -148,7 +191,7 @@ export default function ApplicationStatus() {
             </div>
 
             <p className="mt-8 rounded-md border border-[#ddd0e2] bg-[#faf8fb] px-5 py-4 text-sm leading-6 text-gray-600">
-              Your application has been received and is currently being reviewed by our Sales Team.
+              {getStatusMessage(application)}
             </p>
           </section>
         )}
@@ -191,4 +234,24 @@ function createDefaultTimeline(): ApplicationTimelineItem[] {
     { key: 'review', label: 'Sales Team Review', status: 'current' },
     { key: 'activation', label: 'Account Activation', status: 'pending' },
   ];
+}
+
+function getStatusMessage(application: ApplicationStatusDetails) {
+  if (application.status === 'APPROVED') {
+    return 'Your application has been approved. Your customer portal account is being prepared for activation.';
+  }
+
+  if (application.status === 'ACTIVATED') {
+    return 'Your account has been activated. You can now access the AlSafwa Cement Customer Portal once customer login is enabled.';
+  }
+
+  if (application.status === 'CHANGES_REQUIRED') {
+    return 'Sales Team requested updates to your application. Please update and resubmit your application.';
+  }
+
+  if (application.status === 'REJECTED') {
+    return 'Your application was rejected by the Sales Team. Please contact AlSafwa Cement for more information.';
+  }
+
+  return 'Your application has been received and is currently being reviewed by our Sales Team.';
 }

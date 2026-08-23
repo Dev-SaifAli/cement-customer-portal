@@ -1,7 +1,7 @@
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
 
 export type ApplicationStatus =
-  'SUBMITTED' | 'UNDER_REVIEW' | 'CHANGES_REQUIRED' | 'APPROVED' | 'REJECTED' | 'ACTIVE';
+  'SUBMITTED' | 'UNDER_REVIEW' | 'CHANGES_REQUIRED' | 'APPROVED' | 'REJECTED' | 'ACTIVATED';
 
 export type TimelineStatus = 'completed' | 'current' | 'pending';
 
@@ -12,10 +12,13 @@ export interface ApplicationTimelineItem {
 }
 
 export interface ApplicationStatusDetails {
+  id?: string;
   reference: string;
   status: ApplicationStatus;
   statusLabel: string;
   submittedAt: string;
+  changeReason?: string | null;
+  canUpdateApplication?: boolean;
   timeline: ApplicationTimelineItem[];
 }
 

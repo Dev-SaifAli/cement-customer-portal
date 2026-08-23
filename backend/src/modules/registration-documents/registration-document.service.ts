@@ -27,9 +27,9 @@ export class RegistrationDocumentService {
   }): Promise<RegistrationDraft> {
     const draft = await this.getRegistrationDraft(input.registrationId);
 
-    if (draft.status !== 'DRAFT') {
+    if (draft.status !== 'DRAFT' && draft.status !== 'CHANGES_REQUESTED') {
       throw new AppError(
-        'Documents can only be uploaded while the registration is in draft.',
+        'Documents can only be uploaded while the registration is editable.',
         409,
         'REGISTRATION_DOCUMENT_UPLOAD_NOT_ALLOWED',
       );
@@ -59,7 +59,8 @@ export class RegistrationDocumentService {
            updated_at = now()
        where id = $1
        returning id, reference, status, current_step, company, contact, documents,
-                 delivery_locations, administrator, submitted_at, created_at, updated_at`,
+                 delivery_locations, administrator, admin_password_hash, submitted_at, created_at,
+                 updated_at`,
       [input.registrationId, JSON.stringify(nextDocuments)],
     );
 
@@ -143,6 +144,7 @@ function mapRegistration(row: Record<string, unknown>): RegistrationDraft {
     documents: safeDocuments((row.documents ?? {}) as Record<string, unknown>),
     deliveryLocations: (row.delivery_locations ?? []) as unknown[],
     administrator: safeAdministrator((row.administrator ?? {}) as Record<string, unknown>),
+    hasAdminPassword: Boolean(row.admin_password_hash),
     submittedAt: row.submitted_at ? new Date(String(row.submitted_at)).toISOString() : null,
     createdAt: new Date(String(row.created_at)).toISOString(),
     updatedAt: new Date(String(row.updated_at)).toISOString(),

@@ -1,5 +1,5 @@
 export type ApplicationStatus =
-  'SUBMITTED' | 'UNDER_REVIEW' | 'CHANGES_REQUIRED' | 'APPROVED' | 'REJECTED' | 'ACTIVE';
+  'SUBMITTED' | 'UNDER_REVIEW' | 'CHANGES_REQUIRED' | 'APPROVED' | 'REJECTED' | 'ACTIVATED';
 
 export type ApplicationTimelineStatus = 'completed' | 'current' | 'pending';
 
@@ -10,10 +10,13 @@ export interface ApplicationTimelineItem {
 }
 
 export interface ApplicationStatusResponse {
+  id?: string;
   reference: string;
   status: ApplicationStatus;
   statusLabel: string;
   submittedAt: string;
+  changeReason?: string | null;
+  canUpdateApplication?: boolean;
   timeline: ApplicationTimelineItem[];
 }
 

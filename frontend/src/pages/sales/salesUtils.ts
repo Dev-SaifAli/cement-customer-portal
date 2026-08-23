@@ -6,6 +6,7 @@ export const salesStatuses: SalesApplicationStatus[] = [
   'APPROVED',
   'CHANGES_REQUESTED',
   'REJECTED',
+  'ACTIVATED',
 ];
 
 export const statusLabels: Record<SalesApplicationStatus, string> = {

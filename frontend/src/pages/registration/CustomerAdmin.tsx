@@ -18,7 +18,13 @@ type AdminErrors = Partial<Record<keyof AdministratorData, string>>;
 
 export default function CustomerAdmin() {
   const navigate = useNavigate();
-  const { continueRegistration, data, setCurrentStep, updateAdministrator } = useRegistration();
+  const {
+    continueRegistration,
+    data,
+    hasSavedAdministratorPassword,
+    setCurrentStep,
+    updateAdministrator,
+  } = useRegistration();
   const [errors, setErrors] = useState<AdminErrors>({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -47,17 +53,21 @@ export default function CustomerAdmin() {
     else if (!isSaudiPhoneNumber(admin.phone)) {
       next.phone = 'Enter a valid Saudi mobile number.';
     }
-    if (!admin.password) next.password = 'Password is required.';
-    else if (admin.password.length < 8) next.password = 'Password must be at least 8 characters.';
-    else if (
-      !/[A-Z]/.test(admin.password) ||
-      !/[a-z]/.test(admin.password) ||
-      !/\d/.test(admin.password)
-    )
-      next.password = 'Password must include uppercase, lowercase, and a number.';
-    if (!admin.confirmPassword) next.confirmPassword = 'Confirm password is required.';
-    else if (admin.confirmPassword !== admin.password)
-      next.confirmPassword = 'Passwords must match.';
+    const isChangingPassword = Boolean(admin.password || admin.confirmPassword);
+
+    if (!hasSavedAdministratorPassword || isChangingPassword) {
+      if (!admin.password) next.password = 'Password is required.';
+      else if (admin.password.length < 8) next.password = 'Password must be at least 8 characters.';
+      else if (
+        !/[A-Z]/.test(admin.password) ||
+        !/[a-z]/.test(admin.password) ||
+        !/\d/.test(admin.password)
+      )
+        next.password = 'Password must include uppercase, lowercase, and a number.';
+      if (!admin.confirmPassword) next.confirmPassword = 'Confirm password is required.';
+      else if (admin.confirmPassword !== admin.password)
+        next.confirmPassword = 'Passwords must match.';
+    }
 
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -148,6 +158,12 @@ export default function CustomerAdmin() {
               </button>
             }
           />
+          {hasSavedAdministratorPassword && !admin.password && !admin.confirmPassword && (
+            <div className="md:col-span-2 rounded-md border border-[#ddd0e2] bg-[#faf8fb] px-4 py-3 text-sm font-medium text-gray-600">
+              Administrator password is already saved. Leave password fields empty unless you want
+              to change it.
+            </div>
+          )}
         </div>
 
         <div className="mx-8 border-t border-gray-200" />

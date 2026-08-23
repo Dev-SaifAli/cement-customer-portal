@@ -42,6 +42,7 @@ export interface SalesApplicationDetails {
   submittedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  activatedAt: string | null;
   statusHistory: SalesStatusHistoryItem[];
 }
 
@@ -51,6 +52,8 @@ export interface SalesStatusHistoryItem {
   newStatus: SalesApplicationStatus;
   reason: string | null;
   changedBy: string;
+  changedByName: string | null;
+  changedByEmail: string | null;
   createdAt: string;
 }
 
@@ -64,6 +67,11 @@ export interface SalesApplicationsPagination {
 export interface SalesApplicationsList {
   items: SalesApplicationSummary[];
   pagination: SalesApplicationsPagination;
+}
+
+export interface SalesFilterOption {
+  value: string;
+  label: string;
 }
 
 interface ApiErrorBody {
@@ -142,12 +150,22 @@ export const salesLogout = async () => {
 
 export const listSalesApplications = async (params: {
   search?: string;
+  reference?: string;
+  company?: string;
+  contact?: string;
+  submittedFrom?: string;
+  submittedTo?: string;
   status?: SalesApplicationStatus | '';
   page?: number;
   pageSize?: number;
 }) => {
   const searchParams = new URLSearchParams();
   if (params.search) searchParams.set('search', params.search);
+  if (params.reference) searchParams.set('reference', params.reference);
+  if (params.company) searchParams.set('company', params.company);
+  if (params.contact) searchParams.set('contact', params.contact);
+  if (params.submittedFrom) searchParams.set('submittedFrom', params.submittedFrom);
+  if (params.submittedTo) searchParams.set('submittedTo', params.submittedTo);
   if (params.status) searchParams.set('status', params.status);
   if (params.page) searchParams.set('page', String(params.page));
   if (params.pageSize) searchParams.set('pageSize', String(params.pageSize));
@@ -168,6 +186,23 @@ export const getSalesApplication = async (id: string) => {
   return response.data.application;
 };
 
+export const getSalesApplicationFilterOptions = async (params: {
+  field: 'reference' | 'company' | 'contact' | 'contactEmail' | 'contactPhone' | 'status';
+  search?: string;
+  limit?: number;
+}) => {
+  const searchParams = new URLSearchParams({ field: params.field });
+  if (params.search) searchParams.set('search', params.search);
+  if (params.limit) searchParams.set('limit', String(params.limit));
+
+  const response = await requestSales<{
+    success: boolean;
+    data: { options: SalesFilterOption[] };
+  }>(`/sales/applications/filter-options?${searchParams.toString()}`);
+
+  return response.data.options;
+};
+
 export const updateSalesApplicationStatus = async (
   id: string,
   payload: {
@@ -185,6 +220,28 @@ export const updateSalesApplicationStatus = async (
   }>(`/sales/applications/${id}/status`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
+  });
+
+  return response.data;
+};
+
+export const activateSalesApplication = async (id: string) => {
+  const response = await requestSales<{
+    success: boolean;
+    data: {
+      activated: boolean;
+      message?: string;
+      account: {
+        id: string;
+        registrationId: string;
+        companyName: string;
+        status: string;
+        activatedAt: string;
+      } | null;
+      application: SalesApplicationDetails;
+    };
+  }>(`/sales/applications/${id}/activate`, {
+    method: 'POST',
   });
 
   return response.data;

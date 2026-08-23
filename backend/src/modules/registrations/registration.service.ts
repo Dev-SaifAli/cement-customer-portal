@@ -19,6 +19,7 @@ const mapRegistration = (
     : safeDocuments((row.documents ?? {}) as Record<string, unknown>),
   deliveryLocations: (row.delivery_locations ?? []) as unknown[],
   administrator: (row.administrator ?? {}) as Record<string, unknown>,
+  hasAdminPassword: Boolean(row.admin_password_hash),
   submittedAt: row.submitted_at ? new Date(String(row.submitted_at)).toISOString() : null,
   createdAt: new Date(String(row.created_at)).toISOString(),
   updatedAt: new Date(String(row.updated_at)).toISOString(),
@@ -149,7 +150,7 @@ export class RegistrationService {
   async submitDraft(id: string) {
     const draft = await this.getInternalDraft(id);
 
-    if (draft.status !== 'DRAFT') {
+    if (draft.status !== 'DRAFT' && draft.status !== 'CHANGES_REQUESTED') {
       if (!draft.reference || !draft.submittedAt) {
         throw new AppError(
           'Registration has already moved out of draft but is missing submission details.',
@@ -175,7 +176,7 @@ export class RegistrationService {
            submitted_at = coalesce(submitted_at, now()),
            updated_at = now()
        where id = $1
-         and status = 'DRAFT'
+         and status in ('DRAFT', 'CHANGES_REQUESTED')
        returning *`,
       [id, reference],
     );
@@ -272,12 +273,22 @@ export class RegistrationService {
           errors[`deliveryLocations.${index}.contactPhone`] =
             'Contact phone must be a valid Saudi mobile number.';
         }
+        const hasLatitude = item.latitude !== undefined;
+        const hasLongitude = item.longitude !== undefined;
+        if (hasLatitude !== hasLongitude) {
+          errors[`deliveryLocations.${index}.coordinates`] =
+            'Both latitude and longitude are required when a map location is selected.';
+        }
         if (!isValidOptionalLatitude(item.latitude)) {
           errors[`deliveryLocations.${index}.latitude`] = 'Latitude must be between -90 and 90.';
         }
         if (!isValidOptionalLongitude(item.longitude)) {
           errors[`deliveryLocations.${index}.longitude`] =
             'Longitude must be between -180 and 180.';
+        }
+        if (item.isPrimary !== undefined && typeof item.isPrimary !== 'boolean') {
+          errors[`deliveryLocations.${index}.isPrimary`] =
+            'Primary delivery location flag must be true or false.';
         }
       });
     }

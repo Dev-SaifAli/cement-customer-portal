@@ -6,7 +6,7 @@ import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-lea
 import markerIconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIconUrl from 'leaflet/dist/images/marker-icon.png';
 import markerShadowUrl from 'leaflet/dist/images/marker-shadow.png';
-import { formatCoordinates, mapConfig, type Coordinates } from '../../config/map';
+import { mapConfig, type Coordinates } from '../../config/map';
 
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIconRetinaUrl,
@@ -45,7 +45,9 @@ export function LocationPickerMap({
     setGeoStatus('');
 
     if (!navigator.geolocation) {
-      setGeoStatus('Current location is not available in this browser.');
+      setGeoStatus(
+        'Current location is not available in this browser or connection. You can still select the site manually on the map.',
+      );
       return;
     }
 
@@ -92,10 +94,10 @@ export function LocationPickerMap({
           <div>
             <div className="flex items-center gap-2 text-[#54247a]">
               <MapPin size={20} />
-              <h2 className="text-lg font-bold">Select Exact Delivery Location</h2>
+              <h2 className="text-lg font-bold">Select Delivery Location</h2>
             </div>
             <p className="mt-1 text-sm text-[#6c666c]">
-              Click or drag the marker to set the precise delivery point
+              Click anywhere on the map or drag the marker to the exact delivery point
               {locationLabel ? ` for ${locationLabel}` : ''}.
             </p>
           </div>
@@ -123,9 +125,7 @@ export function LocationPickerMap({
             </button>
 
             <div className="text-sm font-medium text-[#625c62]">
-              {selectedCoordinates
-                ? `Selected: ${formatCoordinates(selectedCoordinates)}`
-                : 'No map point selected yet.'}
+              {selectedCoordinates ? 'Map location selected' : 'No map point selected yet.'}
             </div>
           </div>
 
