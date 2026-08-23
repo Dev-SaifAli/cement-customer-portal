@@ -7,6 +7,7 @@ import {
   MapPin,
   Menu,
   PackageSearch,
+  FilePlus2,
   UserCircle,
   Users,
   X,
@@ -47,6 +48,12 @@ const customerNavigation = [
     label: 'Products',
     icon: <PackageSearch size={18} />,
     roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
+  },
+  {
+    to: '/customer/quotations/new',
+    label: 'New Quotation',
+    icon: <FilePlus2 size={18} />,
+    roles: ['CUSTOMER_ADMIN', 'PURCHASER'],
   },
 ] satisfies Array<{
   to: string;

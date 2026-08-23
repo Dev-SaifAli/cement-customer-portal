@@ -6,6 +6,7 @@ import { customerDashboardRouter } from '../modules/customer-dashboard/customer-
 import { customerLocationsRouter } from '../modules/customer-locations/customer-locations.routes.js';
 import { customerProductsRouter } from '../modules/customer-products/customer-products.routes.js';
 import { customerProfileRouter } from '../modules/customer-profile/customer-profile.routes.js';
+import { customerQuotationsRouter } from '../modules/customer-quotations/customer-quotations.routes.js';
 import { customerUsersRouter } from '../modules/customer-users/customer-users.routes.js';
 import { healthRouter } from '../modules/health/health.routes.js';
 import { registrationRouter } from '../modules/registrations/registration.routes.js';
@@ -20,6 +21,7 @@ v1Router.use('/customer/dashboard', customerDashboardRouter);
 v1Router.use('/customer/locations', customerLocationsRouter);
 v1Router.use('/customer/products', customerProductsRouter);
 v1Router.use('/customer/profile', customerProfileRouter);
+v1Router.use('/customer/quotations', customerQuotationsRouter);
 v1Router.use('/customer/users', customerUsersRouter);
 v1Router.use('/health', healthRouter);
 v1Router.use('/registrations', registrationRouter);
