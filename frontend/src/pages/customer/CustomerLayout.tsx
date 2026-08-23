@@ -14,6 +14,39 @@ import { useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import Logo from '../../components/Logo/Logo';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import type { CustomerRole } from '../../services/customerAuthService';
+
+const customerNavigation = [
+  {
+    to: '/customer/dashboard',
+    label: 'Dashboard',
+    icon: <LayoutDashboard size={18} />,
+    roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
+  },
+  {
+    to: '/customer/profile',
+    label: 'Profile',
+    icon: <UserCircle size={18} />,
+    roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
+  },
+  {
+    to: '/customer/locations',
+    label: 'Delivery Locations',
+    icon: <MapPin size={18} />,
+    roles: ['CUSTOMER_ADMIN', 'PURCHASER'],
+  },
+  {
+    to: '/customer/users',
+    label: 'Users',
+    icon: <Users size={18} />,
+    roles: ['CUSTOMER_ADMIN'],
+  },
+] satisfies Array<{
+  to: string;
+  label: string;
+  icon: ReactNode;
+  roles: CustomerRole[];
+}>;
 
 export function CustomerLayout() {
   const { account, logout, user } = useCustomerAuth();
@@ -21,7 +54,9 @@ export function CustomerLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const isCustomerAdmin = user?.role === 'CUSTOMER_ADMIN';
+  const visibleNavigation = customerNavigation.filter(
+    (item) => user?.role && item.roles.includes(user.role),
+  );
 
   const handleLogout = async () => {
     await logout();
@@ -65,40 +100,17 @@ export function CustomerLayout() {
         </div>
 
         <nav className={`space-y-2 ${sidebarCollapsed ? 'p-3' : 'p-4'}`}>
-          <CustomerNavLink
-            to="/customer/dashboard"
-            icon={<LayoutDashboard size={18} />}
-            collapsed={sidebarCollapsed}
-            onClick={() => setSidebarOpen(false)}
-          >
-            Dashboard
-          </CustomerNavLink>
-          <CustomerNavLink
-            to="/customer/profile"
-            icon={<UserCircle size={18} />}
-            collapsed={sidebarCollapsed}
-            onClick={() => setSidebarOpen(false)}
-          >
-            Profile
-          </CustomerNavLink>
-          <CustomerNavLink
-            to="/customer/locations"
-            icon={<MapPin size={18} />}
-            collapsed={sidebarCollapsed}
-            onClick={() => setSidebarOpen(false)}
-          >
-            Delivery Locations
-          </CustomerNavLink>
-          {isCustomerAdmin && (
+          {visibleNavigation.map((item) => (
             <CustomerNavLink
-              to="/customer/users"
-              icon={<Users size={18} />}
+              key={item.to}
+              to={item.to}
+              icon={item.icon}
               collapsed={sidebarCollapsed}
               onClick={() => setSidebarOpen(false)}
             >
-              Users
+              {item.label}
             </CustomerNavLink>
-          )}
+          ))}
         </nav>
       </aside>
 

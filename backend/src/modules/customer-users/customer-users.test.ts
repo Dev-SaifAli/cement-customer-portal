@@ -70,6 +70,27 @@ function createValidCustomerToken() {
   return `${header}.${payload}.${signature}`;
 }
 
+function createValidSalesToken() {
+  const now = Math.floor(Date.now() / 1000);
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' }), 'utf8').toString(
+    'base64url',
+  );
+  const payload = Buffer.from(
+    JSON.stringify({
+      sub: '55555555-5555-4555-8555-555555555555',
+      type: 'sales',
+      iat: now,
+      exp: now + 60 * 60,
+    }),
+    'utf8',
+  ).toString('base64url');
+  const signature = createHmac('sha256', process.env.JWT_SECRET ?? '')
+    .update(`${header}.${payload}`)
+    .digest('base64url');
+
+  return `${header}.${payload}.${signature}`;
+}
+
 function authenticatedRequest() {
   return request(createApp())
     .get('/api/v1/customer/users')
@@ -87,6 +108,16 @@ describe('customer users API', () => {
     const response = await request(createApp()).get('/api/v1/customer/users');
 
     expect(response.status).toBe(401);
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('does not authenticate customer users API with a Sales session cookie', async () => {
+    const response = await request(createApp())
+      .get('/api/v1/customer/users')
+      .set({ Cookie: `sales_session=${createValidSalesToken()}` });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe('CUSTOMER_AUTH_REQUIRED');
     expect(query).not.toHaveBeenCalled();
   });
 

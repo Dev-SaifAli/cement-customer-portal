@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useEffect } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -90,7 +90,9 @@ describe('authentication routes', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
-    expect(await screen.findByText('Please complete the security verification.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Please complete the security verification.'),
+    ).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/security verification/i), {
       target: { value: '999' },
@@ -192,6 +194,48 @@ describe('authentication routes', () => {
     expect(
       await screen.findByRole('heading', { name: 'Welcome Back', level: 1 }),
     ).toBeInTheDocument();
+  });
+
+  it.each([
+    {
+      role: 'CUSTOMER_ADMIN',
+      visible: [/dashboard/i, /profile/i, /delivery locations/i, /^users$/i],
+      hidden: [],
+    },
+    {
+      role: 'PURCHASER',
+      visible: [/dashboard/i, /profile/i, /delivery locations/i],
+      hidden: [/^users$/i],
+    },
+    {
+      role: 'FINANCE_USER',
+      visible: [/dashboard/i, /profile/i],
+      hidden: [/delivery locations/i, /^users$/i],
+    },
+    {
+      role: 'VIEWER',
+      visible: [/dashboard/i, /profile/i],
+      hidden: [/delivery locations/i, /^users$/i],
+    },
+  ])('shows role-aware customer navigation for $role', async ({ hidden, role, visible }) => {
+    window.sessionStorage.setItem('test_customer_session', 'active');
+    window.sessionStorage.setItem('test_customer_role', role);
+
+    render(
+      <MemoryRouter initialEntries={['/customer/dashboard']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('heading', { name: /customer dashboard/i });
+    const sidebar = screen.getByRole('navigation');
+
+    visible.forEach((name) => {
+      expect(within(sidebar).getByRole('link', { name })).toBeInTheDocument();
+    });
+    hidden.forEach((name) => {
+      expect(within(sidebar).queryByRole('link', { name })).not.toBeInTheDocument();
+    });
   });
 
   it('does not create a draft until the user explicitly saves company information', async () => {

@@ -137,12 +137,14 @@ vi.stubGlobal(
 );
 
 function customerAuthSession() {
+  const role = window.sessionStorage.getItem('test_customer_role') ?? 'CUSTOMER_ADMIN';
+
   return {
     user: {
       id: 'customer-user-1',
       name: 'Customer Admin',
       email: 'admin@example.com',
-      role: 'CUSTOMER_ADMIN',
+      role,
     },
     account: {
       id: 'customer-account-1',
