@@ -254,6 +254,28 @@ describe('authentication routes', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('CEM-OPC-50KG')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /back to products/i })).toBeInTheDocument();
+    const sidebar = screen.getByRole('navigation');
+    const productsLink = within(sidebar).getByRole('link', { name: /products/i });
+    expect(productsLink).toHaveClass('bg-[#f6f2fa]');
+  });
+
+  it('keeps Products active and the customer sidebar visible on product details', async () => {
+    window.sessionStorage.setItem('test_customer_session', 'active');
+
+    render(
+      <MemoryRouter initialEntries={['/customer/products/product-1']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: /ordinary portland cement/i }),
+    ).toBeInTheDocument();
+
+    const sidebar = screen.getByRole('navigation');
+    expect(within(sidebar).getByRole('link', { name: /dashboard/i })).toBeInTheDocument();
+    expect(within(sidebar).getByRole('link', { name: /profile/i })).toBeInTheDocument();
+    expect(within(sidebar).getByRole('link', { name: /products/i })).toHaveClass('bg-[#f6f2fa]');
   });
 
   it('does not create a draft until the user explicitly saves company information', async () => {

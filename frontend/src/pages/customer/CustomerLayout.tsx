@@ -37,16 +37,16 @@ const customerNavigation = [
     roles: ['CUSTOMER_ADMIN', 'PURCHASER'],
   },
   {
-    to: '/customer/products',
-    label: 'Products',
-    icon: <PackageSearch size={18} />,
-    roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
-  },
-  {
     to: '/customer/users',
     label: 'Users',
     icon: <Users size={18} />,
     roles: ['CUSTOMER_ADMIN'],
+  },
+  {
+    to: '/customer/products',
+    label: 'Products',
+    icon: <PackageSearch size={18} />,
+    roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
   },
 ] satisfies Array<{
   to: string;
