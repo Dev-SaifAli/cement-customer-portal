@@ -7,6 +7,7 @@ import {
   MapPin,
   Menu,
   UserCircle,
+  Users,
   X,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -20,6 +21,7 @@ export function CustomerLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const isCustomerAdmin = user?.role === 'CUSTOMER_ADMIN';
 
   const handleLogout = async () => {
     await logout();
@@ -87,6 +89,16 @@ export function CustomerLayout() {
           >
             Delivery Locations
           </CustomerNavLink>
+          {isCustomerAdmin && (
+            <CustomerNavLink
+              to="/customer/users"
+              icon={<Users size={18} />}
+              collapsed={sidebarCollapsed}
+              onClick={() => setSidebarOpen(false)}
+            >
+              Users
+            </CustomerNavLink>
+          )}
         </nav>
       </aside>
 

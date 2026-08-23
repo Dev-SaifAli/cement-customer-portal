@@ -4,8 +4,10 @@ export interface CustomerAuthUser {
   id: string;
   name: string;
   email: string;
-  role: 'CUSTOMER_ADMIN';
+  role: CustomerRole;
 }
+
+export type CustomerRole = 'CUSTOMER_ADMIN' | 'PURCHASER' | 'FINANCE_USER' | 'VIEWER';
 
 export interface CustomerAuthAccount {
   id: string;
