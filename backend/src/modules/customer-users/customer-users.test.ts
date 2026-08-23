@@ -39,7 +39,7 @@ const safeCustomerUserRow = {
   customer_account_id: customerAccountId,
   name: 'Operations User',
   email: 'operations@example.com',
-  role: 'CUSTOMER_ADMIN',
+  role: 'PURCHASER',
   is_active: true,
   created_at: '2026-08-23T08:00:00.000Z',
   updated_at: '2026-08-23T08:00:00.000Z',
@@ -103,7 +103,8 @@ describe('customer users API', () => {
             id: safeCustomerUserRow.id,
             name: 'Operations User',
             email: 'operations@example.com',
-            role: 'CUSTOMER_ADMIN',
+            role: 'PURCHASER',
+            roleLabel: 'Purchaser',
             isActive: true,
             createdAt: '2026-08-23T08:00:00.000Z',
             updatedAt: '2026-08-23T08:00:00.000Z',
@@ -128,6 +129,7 @@ describe('customer users API', () => {
         name: 'Operations User',
         email: 'OPERATIONS@EXAMPLE.COM',
         password: 'new-password',
+        role: 'PURCHASER',
       });
 
     expect(response.status).toBe(201);
@@ -159,6 +161,26 @@ describe('customer users API', () => {
     expect(response.body.data.user.email).toBe('operations@example.com');
   });
 
+  it('rejects customer user creation when the authenticated user is not a customer admin', async () => {
+    query.mockResolvedValueOnce({
+      rows: [{ ...authenticatedCustomerUserRow, role: 'PURCHASER' }],
+    });
+
+    const response = await request(createApp())
+      .post('/api/v1/customer/users')
+      .set({ Cookie: `customer_session=${createValidCustomerToken()}` })
+      .send({
+        name: 'Viewer User',
+        email: 'viewer@example.com',
+        password: 'new-password',
+        role: 'VIEWER',
+      });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('CUSTOMER_ADMIN_REQUIRED');
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
   it('prevents cross-customer access by returning not found for unscoped users', async () => {
     query
       .mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] })
@@ -181,6 +203,7 @@ describe('customer users API', () => {
           {
             ...safeCustomerUserRow,
             name: 'Updated User',
+            role: 'FINANCE_USER',
             is_active: false,
             updated_at: '2026-08-23T09:00:00.000Z',
           },
@@ -190,7 +213,7 @@ describe('customer users API', () => {
     const response = await request(createApp())
       .patch(`/api/v1/customer/users/${safeCustomerUserRow.id}`)
       .set({ Cookie: `customer_session=${createValidCustomerToken()}` })
-      .send({ name: 'Updated User', isActive: false });
+      .send({ name: 'Updated User', role: 'FINANCE_USER', isActive: false });
 
     expect(response.status).toBe(200);
     expect(query).toHaveBeenNthCalledWith(
@@ -201,13 +224,31 @@ describe('customer users API', () => {
         safeCustomerUserRow.id,
         'Updated User',
         'operations@example.com',
+        'FINANCE_USER',
         false,
       ],
     );
     expect(response.body.data.user).toMatchObject({
       id: safeCustomerUserRow.id,
       name: 'Updated User',
+      role: 'FINANCE_USER',
+      roleLabel: 'Finance User',
       isActive: false,
     });
+  });
+
+  it('rejects customer user updates when the authenticated user is not a customer admin', async () => {
+    query.mockResolvedValueOnce({
+      rows: [{ ...authenticatedCustomerUserRow, role: 'VIEWER' }],
+    });
+
+    const response = await request(createApp())
+      .patch(`/api/v1/customer/users/${safeCustomerUserRow.id}`)
+      .set({ Cookie: `customer_session=${createValidCustomerToken()}` })
+      .send({ name: 'Blocked Update' });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('CUSTOMER_ADMIN_REQUIRED');
+    expect(query).toHaveBeenCalledTimes(1);
   });
 });

@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import type { CustomerUser } from '../customer-auth/customer-auth.types.js';
+import { customerRoleLabels } from '../customer-auth/customer-roles.js';
 import type {
   CreateCustomerUserInput,
   UpdateCustomerUserInput,
@@ -107,7 +108,8 @@ export class CustomerUsersService {
         `update customer_users
          set name = $3,
              email = $4,
-             is_active = $5,
+             role = $5,
+             is_active = $6,
              updated_at = now()
          where id = $2
            and customer_account_id = $1
@@ -125,6 +127,7 @@ export class CustomerUsersService {
           userId,
           input.name ?? current.name,
           input.email ?? current.email,
+          input.role ?? current.role,
           input.isActive ?? current.is_active,
         ],
       );
@@ -179,6 +182,7 @@ function mapCustomerUser(row: CustomerUserRow) {
     name: row.name,
     email: row.email,
     role: row.role,
+    roleLabel: customerRoleLabels[row.role],
     isActive: row.is_active,
     createdAt: dateString(row.created_at),
     updatedAt: dateString(row.updated_at),

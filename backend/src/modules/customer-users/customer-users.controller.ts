@@ -17,6 +17,8 @@ export class CustomerUsersController {
 
   async create(request: CustomerAuthenticatedRequest, response: Response) {
     const customerUser = getAuthenticatedCustomerUser(request);
+    requireCustomerAdmin(customerUser);
+
     const input = createCustomerUserSchema.parse(request.body);
     const user = await customerUsersService.create(customerUser, input);
 
@@ -32,6 +34,8 @@ export class CustomerUsersController {
 
   async update(request: CustomerAuthenticatedRequest, response: Response) {
     const customerUser = getAuthenticatedCustomerUser(request);
+    requireCustomerAdmin(customerUser);
+
     const input = updateCustomerUserSchema.parse(request.body);
     const user = await customerUsersService.update(customerUser, getUserId(request), input);
 
@@ -57,4 +61,14 @@ function getUserId(request: CustomerAuthenticatedRequest) {
   }
 
   return id;
+}
+
+function requireCustomerAdmin(customerUser: ReturnType<typeof getAuthenticatedCustomerUser>) {
+  if (customerUser.role !== 'CUSTOMER_ADMIN') {
+    throw new AppError(
+      'Customer administrator access is required.',
+      403,
+      'CUSTOMER_ADMIN_REQUIRED',
+    );
+  }
 }

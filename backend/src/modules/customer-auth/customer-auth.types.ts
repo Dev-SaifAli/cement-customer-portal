@@ -1,4 +1,5 @@
 import type { Request } from 'express';
+import type { CustomerRole } from './customer-roles.js';
 
 export interface CustomerAccount {
   id: string;
@@ -12,7 +13,7 @@ export interface CustomerUser {
   customerAccountId: string;
   name: string;
   email: string;
-  role: 'CUSTOMER_ADMIN';
+  role: CustomerRole;
   isActive: boolean;
   account: CustomerAccount;
 }

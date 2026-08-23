@@ -6,6 +6,8 @@ import type {
   CustomerUser,
   CustomerUserRecord,
 } from './customer-auth.types.js';
+import type { CustomerRole } from './customer-roles.js';
+import { isCustomerRole } from './customer-roles.js';
 import { customerTokenService } from './customer-token.service.js';
 
 const genericAuthenticationError = 'Invalid email or password.';
@@ -99,7 +101,7 @@ interface CustomerUserRow {
   name: string;
   email: string;
   password_hash: string;
-  role: 'CUSTOMER_ADMIN';
+  role: CustomerRole;
   is_active: boolean;
   registration_id: string;
   company_name: string;
@@ -108,13 +110,15 @@ interface CustomerUserRow {
 }
 
 function mapCustomerUserRecord(row: CustomerUserRow): CustomerUserRecord {
+  const role = isCustomerRole(row.role) ? row.role : 'VIEWER';
+
   return {
     id: row.id,
     customerAccountId: row.customer_account_id,
     name: row.name,
     email: row.email,
     passwordHash: row.password_hash,
-    role: row.role,
+    role,
     isActive: row.is_active,
     accountIsActive: row.account_status === 'ACTIVE',
     applicationStatus: row.application_status,
