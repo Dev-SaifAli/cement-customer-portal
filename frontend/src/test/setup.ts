@@ -205,6 +205,7 @@ function testProduct() {
     uom: '50KG_BAG',
     category: 'Cement',
     displayOrder: 10,
+    priceDisplay: 'PRICE_ON_REQUEST',
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

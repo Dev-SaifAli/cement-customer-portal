@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler.js';
-import { requireSalesAuth } from '../sales-auth/sales-auth.middleware.js';
+import { requireSalesAuth, requireSalesRole } from '../sales-auth/sales-auth.middleware.js';
 import { salesContractsController } from './sales-contracts.controller.js';
 
 export const salesContractsRouter = Router();
 
 salesContractsRouter.use(requireSalesAuth);
+salesContractsRouter.use(requireSalesRole('SALES_REP'));
 
 salesContractsRouter.get(
   '/',
@@ -30,4 +31,14 @@ salesContractsRouter.patch(
 salesContractsRouter.post(
   '/:id/submit',
   asyncHandler((request, response) => salesContractsController.submit(request, response)),
+);
+
+salesContractsRouter.post(
+  '/:id/activate',
+  asyncHandler((request, response) => salesContractsController.activate(request, response)),
+);
+
+salesContractsRouter.post(
+  '/:id/extend',
+  asyncHandler((request, response) => salesContractsController.extend(request, response)),
 );

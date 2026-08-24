@@ -4,6 +4,7 @@ import type { SalesAuthenticatedRequest } from '../sales-auth/sales-auth.types.j
 import { salesContractsService } from './sales-contracts.service.js';
 import {
   listSalesContractsSchema,
+  salesContractExtensionSchema,
   salesContractIdSchema,
   salesContractPayloadSchema,
 } from './sales-contracts.validation.js';
@@ -44,6 +45,23 @@ export class SalesContractsController {
     const salesUser = getSalesUser(request);
     const { id } = salesContractIdSchema.parse(request.params);
     const contract = await salesContractsService.submit(id, salesUser);
+
+    response.status(200).json({ success: true, data: { contract } });
+  }
+
+  async activate(request: SalesAuthenticatedRequest, response: Response) {
+    const salesUser = getSalesUser(request);
+    const { id } = salesContractIdSchema.parse(request.params);
+    const contract = await salesContractsService.activate(id, salesUser);
+
+    response.status(200).json({ success: true, data: { contract } });
+  }
+
+  async extend(request: SalesAuthenticatedRequest, response: Response) {
+    const salesUser = getSalesUser(request);
+    const { id } = salesContractIdSchema.parse(request.params);
+    const payload = salesContractExtensionSchema.parse(request.body);
+    const contract = await salesContractsService.extend(id, payload, salesUser);
 
     response.status(200).json({ success: true, data: { contract } });
   }

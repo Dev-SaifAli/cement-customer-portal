@@ -29,6 +29,13 @@ const quotation: CustomerQuotation = {
   submittedAt: null,
   createdAt: '2026-08-24T08:00:00.000Z',
   updatedAt: '2026-08-24T08:00:00.000Z',
+  validUntil: null,
+  paymentTerms: null,
+  commercialNotes: null,
+  subtotal: null,
+  vatRate: null,
+  vatAmount: null,
+  grandTotal: null,
   items: [
     {
       id: 'item-1',
@@ -47,9 +54,13 @@ const quotation: CustomerQuotation = {
       packagingType: 'Bag',
       uom: '50KG_BAG',
       quantity: 2000,
+      unitWeightKg: 50,
+      equivalentTons: 100,
       palletRequired: false,
       palletType: null,
       palletQuantity: null,
+      customerRate: null,
+      amount: null,
     },
   ],
 };

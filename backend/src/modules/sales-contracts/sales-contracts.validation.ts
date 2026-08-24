@@ -35,6 +35,25 @@ export const salesContractIdSchema = z.object({
   id: uuidSchema,
 });
 
+export const salesContractExtensionSchema = z
+  .object({
+    additionalQuantityTons: z.coerce.number().positive().optional(),
+    endDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'End date must use YYYY-MM-DD format.')
+      .optional(),
+    reason: optionalText(500),
+  })
+  .superRefine((value, context) => {
+    if (value.additionalQuantityTons === undefined && value.endDate === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['additionalQuantityTons'],
+        message: 'Provide a quantity increase or a later end date.',
+      });
+    }
+  });
+
 export const salesContractPayloadSchema = z
   .object({
     customerAccountId: uuidSchema,
@@ -87,5 +106,28 @@ export const salesContractPayloadSchema = z
     }
   });
 
+export const createContractFromAcceptedQuotationSchema = z
+  .object({
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must use YYYY-MM-DD format.'),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'End date must use YYYY-MM-DD format.'),
+    totalQuantityTons: z.coerce
+      .number()
+      .positive('Contract quantity must be greater than zero.'),
+    internalNotes: optionalText(1000),
+  })
+  .superRefine((value, context) => {
+    if (value.endDate < value.startDate) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endDate'],
+        message: 'End date must be greater than or equal to start date.',
+      });
+    }
+  });
+
 export type ListSalesContractsQuery = z.infer<typeof listSalesContractsSchema>;
 export type SalesContractPayload = z.infer<typeof salesContractPayloadSchema>;
+export type SalesContractExtensionPayload = z.infer<typeof salesContractExtensionSchema>;
+export type CreateContractFromAcceptedQuotationPayload = z.infer<
+  typeof createContractFromAcceptedQuotationSchema
+>;

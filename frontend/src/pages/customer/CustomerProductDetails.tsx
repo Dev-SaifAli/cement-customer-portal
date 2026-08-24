@@ -83,10 +83,11 @@ function ProductDetailsCard({ product }: { product: CustomerProduct }) {
             </p>
           </div>
 
-          <dl className="grid gap-3 border-t border-slate-100 pt-5 sm:grid-cols-3">
+          <dl className="grid gap-3 border-t border-slate-100 pt-5 sm:grid-cols-4">
             <DetailField label="Category" value={product.category} />
             <DetailField label="Packaging Type" value={product.packagingType} />
             <DetailField label="UOM" value={product.uom} />
+            <DetailField label="Price" value="Price on Request" />
           </dl>
         </div>
 

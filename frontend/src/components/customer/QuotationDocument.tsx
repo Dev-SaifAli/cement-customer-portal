@@ -13,6 +13,12 @@ interface QuotationDocumentProps {
 export const QuotationDocument = forwardRef<HTMLDivElement, QuotationDocumentProps>(
   function QuotationDocument({ quotation, account, user, phone }, ref) {
     const isDraft = quotation.status === 'DRAFT';
+    const showsCommercialTerms = [
+      'READY_FOR_CUSTOMER',
+      'ACCEPTED',
+      'REJECTED',
+      'CLARIFICATION_REQUESTED',
+    ].includes(quotation.status);
     const destination =
       quotation.fulfilmentType === 'DELIVERY' ? quotation.shipToLocation : quotation.pickupLocation;
     const destinationLabel =
@@ -105,6 +111,19 @@ export const QuotationDocument = forwardRef<HTMLDivElement, QuotationDocumentPro
                   <th className="w-20 border border-[#d9d5de] px-2 py-2 text-right">Quantity</th>
                   <th className="w-16 border border-[#d9d5de] px-2 py-2 text-center">UOM</th>
                   <th className="w-20 border border-[#d9d5de] px-2 py-2 text-center">Packaging</th>
+                  {showsCommercialTerms && (
+                    <th className="w-20 border border-[#d9d5de] px-2 py-2 text-right">
+                      Equivalent
+                    </th>
+                  )}
+                  {showsCommercialTerms && (
+                    <th className="w-20 border border-[#d9d5de] px-2 py-2 text-right">
+                      Unit Rate / TON
+                    </th>
+                  )}
+                  {showsCommercialTerms && (
+                    <th className="w-24 border border-[#d9d5de] px-2 py-2 text-right">Amount</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -124,11 +143,48 @@ export const QuotationDocument = forwardRef<HTMLDivElement, QuotationDocumentPro
                     <td className="border border-[#d9d5de] px-2 py-2 text-center">
                       {item.packagingType}
                     </td>
+                    {showsCommercialTerms && (
+                      <td className="border border-[#d9d5de] px-2 py-2 text-right">
+                        {formatQuantity(item.equivalentTons)} TON
+                      </td>
+                    )}
+                    {showsCommercialTerms && (
+                      <td className="border border-[#d9d5de] px-2 py-2 text-right">
+                        {formatMoney(item.customerRate)}
+                      </td>
+                    )}
+                    {showsCommercialTerms && (
+                      <td className="border border-[#d9d5de] px-2 py-2 text-right font-semibold">
+                        {formatMoney(item.amount)}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </section>
+
+          {showsCommercialTerms && (
+            <div className="mt-6 grid grid-cols-2 gap-8">
+              <DocumentSection title="Commercial Terms">
+                <DocumentLabel label="Valid Until" value={formatDate(quotation.validUntil)} />
+                <DocumentLabel label="Payment Terms" value={quotation.paymentTerms} />
+                <DocumentLabel label="Commercial Notes" value={quotation.commercialNotes} />
+              </DocumentSection>
+              <section className="rounded border border-[#d9d5de] p-3 text-[10px]">
+                <MoneyRow label="Subtotal" value={quotation.subtotal} />
+                <MoneyRow
+                  label={
+                    quotation.vatRate === null ? 'VAT' : `VAT (${formatVatRate(quotation.vatRate)})`
+                  }
+                  value={quotation.vatAmount}
+                />
+                <div className="mt-2 border-t border-[#d9d5de] pt-2">
+                  <MoneyRow label="Grand Total" value={quotation.grandTotal} strong />
+                </div>
+              </section>
+            </div>
+          )}
 
           <section className="mt-6">
             <h2 className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#54247a]">
@@ -182,6 +238,25 @@ function DocumentLabel({
   );
 }
 
+function MoneyRow({
+  label,
+  strong = false,
+  value,
+}: {
+  label: string;
+  strong?: boolean;
+  value: number | null;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between py-1 ${strong ? 'font-extrabold text-[#54247a]' : ''}`}
+    >
+      <span>{label}</span>
+      <span>{formatMoney(value)} SAR</span>
+    </div>
+  );
+}
+
 function formatStatus(status: CustomerQuotation['status']) {
   const labels: Record<CustomerQuotation['status'], string> = {
     DRAFT: 'Draft',
@@ -214,6 +289,20 @@ function formatDate(value?: string | null) {
 
 function formatQuantity(value: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 }).format(value);
+}
+
+function formatMoney(value: number | null) {
+  if (value === null) return 'Not provided';
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatVatRate(value: number | null) {
+  return value === null
+    ? 'VAT'
+    : `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value * 100)}%`;
 }
 
 function formatAddress(location: NonNullable<CustomerQuotation['shipToLocation']>) {

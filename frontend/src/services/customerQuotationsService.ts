@@ -86,6 +86,13 @@ export interface CustomerQuotation {
   submittedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  validUntil: string | null;
+  paymentTerms: string | null;
+  commercialNotes: string | null;
+  subtotal: number | null;
+  vatRate: number | null;
+  vatAmount: number | null;
+  grandTotal: number | null;
   items: Array<{
     id: string;
     productId: string;
@@ -104,9 +111,14 @@ export interface CustomerQuotation {
     packagingType: string;
     uom: string;
     quantity: number;
+    unitWeightKg: number;
+    equivalentTons: number;
     palletRequired: boolean;
     palletType: string | null;
     palletQuantity: number | null;
+    customerRate: number | null;
+    amount: number | null;
+    commercialDiscountApplied?: boolean;
   }>;
 }
 
@@ -208,6 +220,31 @@ export const submitCustomerQuotation = async (id: string) => {
 
   return response.data.quotation;
 };
+
+export const acceptCustomerQuotation = async (id: string) =>
+  customerQuotationDecision(id, 'accept');
+
+export const rejectCustomerQuotation = async (id: string, reason: string) =>
+  customerQuotationDecision(id, 'reject', reason);
+
+export const requestCustomerQuotationClarification = async (id: string, message: string) =>
+  customerQuotationDecision(id, 'request-clarification', message);
+
+async function customerQuotationDecision(
+  id: string,
+  action: 'accept' | 'reject' | 'request-clarification',
+  reason?: string,
+) {
+  const response = await requestCustomerQuotations<QuotationResponse>(
+    `/customer/quotations/${encodeURIComponent(id)}/${action}`,
+    {
+      method: 'POST',
+      ...(reason === undefined ? {} : { body: JSON.stringify({ reason }) }),
+    },
+  );
+
+  return response.data.quotation;
+}
 
 async function requestCustomerQuotations<TResponse>(path: string, options: RequestInit = {}) {
   let response: Response;

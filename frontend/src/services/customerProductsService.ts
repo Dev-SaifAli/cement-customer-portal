@@ -14,6 +14,7 @@ export interface CustomerProduct {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  priceDisplay: 'PRICE_ON_REQUEST';
 }
 
 export interface CustomerProductsQuery {

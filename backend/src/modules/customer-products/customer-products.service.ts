@@ -149,6 +149,7 @@ function mapProduct(row: ProductCatalogRow) {
     isActive: row.is_active,
     createdAt: dateString(row.created_at),
     updatedAt: dateString(row.updated_at),
+    priceDisplay: 'PRICE_ON_REQUEST' as const,
   };
 }
 

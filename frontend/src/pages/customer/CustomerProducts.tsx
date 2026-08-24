@@ -211,9 +211,10 @@ function ProductCard({ product }: { product: CustomerProduct }) {
         </p>
       )}
 
-      <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
+      <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-slate-100 pt-4">
         <ProductMeta label="Packaging" value={product.packagingType} />
         <ProductMeta label="UOM" value={product.uom} />
+        <ProductMeta label="Price" value="Price on Request" />
       </dl>
     </article>
   );

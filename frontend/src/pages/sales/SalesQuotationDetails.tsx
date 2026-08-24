@@ -1,9 +1,21 @@
-import { ArrowLeft, Check, Eye, Loader2, Save, Send, XCircle } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  BriefcaseBusiness,
+  Check,
+  CheckCircle2,
+  Clock3,
+  Eye,
+  Loader2,
+  Send,
+  XCircle,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { SalesQuotationPreview } from '../../components/sales/SalesQuotationPreview';
 import {
   approveSalesQuotation,
+  createContractFromSalesQuotation,
   getSalesQuotation,
   rejectSalesQuotation,
   SalesApiError,
@@ -11,11 +23,16 @@ import {
   startSalesQuotationReview,
   submitSalesQuotationApproval,
   updateSalesQuotationPricing,
+  type SalesContractDetails,
   type SalesQuotationDetails,
   type SalesQuotationStatus,
 } from '../../services/salesService';
 
-type PricingInput = Record<string, { productPrice: string; deliveryPrice: string }>;
+type DiscountMode = 'PERCENT' | 'SAR_PER_TON' | '';
+type PricingInput = Record<
+  string,
+  { productPrice: string; deliveryPrice: string; discountMode: DiscountMode; discountValue: string }
+>;
 
 export function SalesQuotationDetailsPage() {
   const { id = '' } = useParams();
@@ -31,6 +48,16 @@ export function SalesQuotationDetailsPage() {
   const [preview, setPreview] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [contractModalOpen, setContractModalOpen] = useState(false);
+  const [contractSubmitting, setContractSubmitting] = useState(false);
+  const [contractError, setContractError] = useState('');
+  const [createdContract, setCreatedContract] = useState<SalesContractDetails | null>(null);
+  const [contractForm, setContractForm] = useState({
+    startDate: today(),
+    endDate: today(),
+    totalQuantityTons: '',
+    internalNotes: '',
+  });
 
   const applyQuotation = (value: SalesQuotationDetails) => {
     setQuotation(value);
@@ -41,6 +68,8 @@ export function SalesQuotationDetailsPage() {
           {
             productPrice: item.productPrice?.toFixed(2) ?? '',
             deliveryPrice: item.deliveryPrice?.toFixed(2) ?? '',
+            discountMode: item.discountMode ?? '',
+            discountValue: item.discountValue?.toString() ?? '',
           },
         ]),
       ),
@@ -68,60 +97,153 @@ export function SalesQuotationDetailsPage() {
     try {
       applyQuotation(await action());
     } catch (failure) {
-      setError(
-        failure instanceof SalesApiError && failure.status === 400
-          ? failure.message
-          : 'Unable to complete this action. Please retry.',
-      );
+      setError(toSafeActionError(failure));
     } finally {
       setSaving(false);
     }
   };
 
-  const savePricing = async () => {
-    if (!quotation) return;
+  const pricingPayload = () => {
+    if (!quotation) return null;
+    if (!quotation.pricingCity) {
+      setValidation('Pricing city is not configured for this quotation.');
+      return null;
+    }
+    const productsWithoutListPricing = missingProductListPrices(quotation);
+    if (productsWithoutListPricing.length) {
+      setValidation(
+        `List pricing is not configured for ${productsWithoutListPricing.map((item) => `${item.productCode} (${quotation.pricingCity?.name ?? 'unmapped city'} · ${item.packagingType} · ${item.uom})`).join(', ')}. Contact the pricing administrator.`,
+      );
+      return null;
+    }
+    const productsWithoutDeliveryPricing = missingDeliveryListPrices(quotation);
+    if (productsWithoutDeliveryPricing.length) {
+      setValidation(
+        `Hader delivery pricing is not configured for ${quotation.pricingCity?.name ?? 'unmapped city'}. Configure delivery pricing for the quotation delivery UOM before preparing this quotation.`,
+      );
+      return null;
+    }
     const invalid =
       !validUntil ||
       !paymentTerms.trim() ||
       quotation.items.some((item) => {
         const price = Number(prices[item.id]?.productPrice);
+        const discountedPrice = finalProductPrice(item.productListPrice, prices[item.id]);
         const delivery = Number(prices[item.id]?.deliveryPrice);
         return (
-          !Number.isFinite(price) ||
-          price < 0 ||
+          !Number.isFinite(discountedPrice ?? price) ||
+          Number(discountedPrice ?? price) <= 0 ||
           (quotation.fulfilmentType === 'DELIVERY' && (!Number.isFinite(delivery) || delivery < 0))
         );
       });
     if (invalid) {
-      setValidation('Enter valid pricing, validity, and payment terms before saving.');
+      setValidation('Enter valid pricing, validity, and payment terms before continuing.');
+      return null;
+    }
+    return {
+      items: quotation.items.map((item) => {
+        const input = prices[item.id];
+        return {
+          id: item.id,
+          productPrice:
+            finalProductPrice(item.productListPrice, input) ?? Number(input?.productPrice ?? ''),
+          ...(input?.discountMode
+            ? {
+                discountMode: input.discountMode as Exclude<DiscountMode, ''>,
+                discountValue: Number(input.discountValue || 0),
+              }
+            : {}),
+          ...(quotation.fulfilmentType === 'DELIVERY'
+            ? { deliveryPrice: Number(input?.deliveryPrice ?? '') }
+            : {}),
+        };
+      }),
+      validUntil,
+      paymentTerms: paymentTerms.trim(),
+      commercialNotes: commercialNotes.trim(),
+    };
+  };
+
+  const submitCommercialQuote = async () => {
+    if (!quotation || saving) return;
+    const payload = pricingPayload();
+    if (!payload) return;
+    setSaving(true);
+    setError('');
+    setValidation('');
+    try {
+      const updated = await updateSalesQuotationPricing(quotation.id, payload);
+      const completed = updated.allowedActions.submitApproval
+        ? await submitSalesQuotationApproval(updated.id)
+        : updated.allowedActions.sendToCustomer
+          ? await sendSalesQuotationToCustomer(updated.id)
+          : updated;
+      applyQuotation(completed);
+    } catch (failure) {
+      setError(toSafeActionError(failure));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openContractModal = () => {
+    if (!quotation) return;
+    const acceptedQuantity = totalEquivalentTons(quotation);
+    setContractForm({
+      startDate: today(),
+      endDate: quotation.validUntil ?? today(),
+      totalQuantityTons: acceptedQuantity.toFixed(3),
+      internalNotes: '',
+    });
+    setContractError('');
+    setCreatedContract(null);
+    setContractModalOpen(true);
+  };
+
+  const submitContract = async () => {
+    if (!quotation || contractSubmitting) return;
+    const quantity = Number(contractForm.totalQuantityTons);
+    const acceptedQuantity = totalEquivalentTons(quotation);
+    if (!contractForm.startDate || !contractForm.endDate || contractForm.endDate < contractForm.startDate) {
+      setContractError('Enter valid contract start and end dates.');
       return;
     }
-    await perform(() =>
-      updateSalesQuotationPricing(quotation.id, {
-        items: quotation.items.map((item) => ({
-          id: item.id,
-          productPrice: Number(prices[item.id]?.productPrice ?? ''),
-          ...(quotation.fulfilmentType === 'DELIVERY'
-            ? { deliveryPrice: Number(prices[item.id]?.deliveryPrice ?? '') }
-            : {}),
-        })),
-        validUntil,
-        paymentTerms: paymentTerms.trim(),
-        commercialNotes: commercialNotes.trim(),
-      }),
-    );
+    if (!Number.isFinite(quantity) || Math.abs(quantity - acceptedQuantity) >= 0.001) {
+      setContractError('Initial contract quantity must match the accepted quotation quantity.');
+      return;
+    }
+    setContractSubmitting(true);
+    setContractError('');
+    try {
+      const contract = await createContractFromSalesQuotation(quotation.id, {
+        startDate: contractForm.startDate,
+        endDate: contractForm.endDate,
+        totalQuantityTons: quantity,
+        ...(contractForm.internalNotes.trim()
+          ? { internalNotes: contractForm.internalNotes.trim() }
+          : {}),
+      });
+      setCreatedContract(contract);
+      load();
+    } catch (failure) {
+      setContractError(toSafeActionError(failure));
+    } finally {
+      setContractSubmitting(false);
+    }
   };
 
   const computed = useMemo(
     () =>
       quotation?.items.map((item) => {
-        const product = Number(prices[item.id]?.productPrice || 0);
+        const product =
+          finalProductPrice(item.productListPrice, prices[item.id]) ??
+          Number(prices[item.id]?.productPrice || 0);
         const delivery =
           quotation.fulfilmentType === 'DELIVERY' ? Number(prices[item.id]?.deliveryPrice || 0) : 0;
         return {
           id: item.id,
           rate: product + delivery,
-          amount: item.quantity * (product + delivery),
+          amount: item.equivalentTons * (product + delivery),
         };
       }) ?? [],
     [prices, quotation],
@@ -133,6 +255,30 @@ export function SalesQuotationDetailsPage() {
   if (!quotation) return <ErrorState message={error} retry={load} />;
 
   const editable = quotation.allowedActions.editPricing;
+  const productsWithoutListPricing = missingProductListPrices(quotation);
+  const productsWithoutDeliveryPricing = missingDeliveryListPrices(quotation);
+  const localProductPriceChanged = quotation.items.some(
+    (item) =>
+      item.productListPrice !== null &&
+      Math.abs(
+        (finalProductPrice(item.productListPrice, prices[item.id]) ??
+          Number(prices[item.id]?.productPrice)) - item.productListPrice,
+      ) >= 0.005,
+  );
+  const localDeliveryPriceChanged =
+    quotation.fulfilmentType === 'DELIVERY' &&
+    quotation.items.some(
+      (item) =>
+        item.deliveryListPrice !== null &&
+        Math.abs(Number(prices[item.id]?.deliveryPrice) - item.deliveryListPrice) >= 0.005,
+    );
+  const commercialActionLabel =
+    quotation.allowedActions.sendToCustomer ||
+    (!localProductPriceChanged && !localDeliveryPriceChanged)
+      ? 'Send to Customer'
+      : quotation.approvals.hader === 'REJECTED' || quotation.approvals.price === 'REJECTED'
+        ? 'Resubmit for Approval'
+        : 'Submit for Approval';
   const destinationLabel =
     quotation.fulfilmentType === 'DELIVERY' ? 'Delivery Location' : 'Pickup From';
 
@@ -153,6 +299,9 @@ export function SalesQuotationDetailsPage() {
           <p className="mt-1 text-sm text-[#64748b]">
             Customer:{' '}
             <span className="font-semibold text-[#1a1b23]">{quotation.customer.companyName}</span>
+            <span className="mx-2 text-[#cbd5e1]">|</span>
+            Customer ID:{' '}
+            <span className="break-all font-semibold text-[#1a1b23]">{quotation.customer.id}</span>
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -167,20 +316,13 @@ export function SalesQuotationDetailsPage() {
               Start Review
             </ActionButton>
           )}
-          {quotation.allowedActions.submitApproval && (
+          {editable && (
             <ActionButton
               loading={saving}
-              onClick={() => perform(() => submitSalesQuotationApproval(id))}
+              disabled={productsWithoutListPricing.length > 0 || productsWithoutDeliveryPricing.length > 0}
+              onClick={() => void submitCommercialQuote()}
             >
-              <Send size={15} /> Submit for Approval
-            </ActionButton>
-          )}
-          {quotation.allowedActions.sendToCustomer && (
-            <ActionButton
-              loading={saving}
-              onClick={() => perform(() => sendSalesQuotationToCustomer(id))}
-            >
-              <Send size={15} /> Send to Customer
+              <Send size={15} /> {commercialActionLabel}
             </ActionButton>
           )}
           {quotation.allowedActions.approve && (
@@ -197,6 +339,16 @@ export function SalesQuotationDetailsPage() {
               <XCircle size={15} /> Reject
             </button>
           )}
+          {quotation.allowedActions.createContract && (
+            <ActionButton loading={contractSubmitting} onClick={openContractModal}>
+              <BriefcaseBusiness size={15} /> Create Contract
+            </ActionButton>
+          )}
+          {!quotation.allowedActions.createContract && quotation.contract && (
+            <button type="button" disabled className={secondaryButton}>
+              <BriefcaseBusiness size={15} /> Contract {quotation.contract.reference ?? 'created'}
+            </button>
+          )}
         </div>
       </header>
 
@@ -208,6 +360,48 @@ export function SalesQuotationDetailsPage() {
           {validation || error}
         </div>
       )}
+
+      {editable && !quotation.pricingCity && !validation && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <AlertTriangle size={17} className="mt-0.5 shrink-0" />
+          <p>Pricing city is not configured for this quotation.</p>
+        </div>
+      )}
+
+      {editable &&
+        quotation.pricingCity &&
+        productsWithoutListPricing.length > 0 &&
+        !validation && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <AlertTriangle size={17} className="mt-0.5 shrink-0" />
+            <p>
+              List pricing is not configured for{' '}
+              {productsWithoutListPricing.map((item) => (
+                <span
+                  key={`${item.productCode}-${item.packagingType}-${item.uom}`}
+                  className="block"
+                >
+                  <strong>{item.productCode}</strong> — {quotation.pricingCity?.name} ·{' '}
+                  {item.packagingType} · {item.uom}
+                </span>
+              ))}
+              Contact the pricing administrator before preparing this quotation.
+            </p>
+          </div>
+        )}
+
+      {editable &&
+        quotation.pricingCity &&
+        productsWithoutDeliveryPricing.length > 0 &&
+        !validation && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <AlertTriangle size={17} className="mt-0.5 shrink-0" />
+            <p>
+              Hader delivery pricing is not configured for {quotation.pricingCity?.name}. Contact
+              the pricing administrator before preparing this quotation.
+            </p>
+          </div>
+        )}
 
       <section className={sectionClass}>
         <SectionTitle>Customer Requirement</SectionTitle>
@@ -244,6 +438,10 @@ export function SalesQuotationDetailsPage() {
             <div className="mt-1">
               <Status status={quotation.status} />
             </div>
+            <p className="mt-4 text-xs text-[#64748b]">Created by (Customer)</p>
+            <p className="mt-1 text-sm font-semibold">
+              {quotation.submittedBy ?? quotation.customer.contactName ?? 'Not provided'}
+            </p>
             <p className="mt-4 text-xs text-[#64748b]">Submitted On</p>
             <p className="mt-1 text-sm font-semibold">{formatDateTime(quotation.submittedAt)}</p>
           </div>
@@ -256,18 +454,20 @@ export function SalesQuotationDetailsPage() {
           <span className="text-xs font-medium text-[#64748b]">Currency: SAR</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1100px] table-fixed text-xs">
+          <table className="w-full min-w-[1220px] table-fixed text-xs">
             <thead className="border-y border-[#e3e1e8] bg-[#f8fafc]">
               <tr>
                 <th className="w-10 p-3">#</th>
                 <th className="w-24 p-3 text-left">Item Code</th>
                 <th className="w-56 p-3 text-left">Item Name</th>
-                <th className="w-24 p-3">Qty</th>
+                <th className="w-28 p-3">Qty</th>
                 <th className="w-20 p-3">UOM</th>
                 <th className="w-24 p-3">Packaging</th>
-                <th className="w-36 p-3">Product Price</th>
-                <th className="w-36 p-3">Delivery Price</th>
-                <th className="w-36 p-3">Customer Rate</th>
+                <th className="w-32 p-3">Product List / TON</th>
+                <th className="w-40 p-3">Discount</th>
+                <th className="w-36 p-3">Final Product / TON</th>
+                <th className="w-36 p-3">Hader Delivery / TON</th>
+                <th className="w-36 p-3">Customer Rate / TON</th>
                 <th className="w-36 p-3 text-right">Amount</th>
               </tr>
             </thead>
@@ -284,26 +484,61 @@ export function SalesQuotationDetailsPage() {
                         <span className="font-semibold">{item.productName}</span>
                       </div>
                     </td>
-                    <td className="p-3 text-center">{formatQuantity(item.quantity)}</td>
+                    <td className="p-3 text-center">
+                      <div className="font-semibold">{formatQuantity(item.quantity)}</div>
+                      <div className="mt-1 text-[11px] text-[#64748b]">
+                        Equivalent: {formatQuantity(item.equivalentTons)} TON
+                      </div>
+                    </td>
                     <td className="p-3 text-center">{item.uom}</td>
                     <td className="p-3 text-center">{item.packagingType}</td>
+                    <td className="p-3 text-center font-bold">
+                      {money(item.productListPrice)}
+                    </td>
+                    <td className="p-3">
+                      <DiscountInput
+                        disabled={!editable}
+                        value={prices[item.id]}
+                        onChange={(patch) =>
+                          setPrices((current) => ({
+                            ...current,
+                            [item.id]: {
+                              productPrice: current[item.id]?.productPrice ?? '',
+                              deliveryPrice: current[item.id]?.deliveryPrice ?? '',
+                              discountMode: current[item.id]?.discountMode ?? '',
+                              discountValue: current[item.id]?.discountValue ?? '',
+                              ...patch,
+                            },
+                          }))
+                        }
+                      />
+                    </td>
                     <td className="p-3">
                       <PriceInput
                         disabled={!editable}
-                        value={prices[item.id]?.productPrice ?? ''}
+                        value={
+                          finalProductPrice(item.productListPrice, prices[item.id])?.toFixed(2) ??
+                          prices[item.id]?.productPrice ??
+                          ''
+                        }
                         onChange={(value) =>
                           setPrices((current) => ({
                             ...current,
                             [item.id]: {
                               productPrice: value,
                               deliveryPrice: current[item.id]?.deliveryPrice ?? '',
+                              discountMode: '',
+                              discountValue: '',
                             },
                           }))
                         }
                       />
                       <PriceComparison
                         list={item.productListPrice}
-                        value={Number(prices[item.id]?.productPrice)}
+                        value={
+                          finalProductPrice(item.productListPrice, prices[item.id]) ??
+                          Number(prices[item.id]?.productPrice)
+                        }
                       />
                     </td>
                     <td className="p-3">
@@ -318,6 +553,8 @@ export function SalesQuotationDetailsPage() {
                                 [item.id]: {
                                   productPrice: current[item.id]?.productPrice ?? '',
                                   deliveryPrice: value,
+                                  discountMode: current[item.id]?.discountMode ?? '',
+                                  discountValue: current[item.id]?.discountValue ?? '',
                                 },
                               }))
                             }
@@ -343,19 +580,6 @@ export function SalesQuotationDetailsPage() {
             </tbody>
           </table>
         </div>
-        {editable && (
-          <div className="flex justify-end border-t border-[#e3e1e8] px-4 py-3">
-            <button
-              type="button"
-              onClick={() => void savePricing()}
-              disabled={saving}
-              className={secondaryButton}
-            >
-              {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Save
-              Pricing
-            </button>
-          </div>
-        )}
       </section>
 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr_0.9fr]">
@@ -399,16 +623,41 @@ export function SalesQuotationDetailsPage() {
         </section>
         <section className={sectionClass}>
           <SectionTitle>Approval Routing</SectionTitle>
+          {(localProductPriceChanged || localDeliveryPriceChanged) && (
+            <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+              <div>
+                <p className="font-bold">Approval required</p>
+                <p>{approvalRequirement(localProductPriceChanged, localDeliveryPriceChanged)}</p>
+              </div>
+            </div>
+          )}
           <ApprovalRow
             label="Hader Manager"
-            status={quotation.approvals.hader}
-            reason="Delivery price approval"
+            status={
+              localDeliveryPriceChanged && quotation.approvals.hader === 'NOT_REQUIRED'
+                ? 'REQUIRED'
+                : quotation.approvals.hader
+            }
+            reason={
+              localDeliveryPriceChanged
+                ? changedPriceSummary(quotation, prices, 'delivery')
+                : 'Delivery price approval is not required.'
+            }
           />
           <div className="ml-2 h-4 border-l border-[#cbd5e1]" />
           <ApprovalRow
             label="Price Manager"
-            status={quotation.approvals.price}
-            reason="Product price approval"
+            status={
+              localProductPriceChanged && quotation.approvals.price === 'NOT_REQUIRED'
+                ? 'REQUIRED'
+                : quotation.approvals.price
+            }
+            reason={
+              localProductPriceChanged
+                ? changedPriceSummary(quotation, prices, 'product')
+                : 'Product price approval is not required.'
+            }
           />
         </section>
         <section className={sectionClass}>
@@ -430,13 +679,31 @@ export function SalesQuotationDetailsPage() {
       <section className={sectionClass}>
         <SectionTitle>Activity Timeline</SectionTitle>
         {quotation.events.length ? (
-          <ol className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {quotation.events.map((event) => (
-              <li key={event.id} className="relative border-l-2 border-[#e5d9ed] pl-4">
-                <span className="absolute -left-[7px] top-0 h-3 w-3 rounded-full border-2 border-[#54247a] bg-white" />
+          <ol className="flex flex-col gap-0 md:flex-row md:overflow-x-auto md:pb-2">
+            {quotation.events.map((event, index) => (
+              <li
+                key={event.id}
+                className="relative min-w-0 border-l-2 border-[#d9c8e5] pb-5 pl-7 last:pb-0 md:min-w-[190px] md:flex-1 md:border-l-0 md:border-t-2 md:pb-0 md:pl-0 md:pt-7"
+              >
+                <span className="absolute -left-[13px] top-0 inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#a875c2] bg-white text-[#54247a] md:-top-[13px] md:left-0">
+                  {event.action.includes('REJECTED') ? (
+                    <XCircle size={14} className="text-red-600" />
+                  ) : index === quotation.events.length - 1 ? (
+                    <Clock3 size={14} />
+                  ) : (
+                    <CheckCircle2 size={14} className="text-emerald-600" />
+                  )}
+                </span>
                 <p className="text-sm font-bold">{eventLabel(event.action)}</p>
-                <p className="mt-1 text-xs text-[#64748b]">
-                  {event.changedBy} · {timeAgo(event.createdAt)}
+                <p className="mt-1 text-xs font-medium text-[#64748b]">
+                  {event.changedBy}
+                  {event.actorRole ? ` · ${formatActorRole(event.actorRole)}` : ''}
+                </p>
+                <p
+                  className="mt-0.5 text-xs text-[#64748b]"
+                  title={formatDateTime(event.createdAt)}
+                >
+                  {timeAgo(event.createdAt)}
                 </p>
                 {event.reason && (
                   <p className="mt-2 rounded-md bg-slate-50 p-2 text-xs text-[#64748b]">
@@ -452,6 +719,18 @@ export function SalesQuotationDetailsPage() {
       </section>
 
       {preview && <SalesQuotationPreview quotation={quotation} onClose={() => setPreview(false)} />}
+      {contractModalOpen && (
+        <ContractCreationModal
+          quotation={quotation}
+          form={contractForm}
+          onChange={setContractForm}
+          loading={contractSubmitting}
+          error={contractError}
+          createdContract={createdContract}
+          onSubmit={() => void submitContract()}
+          onClose={() => setContractModalOpen(false)}
+        />
+      )}
       {rejecting && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4">
           <div
@@ -495,6 +774,218 @@ export function SalesQuotationDetailsPage() {
   );
 }
 
+function ContractCreationModal({
+  quotation,
+  form,
+  onChange,
+  loading,
+  error,
+  createdContract,
+  onSubmit,
+  onClose,
+}: {
+  quotation: SalesQuotationDetails;
+  form: { startDate: string; endDate: string; totalQuantityTons: string; internalNotes: string };
+  onChange: React.Dispatch<
+    React.SetStateAction<{
+      startDate: string;
+      endDate: string;
+      totalQuantityTons: string;
+      internalNotes: string;
+    }>
+  >;
+  loading: boolean;
+  error: string;
+  createdContract: SalesContractDetails | null;
+  onSubmit: () => void;
+  onClose: () => void;
+}) {
+  const firstItem = quotation.items[0];
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white shadow-xl"
+      >
+        <div className="flex items-center justify-between border-b border-[#e3e1e8] px-5 py-4">
+          <div>
+            <h2 className="text-lg font-bold text-[#1a1b23]">
+              {createdContract ? 'Contract Created Successfully' : 'Create Contract from Accepted Quotation'}
+            </h2>
+            <p className="text-xs font-medium text-[#64748b]">
+              Accepted commercial pricing is locked from the quotation.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-[#64748b] hover:bg-[#f8fafc] hover:text-[#1a1b23]"
+            aria-label="Close"
+          >
+            <XCircle size={18} />
+          </button>
+        </div>
+
+        {createdContract ? (
+          <div className="p-6">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+              <Check size={34} />
+            </div>
+            <div className="mt-4 text-center">
+              <h3 className="text-xl font-extrabold">Contract Created Successfully!</h3>
+              <p className="mt-1 text-sm text-[#64748b]">
+                The accepted quotation has been converted to a draft contract.
+              </p>
+            </div>
+            <div className="mt-5 rounded-xl border border-[#e3e1e8] bg-[#f8fafc] p-4 text-sm">
+              <InfoGroup
+                rows={[
+                  ['Contract Number', createdContract.reference],
+                  ['Quotation Number', quotation.reference],
+                  ['Customer', quotation.customer.companyName],
+                  ['Created At', formatDateTime(createdContract.createdAt)],
+                  ['Status', createdContract.status],
+                ]}
+              />
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={onClose} className={secondaryButton}>
+                Back to Quotation
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4 p-5">
+            {error && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-[#b42318]">
+                {error}
+              </div>
+            )}
+            <section className="rounded-xl border border-[#e3e1e8] p-4">
+              <SectionTitle>Source Quotation</SectionTitle>
+              <div className="grid gap-3 text-sm sm:grid-cols-3">
+                <InfoGroup
+                  rows={[
+                    ['Quotation No.', quotation.reference],
+                    ['Customer', quotation.customer.companyName],
+                  ]}
+                />
+                <InfoGroup
+                  rows={[
+                    ['Accepted On', acceptedEventDate(quotation)],
+                    ['Accepted By', acceptedEventActor(quotation)],
+                  ]}
+                />
+                <InfoGroup
+                  rows={[
+                    ['Fulfilment', quotation.fulfilmentType === 'DELIVERY' ? 'Hader Delivery' : 'Pick-Up'],
+                    ['Hader City', quotation.pricingCity?.name],
+                  ]}
+                />
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-[#e3e1e8] p-4">
+              <SectionTitle>Contract Information</SectionTitle>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Field label="Contract Start Date">
+                  <input
+                    type="date"
+                    value={form.startDate}
+                    onChange={(event) =>
+                      onChange((current) => ({ ...current, startDate: event.target.value }))
+                    }
+                    className={inputClass}
+                  />
+                </Field>
+                <Field label="Contract End Date">
+                  <input
+                    type="date"
+                    value={form.endDate}
+                    onChange={(event) =>
+                      onChange((current) => ({ ...current, endDate: event.target.value }))
+                    }
+                    className={inputClass}
+                  />
+                </Field>
+                <Field label="Contract Quantity (TON)">
+                  <input
+                    type="number"
+                    disabled
+                    step="0.001"
+                    value={form.totalQuantityTons}
+                    onChange={(event) =>
+                      onChange((current) => ({ ...current, totalQuantityTons: event.target.value }))
+                    }
+                    className={inputClass}
+                  />
+                </Field>
+                <Field label="Ship-To Location">
+                  <input
+                    disabled
+                    value={quotation.destination?.name ?? 'Not provided'}
+                    className={inputClass}
+                  />
+                </Field>
+                <Field label="Summary">
+                  <input
+                    disabled
+                    value={`${quotation.items.length} item${quotation.items.length === 1 ? '' : 's'} · ${formatQuantity(totalEquivalentTons(quotation))} TON`}
+                    className={inputClass}
+                  />
+                </Field>
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-[#e5d9ed] bg-[#faf7fc] p-4">
+              <SectionTitle>Commercial Locked — From Accepted Quotation</SectionTitle>
+              <div className="grid gap-3 text-sm sm:grid-cols-3">
+                <LockedPrice label="Product Price / TON" value={firstItem?.productPrice} />
+                <LockedPrice label="Hader Delivery / TON" value={firstItem?.deliveryPrice} />
+                <LockedPrice label="Customer Rate / TON" value={firstItem?.customerRate} />
+              </div>
+            </section>
+
+            <Field label="Internal Notes" wide>
+              <textarea
+                rows={3}
+                value={form.internalNotes}
+                onChange={(event) =>
+                  onChange((current) => ({ ...current, internalNotes: event.target.value }))
+                }
+                className={inputClass}
+                placeholder="Add internal notes here..."
+              />
+            </Field>
+
+            <div className="flex justify-end gap-2 border-t border-[#e3e1e8] pt-4">
+              <button type="button" onClick={onClose} className={secondaryButton}>
+                Cancel
+              </button>
+              <ActionButton loading={loading} onClick={onSubmit}>
+                Create Contract
+              </ActionButton>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LockedPrice({ label, value }: { label: string; value: number | null | undefined }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold text-[#64748b]">{label}</p>
+      <p className="mt-1 rounded-lg border border-[#e5d9ed] bg-white px-3 py-2 font-bold">
+        {value === null || value === undefined ? 'Not applicable' : `${money(value)} SAR`}
+      </p>
+    </div>
+  );
+}
+
 const sectionClass = 'rounded-xl border border-[#e3e1e8] bg-white p-4';
 const secondaryButton =
   'inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#e3e1e8] bg-white px-4 text-sm font-bold text-[#1a1b23] hover:bg-[#f8fafc] disabled:opacity-50';
@@ -503,16 +994,18 @@ const inputClass =
 function ActionButton({
   children,
   loading,
+  disabled,
   onClick,
 }: {
   children: React.ReactNode;
   loading: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      disabled={loading}
+      disabled={loading || disabled}
       onClick={onClick}
       className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#54247a] px-4 text-sm font-bold text-white hover:bg-[#472066] disabled:opacity-60"
     >
@@ -582,6 +1075,47 @@ function PriceInput({
     />
   );
 }
+function DiscountInput({
+  disabled,
+  value,
+  onChange,
+}: {
+  disabled: boolean;
+  value?: { discountMode: DiscountMode; discountValue: string } | undefined;
+  onChange: (patch: Partial<{ discountMode: DiscountMode; discountValue: string }>) => void;
+}) {
+  return (
+    <div className="grid grid-cols-[1fr_78px] gap-1">
+      <input
+        aria-label="Discount"
+        type="number"
+        min="0"
+        step="0.01"
+        disabled={disabled || !value?.discountMode}
+        value={value?.discountValue ?? ''}
+        onChange={(event) => onChange({ discountValue: event.target.value })}
+        placeholder="0"
+        className="h-9 w-full rounded-md border border-[#e3e1e8] px-2 text-right font-semibold outline-none focus:border-[#54247a] disabled:bg-slate-50"
+      />
+      <select
+        aria-label="Discount mode"
+        disabled={disabled}
+        value={value?.discountMode ?? ''}
+        onChange={(event) =>
+          onChange({
+            discountMode: event.target.value as DiscountMode,
+            discountValue: event.target.value ? (value?.discountValue ?? '') : '',
+          })
+        }
+        className="h-9 rounded-md border border-[#e3e1e8] bg-white px-1 text-xs font-semibold outline-none focus:border-[#54247a] disabled:bg-slate-50"
+      >
+        <option value="">None</option>
+        <option value="PERCENT">%</option>
+        <option value="SAR_PER_TON">SAR</option>
+      </select>
+    </div>
+  );
+}
 function PriceComparison({ list, value }: { list: number | null; value: number }) {
   const changed = list !== null && Number.isFinite(value) && Math.abs(list - value) >= 0.005;
   return (
@@ -601,15 +1135,29 @@ function PriceComparison({ list, value }: { list: number | null; value: number }
   );
 }
 function ApprovalRow({ label, status, reason }: { label: string; status: string; reason: string }) {
+  const color =
+    status === 'APPROVED'
+      ? 'text-emerald-700'
+      : status === 'REJECTED'
+        ? 'text-red-700'
+        : status === 'PENDING' || status === 'REQUIRED'
+          ? 'text-[#b45309]'
+          : 'text-[#64748b]';
+  const dot =
+    status === 'APPROVED'
+      ? 'border-emerald-600 bg-emerald-600'
+      : status === 'REJECTED'
+        ? 'border-red-600 bg-red-600'
+        : status === 'PENDING' || status === 'REQUIRED'
+          ? 'border-orange-500 bg-white'
+          : 'border-slate-300 bg-white';
   return (
     <div className="flex gap-3">
-      <span
-        className={`mt-1 h-3 w-3 rounded-full border-2 ${status === 'APPROVED' ? 'border-emerald-600 bg-emerald-600' : status === 'PENDING' ? 'border-orange-500 bg-white' : 'border-slate-300 bg-white'}`}
-      />
+      <span className={`mt-1 h-3 w-3 rounded-full border-2 ${dot}`} />
       <div>
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm font-bold">{label}</p>
-          <span className="text-xs font-semibold text-[#b45309]">{formatApproval(status)}</span>
+          <span className={`text-xs font-semibold ${color}`}>{formatApproval(status)}</span>
         </div>
         <p className="mt-0.5 text-xs text-[#64748b]">{reason}</p>
       </div>
@@ -684,6 +1232,111 @@ function ErrorState({ message, retry }: { message: string; retry: () => void }) 
     </div>
   );
 }
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function totalEquivalentTons(quotation: SalesQuotationDetails) {
+  return Math.round(
+    (quotation.items.reduce((sum, item) => sum + item.equivalentTons, 0) + Number.EPSILON) * 1000,
+  ) / 1000;
+}
+
+function acceptedEventDate(quotation: SalesQuotationDetails) {
+  const event = [...quotation.events].reverse().find((item) => item.action.includes('ACCEPT'));
+  return event ? formatDateTime(event.createdAt) : 'Not provided';
+}
+
+function acceptedEventActor(quotation: SalesQuotationDetails) {
+  const event = [...quotation.events].reverse().find((item) => item.action.includes('ACCEPT'));
+  return event?.changedBy ?? 'Customer user';
+}
+
+function toSafeActionError(failure: unknown) {
+  if (
+    failure instanceof SalesApiError &&
+    failure.status !== undefined &&
+    failure.status >= 400 &&
+    failure.status < 500
+  ) {
+    return failure.message;
+  }
+  return 'Unable to complete this action. Please retry.';
+}
+
+function approvalRequirement(productChanged: boolean, deliveryChanged: boolean) {
+  if (productChanged && deliveryChanged) {
+    return 'Delivery pricing requires Hader Manager approval, followed by Price Manager approval.';
+  }
+  return productChanged
+    ? 'Modified product pricing requires Price Manager approval.'
+    : 'Modified delivery pricing requires Hader Manager approval.';
+}
+
+function changedPriceSummary(
+  quotation: SalesQuotationDetails,
+  prices: PricingInput,
+  type: 'product' | 'delivery',
+) {
+  const changes = quotation.items.flatMap((item) => {
+    const list = type === 'product' ? item.productListPrice : item.deliveryListPrice;
+    const entered =
+      type === 'product'
+        ? (finalProductPrice(item.productListPrice, prices[item.id]) ??
+          Number(prices[item.id]?.productPrice))
+        : Number(prices[item.id]?.deliveryPrice);
+    if (list === null || !Number.isFinite(entered) || Math.abs(list - entered) < 0.005) return [];
+    return [`${item.productCode}: ${money(list)} → ${money(entered)} SAR`];
+  });
+  return changes.length ? changes.join('; ') : `Modified ${type} pricing requires approval.`;
+}
+
+function finalProductPrice(
+  listPrice: number | null,
+  input:
+    | {
+        discountMode: DiscountMode;
+        discountValue: string;
+        productPrice?: string;
+      }
+    | undefined,
+) {
+  if (!listPrice || !input?.discountMode) return null;
+  const discountValue = Number(input.discountValue || 0);
+  if (!Number.isFinite(discountValue) || discountValue <= 0) return listPrice;
+  const discount =
+    input.discountMode === 'PERCENT' ? (listPrice * discountValue) / 100 : discountValue;
+  return Math.max(0, Math.round((listPrice - discount + Number.EPSILON) * 100) / 100);
+}
+
+function missingProductListPrices(quotation: SalesQuotationDetails) {
+  const missing = quotation.items.filter((item) => item.productListPrice === null);
+
+  return Array.from(
+    new Map(
+      missing.map((item) => [
+        `${item.productCode.trim().toUpperCase()}|${item.packagingType.trim().toUpperCase()}|${item.uom.trim().toUpperCase()}`,
+        item,
+      ]),
+    ).values(),
+  );
+}
+
+function missingDeliveryListPrices(quotation: SalesQuotationDetails) {
+  if (quotation.fulfilmentType !== 'DELIVERY') return [];
+  const missing = quotation.items.filter((item) => item.deliveryListPrice === null);
+
+  return Array.from(
+    new Map(
+      missing.map((item) => [
+        `${item.productCode.trim().toUpperCase()}|${item.packagingType.trim().toUpperCase()}|${item.uom.trim().toUpperCase()}`,
+        item,
+      ]),
+    ).values(),
+  );
+}
+
 const statusMap: Record<SalesQuotationStatus, { label: string; dot: string; text: string }> = {
   PENDING_SALES_REVIEW: {
     label: 'Pending Sales Review',
@@ -726,6 +1379,19 @@ function eventLabel(action: string) {
 }
 function formatApproval(value: string) {
   return value === 'NOT_REQUIRED' ? 'Not required' : value.charAt(0) + value.slice(1).toLowerCase();
+}
+function formatActorRole(value: string) {
+  const labels: Record<string, string> = {
+    SALES_REP: 'Sales Representative',
+    HADER_MANAGER: 'Hader Manager',
+    PRICE_MANAGER: 'Price Manager',
+    PRICING_ADMIN: 'Pricing Administrator',
+    CUSTOMER_ADMIN: 'Customer Administrator',
+    PURCHASER: 'Purchaser',
+    FINANCE_USER: 'Finance User',
+    VIEWER: 'Viewer',
+  };
+  return labels[value] ?? value.toLowerCase().replaceAll('_', ' ');
 }
 function money(value: number | null | undefined) {
   return value === null || value === undefined || !Number.isFinite(value)

@@ -6,6 +6,7 @@ import PasswordResetSuccess from '../pages/PasswordResetSuccess/PasswordResetSuc
 import ResetPassword from '../pages/ResetPassword/ResetPassword';
 import { CustomerAuthProvider } from '../context/CustomerAuthContext';
 import { CustomerRoutes } from './CustomerRoutes';
+import { AdminPricingRoutes } from './AdminPricingRoutes';
 import { RegistrationRoutes } from './RegistrationRoutes';
 import { SalesRoutes } from './SalesRoutes';
 
@@ -28,6 +29,7 @@ export function AppRoutes() {
       <Route path="/register/*" element={<RegistrationRoutes />} />
       <Route path="/customer/*" element={<CustomerRoutes />} />
       <Route path="/sales/*" element={<SalesRoutes />} />
+      <Route path="/admin/*" element={<AdminPricingRoutes />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );

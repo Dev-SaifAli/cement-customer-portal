@@ -7,6 +7,7 @@ import { CustomerProductDetails } from '../pages/customer/CustomerProductDetails
 import { CustomerProfile } from '../pages/customer/CustomerProfile';
 import { CustomerProducts } from '../pages/customer/CustomerProducts';
 import { CustomerQuotationNew } from '../pages/customer/CustomerQuotationNew';
+import { CustomerQuotationRoute } from '../pages/customer/CustomerQuotationRoute';
 import { CustomerQuotations } from '../pages/customer/CustomerQuotations';
 import { CustomerUsers } from '../pages/customer/CustomerUsers';
 
@@ -24,7 +25,7 @@ export function CustomerRoutes() {
             <Route path="products/:id" element={<CustomerProductDetails />} />
             <Route path="quotations" element={<CustomerQuotations />} />
             <Route path="quotations/new" element={<CustomerQuotationNew />} />
-            <Route path="quotations/:id" element={<CustomerQuotationNew />} />
+            <Route path="quotations/:id" element={<CustomerQuotationRoute />} />
             <Route path="users" element={<CustomerUsers />} />
           </Route>
         </Route>

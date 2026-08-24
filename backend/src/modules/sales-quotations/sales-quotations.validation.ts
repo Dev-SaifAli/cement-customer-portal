@@ -33,6 +33,8 @@ export const listSalesQuotationsSchema = z.object({
 });
 
 const priceSchema = z.coerce.number().finite().min(0).max(999999999.99);
+const discountModeSchema = z.enum(['PERCENT', 'SAR_PER_TON']);
+const discountValueSchema = z.coerce.number().finite().min(0).max(999999999.99);
 
 export const updateSalesQuotationPricingSchema = z.object({
   items: z
@@ -41,6 +43,8 @@ export const updateSalesQuotationPricingSchema = z.object({
         id: uuidSchema,
         productPrice: priceSchema,
         deliveryPrice: priceSchema.optional(),
+        discountMode: discountModeSchema.nullish(),
+        discountValue: discountValueSchema.nullish(),
       }),
     )
     .min(1, 'At least one priced item is required.'),

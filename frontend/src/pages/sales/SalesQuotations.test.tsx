@@ -2,8 +2,20 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
-const { listSalesQuotations } = vi.hoisted(() => ({ listSalesQuotations: vi.fn() }));
+const { listSalesQuotations, useSalesAuth } = vi.hoisted(() => ({
+  listSalesQuotations: vi.fn(),
+  useSalesAuth: vi.fn(() => ({
+    user: {
+      id: 'sales-1',
+      name: 'Sales User',
+      email: 'sales@example.com',
+      isActive: true,
+      role: 'SALES_REP',
+    },
+  })),
+}));
 vi.mock('../../services/salesService', () => ({ listSalesQuotations }));
+vi.mock('../../context/SalesAuthContext', () => ({ useSalesAuth }));
 
 import { SalesQuotationsPage } from './SalesQuotations';
 

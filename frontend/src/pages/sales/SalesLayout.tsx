@@ -9,16 +9,30 @@ import {
   X,
 } from 'lucide-react';
 import { useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Logo from '../../components/Logo/Logo';
 import { useSalesAuth } from '../../context/SalesAuthContext';
+import { getSalesLandingPath, getSalesRoleLabel } from '../../utils/salesRouting';
 import type { ReactNode } from 'react';
 
 export function SalesLayout() {
   const { user, logout } = useSalesAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const section = location.pathname.startsWith('/sales/quotations')
+    ? user?.role === 'HADER_MANAGER'
+      ? { title: 'Delivery Price Approvals', subtitle: 'Review assigned delivery-price exceptions' }
+      : user?.role === 'PRICE_MANAGER'
+        ? { title: 'Product Price Approvals', subtitle: 'Review assigned product-price exceptions' }
+        : {
+            title: 'Sales Quotations',
+            subtitle: 'Review requirements and prepare customer quotations',
+          }
+    : location.pathname.startsWith('/sales/applications')
+      ? { title: 'Sales Applications', subtitle: 'Review submitted customer applications' }
+      : { title: 'Sales Portal', subtitle: 'Internal customer review workspace' };
 
   const handleLogout = async () => {
     await logout();
@@ -38,7 +52,7 @@ export function SalesLayout() {
           }`}
         >
           <Link
-            to="/sales/dashboard"
+            to={user ? getSalesLandingPath(user.role) : '/sales/login'}
             className={`flex min-w-0 items-center gap-3 ${sidebarCollapsed ? 'lg:hidden' : ''}`}
           >
             <Logo size="sm" />
@@ -59,20 +73,24 @@ export function SalesLayout() {
           </button>
         </div>
         <nav className={`space-y-2 ${sidebarCollapsed ? 'p-3' : 'p-4'}`}>
-          <SalesNavLink
-            to="/sales/dashboard"
-            icon={<BarChart3 size={18} />}
-            collapsed={sidebarCollapsed}
-          >
-            Dashboard
-          </SalesNavLink>
-          <SalesNavLink
-            to="/sales/applications"
-            icon={<ClipboardList size={18} />}
-            collapsed={sidebarCollapsed}
-          >
-            Applications
-          </SalesNavLink>
+          {user?.role === 'SALES_REP' && (
+            <>
+              <SalesNavLink
+                to="/sales/dashboard"
+                icon={<BarChart3 size={18} />}
+                collapsed={sidebarCollapsed}
+              >
+                Dashboard
+              </SalesNavLink>
+              <SalesNavLink
+                to="/sales/applications"
+                icon={<ClipboardList size={18} />}
+                collapsed={sidebarCollapsed}
+              >
+                Applications
+              </SalesNavLink>
+            </>
+          )}
           <SalesNavLink
             to="/sales/quotations"
             icon={<FileText size={18} />}
@@ -104,14 +122,14 @@ export function SalesLayout() {
               <Menu size={20} />
             </button>
             <div>
-              <p className="text-sm font-semibold text-slate-900">Internal Sales Review</p>
-              <p className="text-xs text-slate-500">Review submitted customer applications</p>
+              <p className="text-sm font-semibold text-slate-900">{section.title}</p>
+              <p className="text-xs text-slate-500">{section.subtitle}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold text-slate-900">{user?.name}</p>
-              <p className="text-xs text-slate-500">{user?.email}</p>
+              <p className="text-xs text-slate-500">{user ? getSalesRoleLabel(user.role) : ''}</p>
             </div>
             <button
               onClick={handleLogout}

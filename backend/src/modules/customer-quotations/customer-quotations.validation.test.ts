@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { listCustomerQuotationsSchema } from './customer-quotations.validation.js';
+import {
+  customerQuotationDecisionMessageSchema,
+  listCustomerQuotationsSchema,
+} from './customer-quotations.validation.js';
 
 describe('customer quotation list validation', () => {
   it('accepts supported filters and normalizes pagination', () => {
@@ -26,5 +29,17 @@ describe('customer quotation list validation', () => {
 
   it('rejects unsupported status filters', () => {
     expect(() => listCustomerQuotationsSchema.parse({ status: 'INTERNAL_ONLY' })).toThrow();
+  });
+});
+
+describe('customer quotation decision validation', () => {
+  it('trims a valid customer reason', () => {
+    expect(
+      customerQuotationDecisionMessageSchema.parse({ reason: '  Please revise delivery.  ' }),
+    ).toEqual({ reason: 'Please revise delivery.' });
+  });
+
+  it('rejects an empty customer reason', () => {
+    expect(() => customerQuotationDecisionMessageSchema.parse({ reason: ' ' })).toThrow();
   });
 });

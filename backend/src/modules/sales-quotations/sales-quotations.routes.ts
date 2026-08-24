@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler.js';
-import { requireSalesAuth } from '../sales-auth/sales-auth.middleware.js';
+import { requireSalesAuth, requireSalesRole } from '../sales-auth/sales-auth.middleware.js';
 import { salesQuotationsController } from './sales-quotations.controller.js';
 
 export const salesQuotationsRouter = Router();
 salesQuotationsRouter.use(requireSalesAuth);
+salesQuotationsRouter.use(requireSalesRole('SALES_REP', 'HADER_MANAGER', 'PRICE_MANAGER'));
 
 salesQuotationsRouter.get(
   '/',
@@ -13,6 +14,10 @@ salesQuotationsRouter.get(
 salesQuotationsRouter.get(
   '/:id',
   asyncHandler((req, res) => salesQuotationsController.show(req, res)),
+);
+salesQuotationsRouter.post(
+  '/:id/contract',
+  asyncHandler((req, res) => salesQuotationsController.createContract(req, res)),
 );
 salesQuotationsRouter.post(
   '/:id/start-review',
