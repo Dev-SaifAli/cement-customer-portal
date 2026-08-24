@@ -62,6 +62,7 @@ interface ContractRow {
   items_snapshot: unknown;
   sales_user_id: string;
   sales_user_name: string | null;
+  registration_delivery_locations: unknown;
   status: ContractStatus;
   activated_by: string | null;
   activated_at: Date | string | null;
@@ -163,6 +164,7 @@ interface AcceptedQuotationItemRow {
 }
 
 const pickupLocations = new Set(['ALSAFWA_PLANT_MAIN']);
+type ContractItemSnapshot = ReturnType<typeof contractItemSnapshot>;
 
 export class SalesContractsService {
   async list(query: ListSalesContractsQuery) {
@@ -178,6 +180,29 @@ export class SalesContractsService {
     if (query.customerAccountId) {
       values.push(query.customerAccountId);
       filters.push(`contracts.customer_account_id = $${values.length}`);
+    }
+
+    if (query.customer) {
+      values.push(`%${query.customer.toLowerCase()}%`);
+      filters.push(`lower(customer_accounts.company_name) like $${values.length}`);
+    }
+
+    if (query.product) {
+      values.push(`%${query.product.toLowerCase()}%`);
+      filters.push(`(
+        lower(coalesce(product_catalog.product_code, '')) like $${values.length}
+        or lower(coalesce(product_catalog.product_name, '')) like $${values.length}
+      )`);
+    }
+
+    if (query.dateFrom) {
+      values.push(query.dateFrom);
+      filters.push(`contracts.start_date >= $${values.length}`);
+    }
+
+    if (query.dateTo) {
+      values.push(query.dateTo);
+      filters.push(`contracts.end_date <= $${values.length}`);
     }
 
     if (query.search) {
@@ -270,6 +295,14 @@ export class SalesContractsService {
         null,
         salesUser.id,
       );
+      await insertContractEvent(client, {
+        contractId: contract.id,
+        eventType: 'CONTRACT_CREATED',
+        previousStatus: null,
+        newStatus: 'DRAFT',
+        reason: null,
+        salesUserId: salesUser.id,
+      });
       await client.query('commit');
 
       return this.getById(contract.id);
@@ -309,11 +342,8 @@ export class SalesContractsService {
       }
 
       if (quotation.existing_contract_id) {
-        throw new AppError(
-          `This quotation already has contract ${quotation.existing_contract_reference ?? quotation.existing_contract_id}.`,
-          409,
-          'QUOTATION_CONTRACT_ALREADY_EXISTS',
-        );
+        await client.query('commit');
+        return this.getById(quotation.existing_contract_id);
       }
 
       await assertActivatedCustomerAccount(client, quotation.customer_account_id);
@@ -410,7 +440,9 @@ export class SalesContractsService {
           payload.startDate,
           payload.endDate,
           quotation.fulfilment_type,
-          quotation.fulfilment_type === 'PICKUP' ? quotation.pickup_location_id : null,
+          quotation.fulfilment_type === 'PICKUP'
+            ? (payload.pickupLocationId ?? quotation.pickup_location_id)
+            : null,
           quotation.fulfilment_type === 'DELIVERY' ? quotation.ship_to_location_id : null,
           quotation.fulfilment_type === 'DELIVERY'
             ? (destination?.city ?? quotation.pricing_city_name ?? null)
@@ -446,6 +478,7 @@ export class SalesContractsService {
         throw new AppError('Contract draft could not be created.', 503, 'CONTRACT_CREATE_FAILED');
       }
 
+      await insertContractItems(client, contract.id, snapshot);
       await insertStatusEvent(
         client,
         contract.id,
@@ -455,6 +488,18 @@ export class SalesContractsService {
         `Accepted quotation ${quotation.reference} converted to contract ${reference}.`,
         salesUser.id,
       );
+      await insertContractEvent(client, {
+        contractId: contract.id,
+        eventType: 'CONTRACT_CREATED',
+        previousStatus: null,
+        newStatus: 'DRAFT',
+        reason: `Accepted quotation ${quotation.reference} converted to contract ${reference}.`,
+        salesUserId: salesUser.id,
+        eventData: {
+          sourceQuotationId: quotation.id,
+          sourceQuotationReference: quotation.reference,
+        },
+      });
       await insertQuotationAuditEvent(
         client,
         quotation.id,
@@ -469,6 +514,10 @@ export class SalesContractsService {
       return this.getById(contract.id);
     } catch (error) {
       await client.query('rollback');
+      if (isUniqueQuotationContractError(error)) {
+        const existing = await getContractByQuotationId(quotationId);
+        if (existing) return this.getById(existing.id);
+      }
       throw error;
     } finally {
       client.release();
@@ -570,36 +619,27 @@ export class SalesContractsService {
       const current = await getContractForUpdate(client, id);
       if (current.status !== 'DRAFT') {
         throw new AppError(
-          'Only draft contracts can be submitted.',
+          'Only draft contracts can be activated.',
           409,
-          'CONTRACT_NOT_SUBMITTABLE',
+          'CONTRACT_NOT_ACTIVATABLE',
         );
       }
 
+      await validateContractActivationReadiness(client, current);
+
       const reference = current.reference ?? (await nextReference(client));
-      const newStatus = current.quotation_id || !hasCustomPricing(current)
-        ? 'ACTIVE'
-        : 'PENDING_SALES_REVIEW';
-      const action = newStatus === 'ACTIVE' ? 'SUBMIT_ACTIVATE' : 'SUBMIT_FOR_APPROVAL';
-      const reason =
-        newStatus === 'PENDING_SALES_REVIEW'
-          ? 'Contract includes custom pricing and requires approval.'
-          : null;
 
       const result = await client.query<ContractRow>(
         `update contracts
          set reference = $2,
-             status = $3,
-             activated_by = case when $3 = 'ACTIVE' then $4 else activated_by end,
-             activated_at = case when $3 = 'ACTIVE' then now() else activated_at end,
-             remaining_quantity_tons = case
-               when $3 = 'ACTIVE' then coalesce(remaining_quantity_tons, total_quantity_tons, quantity)
-               else remaining_quantity_tons
-             end,
+             status = 'ACTIVE',
+             activated_by = $3,
+             activated_at = now(),
+             remaining_quantity_tons = coalesce(remaining_quantity_tons, total_quantity_tons, quantity),
              updated_at = now()
          where id = $1
          returning *`,
-        [id, reference, newStatus, salesUser.id],
+        [id, reference, salesUser.id],
       );
 
       const updated = result.rows[0];
@@ -607,7 +647,27 @@ export class SalesContractsService {
         throw contractNotFoundError();
       }
 
-      await insertStatusEvent(client, id, current.status, newStatus, action, reason, salesUser.id);
+      await insertStatusEvent(
+        client,
+        id,
+        current.status,
+        'ACTIVE',
+        'CONTRACT_ACTIVATED',
+        'Contract activated from accepted quotation commercial terms.',
+        salesUser.id,
+      );
+      await insertContractEvent(client, {
+        contractId: id,
+        eventType: 'CONTRACT_ACTIVATED',
+        previousStatus: current.status,
+        newStatus: 'ACTIVE',
+        reason: 'Contract activated from accepted quotation commercial terms.',
+        salesUserId: salesUser.id,
+        eventData: {
+          reference,
+          activatedFromAcceptedQuotation: Boolean(current.quotation_id),
+        },
+      });
       await client.query('commit');
 
       return this.getById(id);
@@ -683,6 +743,27 @@ export class SalesContractsService {
         changes.join(' '),
         salesUser.id,
       );
+      await insertContractEvent(client, {
+        contractId: id,
+        eventType:
+          additionalQuantity > 0 && payload.endDate
+            ? 'CONTRACT_QUANTITY_AND_END_DATE_EXTENDED'
+            : additionalQuantity > 0
+              ? 'CONTRACT_QUANTITY_EXTENDED'
+              : 'CONTRACT_END_DATE_EXTENDED',
+        previousStatus: current.status,
+        newStatus: 'ACTIVE',
+        reason: changes.join(' '),
+        salesUserId: salesUser.id,
+        eventData: {
+          previousTotalQuantityTons: currentTotal,
+          newTotalQuantityTons: nextTotal,
+          previousRemainingQuantityTons: currentRemaining,
+          newRemainingQuantityTons: nextRemaining,
+          previousEndDate: currentEndDate,
+          newEndDate: nextEndDate,
+        },
+      });
       await client.query('commit');
 
       return this.getById(id);
@@ -733,11 +814,13 @@ export const salesContractsService = new SalesContractsService();
 const contractSelectSql = `select
   contracts.*,
   customer_accounts.company_name as customer_company_name,
+  registration_drafts.delivery_locations as registration_delivery_locations,
   product_catalog.product_code,
   product_catalog.product_name,
   sales_users.name as sales_user_name
  from contracts
  inner join customer_accounts on customer_accounts.id = contracts.customer_account_id
+ inner join registration_drafts on registration_drafts.id = customer_accounts.registration_id
  inner join product_catalog on product_catalog.id = contracts.product_id
  inner join sales_users on sales_users.id = contracts.sales_user_id`;
 
@@ -922,6 +1005,95 @@ async function getContractForUpdate(client: PoolClient, id: string) {
   return contract;
 }
 
+async function validateContractActivationReadiness(client: PoolClient, contract: ContractRow) {
+  await assertActivatedCustomerAccount(client, contract.customer_account_id);
+
+  const startDate = new Date(contract.start_date);
+  const endDate = new Date(contract.end_date);
+  if (
+    Number.isNaN(startDate.getTime()) ||
+    Number.isNaN(endDate.getTime()) ||
+    endDate < startDate
+  ) {
+    throw new AppError(
+      'Contract start and end dates must be valid before activation.',
+      400,
+      'CONTRACT_DATES_INVALID',
+    );
+  }
+
+  const items = parseItemsSnapshot(contract.items_snapshot);
+  const totalQuantityTons = nullableNumber(contract.total_quantity_tons);
+  if (!items.length || totalQuantityTons === null || totalQuantityTons <= 0) {
+    throw new AppError(
+      'Contract must have valid accepted quotation items before activation.',
+      400,
+      'CONTRACT_ITEMS_INVALID',
+    );
+  }
+
+  const hasInvalidItem = items.some((item) => {
+    const equivalentTons = Number(item.equivalentTons);
+    const customerRate = Number(item.customerRate);
+    const amount = Number(item.amount);
+    return (
+      !item.productId ||
+      !item.productCode ||
+      !item.packagingType ||
+      !item.uom ||
+      !Number.isFinite(equivalentTons) ||
+      equivalentTons <= 0 ||
+      !Number.isFinite(customerRate) ||
+      customerRate <= 0 ||
+      !Number.isFinite(amount) ||
+      amount <= 0
+    );
+  });
+
+  if (hasInvalidItem) {
+    throw new AppError(
+      'Contract item commercial snapshot is incomplete.',
+      400,
+      'CONTRACT_ITEMS_INVALID',
+    );
+  }
+
+  if (contract.fulfilment === 'PICKUP' && !contract.pickup_location_id) {
+    throw new AppError(
+      'Pickup location is required before activation.',
+      400,
+      'CONTRACT_PICKUP_REQUIRED',
+    );
+  }
+
+  if (contract.fulfilment === 'DELIVERY' && (!contract.delivery_location_id || !contract.delivery_city)) {
+    throw new AppError(
+      'Ship-to location and Hader city are required before activation.',
+      400,
+      'CONTRACT_DELIVERY_REQUIRED',
+    );
+  }
+}
+
+async function getContractByQuotationId(quotationId: string) {
+  const result = await pool.query<{ id: string }>(
+    'select id from contracts where quotation_id = $1 limit 1',
+    [quotationId],
+  );
+
+  return result.rows[0] ?? null;
+}
+
+function isUniqueQuotationContractError(error: unknown) {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: string; constraint?: string }).code === '23505' &&
+    (error as { constraint?: string }).constraint === 'contracts_quotation_id_unique'
+  );
+}
+
 async function insertStatusEvent(
   client: PoolClient,
   contractId: string,
@@ -942,6 +1114,95 @@ async function insertStatusEvent(
      )
      values ($1, $2, $3, $4, $5, $6)`,
     [contractId, previousStatus, newStatus, action, reason, changedBy],
+  );
+}
+
+async function insertContractItems(
+  client: PoolClient,
+  contractId: string,
+  items: ContractItemSnapshot[],
+) {
+  for (const item of items) {
+    await client.query(
+      `insert into contract_items (
+         contract_id,
+         source_quotation_item_id,
+         product_id,
+         product_code,
+         product_name,
+         packaging,
+         original_uom,
+         original_quantity,
+         equivalent_tons,
+         approved_product_price_per_ton,
+         discount_mode,
+         discount_value,
+         discount_amount_per_ton,
+         hader_delivery_price_per_ton,
+         approved_customer_rate_per_ton,
+         amount,
+         display_order
+       )
+       values (
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+         $11, $12, $13, $14, $15, $16, $17
+       )
+       on conflict (contract_id, display_order) do nothing`,
+      [
+        contractId,
+        item.quotationItemId,
+        item.productId,
+        item.productCode,
+        item.productName,
+        item.packagingType,
+        item.uom,
+        item.quantity,
+        item.equivalentTons,
+        item.productPrice,
+        item.discountMode,
+        item.discountValue,
+        item.discountAmountPerTon,
+        item.deliveryPrice,
+        item.customerRate,
+        item.amount,
+        item.displayOrder,
+      ],
+    );
+  }
+}
+
+async function insertContractEvent(
+  client: PoolClient,
+  payload: {
+    contractId: string;
+    eventType: string;
+    previousStatus: ContractStatus | null;
+    newStatus: ContractStatus;
+    reason: string | null;
+    salesUserId: string;
+    eventData?: Record<string, unknown>;
+  },
+) {
+  await client.query(
+    `insert into contract_events (
+       contract_id,
+       event_type,
+       previous_status,
+       new_status,
+       reason,
+       changed_by_sales_user_id,
+       event_data
+     )
+     values ($1, $2, $3, $4, $5, $6, $7)`,
+    [
+      payload.contractId,
+      payload.eventType,
+      payload.previousStatus,
+      payload.newStatus,
+      payload.reason,
+      payload.salesUserId,
+      JSON.stringify(payload.eventData ?? {}),
+    ],
   );
 }
 
@@ -1086,11 +1347,23 @@ function mapContractSummary(row: ContractRow) {
 }
 
 function mapContractDetails(row: ContractRow, events: ContractStatusEventRow[]) {
+  const deliveryLocation = parseDeliveryLocations(row.registration_delivery_locations).find(
+    (location) => location.id === row.delivery_location_id,
+  );
+
   return {
     ...mapContractSummary(row),
     packaging: row.packaging,
     pickupLocationId: row.pickup_location_id,
     deliveryLocationId: row.delivery_location_id,
+    deliveryLocation: deliveryLocation
+      ? {
+          id: deliveryLocation.id ?? null,
+          name: deliveryLocation.name ?? null,
+          city: deliveryLocation.city ?? null,
+          region: deliveryLocation.region ?? null,
+        }
+      : null,
     deliveryCity: row.delivery_city,
     palletRequired: row.pallet_required,
     palletType: row.pallet_type,

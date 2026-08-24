@@ -146,12 +146,22 @@ export interface SalesContractDetails {
   startDate: string;
   endDate: string;
   fulfilment: 'PICKUP' | 'DELIVERY';
+  pickupLocationId?: string | null;
+  deliveryLocationId?: string | null;
+  deliveryLocation?: {
+    id: string | null;
+    name: string | null;
+    city: string | null;
+    region: string | null;
+  } | null;
   deliveryCity: string | null;
   totalQuantityTons: number | null;
   shippedQuantityTons?: number;
   remainingQuantityTons?: number;
   customerRate?: number;
+  productListPrice?: number | null;
   productPrice?: number | null;
+  deliveryListPrice?: number | null;
   deliveryPrice?: number | null;
   subtotal?: number | null;
   vatRate?: number | null;
@@ -186,6 +196,9 @@ export interface SalesContractDetails {
     changedByName: string | null;
     createdAt: string;
   }>;
+  salesUserId?: string | null;
+  salesUserName?: string | null;
+  activatedBy?: string | null;
   activatedAt?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -504,7 +517,7 @@ export const createContractFromSalesQuotation = async (
   payload: {
     startDate: string;
     endDate: string;
-    totalQuantityTons: number;
+    pickupLocationId?: string;
     internalNotes?: string;
   },
 ) => {
@@ -521,8 +534,13 @@ export const createContractFromSalesQuotation = async (
 
 export const listSalesContracts = async (params: {
   page?: number;
+  pageSize?: number;
   search?: string;
-  status?: '' | 'DRAFT' | 'ACTIVE' | 'PENDING_SALES_REVIEW';
+  status?: '' | 'DRAFT' | 'ACTIVE' | 'PENDING_SALES_REVIEW' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'CANCELLED';
+  customer?: string;
+  product?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }) => {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {

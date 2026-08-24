@@ -15,7 +15,10 @@ interface CustomerContractRow {
   uom: string;
   quantity: string;
   fulfilment: 'PICKUP' | 'DELIVERY';
+  pickup_location_id: string | null;
+  delivery_location_id: string | null;
   delivery_city: string | null;
+  registration_delivery_locations: unknown;
   start_date: Date | string;
   end_date: Date | string;
   total_quantity_tons: string | null;
@@ -35,6 +38,13 @@ interface CustomerContractRow {
   activated_at: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
+}
+
+interface DeliveryLocation {
+  id?: string;
+  name?: string;
+  city?: string;
+  region?: string;
 }
 
 const pageSize = 10;
@@ -119,12 +129,17 @@ export const customerContractsService = new CustomerContractsService();
 
 const customerContractSelectSql = `select
   contracts.*,
+  registration_drafts.delivery_locations as registration_delivery_locations,
   product_catalog.product_code,
   product_catalog.product_name
  from contracts
+ inner join customer_accounts on customer_accounts.id = contracts.customer_account_id
+ inner join registration_drafts on registration_drafts.id = customer_accounts.registration_id
  inner join product_catalog on product_catalog.id = contracts.product_id`;
 
 function mapCustomerContractSummary(row: CustomerContractRow) {
+  const deliveryLocation = resolveDeliveryLocation(row);
+
   return {
     id: row.id,
     reference: row.reference,
@@ -140,6 +155,21 @@ function mapCustomerContractSummary(row: CustomerContractRow) {
     uom: row.uom,
     fulfilment: row.fulfilment,
     haderCity: row.delivery_city,
+    pickupLocation: row.pickup_location_id
+      ? {
+          id: row.pickup_location_id,
+          name: row.pickup_location_id === 'ALSAFWA_PLANT_MAIN' ? 'AlSafwa Cement Plant' : row.pickup_location_id,
+          city: row.pickup_location_id === 'ALSAFWA_PLANT_MAIN' ? 'Jeddah' : null,
+        }
+      : null,
+    shipTo: deliveryLocation
+      ? {
+          id: deliveryLocation.id ?? null,
+          name: deliveryLocation.name ?? null,
+          city: deliveryLocation.city ?? null,
+          region: deliveryLocation.region ?? null,
+        }
+      : null,
     totalQuantityTons: nullableNumber(row.total_quantity_tons) ?? Number(row.quantity),
     shippedQuantityTons: nullableNumber(row.shipped_quantity_tons) ?? 0,
     remainingQuantityTons:
@@ -190,6 +220,28 @@ function parseItemsSnapshot(value: unknown): Array<Record<string, unknown>> {
     try {
       const parsed = JSON.parse(value) as unknown;
       return Array.isArray(parsed) ? (parsed as Array<Record<string, unknown>>) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function resolveDeliveryLocation(row: CustomerContractRow) {
+  if (row.fulfilment !== 'DELIVERY' || !row.delivery_location_id) return null;
+  return (
+    parseDeliveryLocations(row.registration_delivery_locations).find(
+      (location) => location.id === row.delivery_location_id,
+    ) ?? null
+  );
+}
+
+function parseDeliveryLocations(value: unknown): DeliveryLocation[] {
+  if (Array.isArray(value)) return value as DeliveryLocation[];
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return Array.isArray(parsed) ? (parsed as DeliveryLocation[]) : [];
     } catch {
       return [];
     }

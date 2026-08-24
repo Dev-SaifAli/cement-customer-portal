@@ -34,19 +34,35 @@ export function CustomerContractDetailsPage() {
   }, [id]);
 
   if (loading) {
-    return <div className="rounded-2xl border border-[#e3e1e8] bg-white p-8 text-sm text-[#64748b]">Loading contract...</div>;
+    return (
+      <div className="rounded-2xl border border-[#e3e1e8] bg-white p-8 text-sm text-[#64748b]">
+        Loading contract...
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="rounded-2xl border border-red-100 bg-red-50 p-6 text-sm font-semibold text-[#b42318]">{error}</div>;
+    return (
+      <div className="rounded-2xl border border-red-100 bg-red-50 p-6 text-sm font-semibold text-[#b42318]">
+        {error}
+      </div>
+    );
   }
 
   if (!contract) return null;
 
+  const usedTons = Math.max(0, contract.shippedQuantityTons ?? 0);
+  const totalTons = contract.totalQuantityTons ?? 0;
+  const remainingTons = contract.remainingQuantityTons ?? 0;
+  const usagePercent = totalTons > 0 ? Math.min(100, Math.max(0, (usedTons / totalTons) * 100)) : 0;
+
   return (
     <div className="space-y-5">
       <div>
-        <Link to="/customer/contracts" className="inline-flex items-center gap-2 text-sm font-semibold text-[#64748b] hover:text-[#54247a]">
+        <Link
+          to="/customer/contracts"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-[#64748b] hover:text-[#54247a]"
+        >
           <ArrowLeft size={16} /> Contracts
         </Link>
         <div className="mt-2 flex items-center gap-3">
@@ -63,22 +79,45 @@ export function CustomerContractDetailsPage() {
           <Field label="Source Quotation" value={contract.sourceQuotation?.reference} />
           <Field label="Product" value={contract.productName} />
           <Field label="Packaging" value={contract.packaging} />
-          <Field label="Fulfilment" value={contract.fulfilment} />
+          <Field label="Fulfilment" value={formatFulfilment(contract.fulfilment)} />
+          <Field label="Ship-to" value={formatLocation(contract.shipTo)} />
+          {contract.fulfilment === 'PICKUP' && (
+            <Field label="Pickup From" value={formatPickupLocation(contract.pickupLocation)} />
+          )}
           <Field label="Hader City" value={contract.haderCity} />
           <Field label="Start Date" value={formatDate(contract.startDate)} />
           <Field label="End Date" value={formatDate(contract.endDate)} />
-          <Field label="Remaining Quantity" value={`${formatNumber(contract.remainingQuantityTons)} TON`} />
-          <Field label="Total Quantity" value={`${formatNumber(contract.totalQuantityTons)} TON`} />
         </InfoCard>
+
         <InfoCard title="Commercial Terms">
           <div className="mb-3 inline-flex items-center gap-2 rounded-lg bg-[#f6f2fa] px-3 py-2 text-xs font-bold text-[#54247a]">
             <Lock size={14} /> Final customer terms
           </div>
-          <Field label="Customer Rate / TON" value={formatMoney(contract.customerRate)} strong />
+          <Field label="Final Customer Rate / TON" value={formatMoney(contract.customerRate)} strong />
           <Field label="Payment Terms" value={contract.paymentTerms} />
           <Field label="Grand Total" value={formatMoney(contract.grandTotal)} strong />
           <Field label="Commercial Notes" value={contract.commercialNotes} />
         </InfoCard>
+      </section>
+
+      <section className="rounded-2xl border border-[#e3e1e8] bg-white p-5 shadow-sm">
+        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-[#54247a]">Quantity Usage</h2>
+            <p className="text-xs text-[#64748b]">
+              Contract balance is shown in equivalent tons for order planning.
+            </p>
+          </div>
+          <p className="text-sm font-bold text-[#1a1b23]">{formatNumber(remainingTons)} TON remaining</p>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-[#f4edf7]">
+          <div className="h-full rounded-full bg-[#54247a]" style={{ width: `${usagePercent}%` }} />
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <Field label="Total Contract Quantity" value={`${formatNumber(totalTons)} TON`} strong />
+          <Field label="Used Quantity" value={`${formatNumber(usedTons)} TON`} />
+          <Field label="Remaining Quantity" value={`${formatNumber(remainingTons)} TON`} strong />
+        </div>
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-[#e3e1e8] bg-white shadow-sm">
@@ -118,8 +157,15 @@ export function CustomerContractDetailsPage() {
         </div>
       </section>
 
-      <div className="rounded-2xl border border-dashed border-[#e3e1e8] bg-white p-5 text-sm text-[#64748b]">
-        Order from Contract will be available in a later module.
+      <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-[#e3e1e8] bg-white p-5 text-sm text-[#64748b] sm:flex-row sm:items-center sm:justify-between">
+        <span>Order from Contract will be available in a later module.</span>
+        <button
+          type="button"
+          disabled
+          className="inline-flex h-10 items-center justify-center rounded-lg border border-[#e3e1e8] px-4 text-sm font-semibold text-[#94a3b8]"
+        >
+          Order from Contract
+        </button>
       </div>
     </div>
   );
@@ -138,19 +184,41 @@ function Field({ label, value, strong = false }: { label: string; value: ReactNo
   return (
     <div>
       <p className="text-xs font-medium text-[#64748b]">{label}</p>
-      <p className={`mt-1 text-sm ${strong ? 'font-bold text-[#54247a]' : 'font-semibold text-[#1a1b23]'}`}>{value || 'Not provided'}</p>
+      <p className={`mt-1 text-sm ${strong ? 'font-bold text-[#54247a]' : 'font-semibold text-[#1a1b23]'}`}>
+        {value || 'Not provided'}
+      </p>
     </div>
   );
 }
 
+function formatFulfilment(value: string) {
+  if (value === 'DELIVERY') return 'Hader Delivery';
+  if (value === 'PICKUP') return 'Pick-Up';
+  return value;
+}
+
+function formatLocation(
+  location?: { name: string | null; city: string | null; region: string | null } | null,
+) {
+  if (!location) return 'Not provided';
+  return [location.name, location.city, location.region].filter(Boolean).join(', ') || 'Not provided';
+}
+
+function formatPickupLocation(location?: { name: string; city: string | null } | null) {
+  if (!location) return 'Not provided';
+  return [location.name, location.city].filter(Boolean).join(', ') || 'Not provided';
+}
+
 function formatMoney(value?: number | null) {
-  return value == null ? '—' : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} SAR`;
+  return value == null ? 'Not provided' : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} SAR`;
 }
 
 function formatNumber(value?: number | null) {
-  return value == null ? '—' : value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+  return value == null ? 'Not provided' : value.toLocaleString(undefined, { maximumFractionDigits: 3 });
 }
 
 function formatDate(value?: string | null) {
-  return value ? new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+  return value
+    ? new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Not provided';
 }

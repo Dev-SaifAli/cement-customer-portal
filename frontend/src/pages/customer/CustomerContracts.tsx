@@ -39,8 +39,8 @@ export function CustomerContracts() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-[#1a1b23]">Active Contracts</h1>
-        <p className="text-sm text-[#64748b]">View approved active contracts for your account.</p>
+        <h1 className="text-2xl font-bold text-[#1a1b23]">Contracts</h1>
+        <p className="text-sm text-[#64748b]">View active contracts for your account.</p>
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-[#e3e1e8] bg-white shadow-sm">
@@ -72,22 +72,25 @@ export function CustomerContracts() {
           <div className="p-10 text-center">
             <BriefcaseBusiness className="mx-auto text-slate-300" size={34} />
             <p className="mt-3 text-sm font-bold text-[#1a1b23]">No active contracts yet</p>
-            <p className="mt-1 text-sm text-[#64748b]">Accepted and activated contracts will appear here.</p>
+            <p className="mt-1 text-sm text-[#64748b]">
+              Activated contracts will appear here once available.
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="min-w-[1120px] w-full text-left text-sm">
               <thead className="bg-[#f8fafc] text-xs uppercase tracking-wide text-[#64748b]">
                 <tr>
                   <th className="px-4 py-3">Contract Number</th>
                   <th className="px-4 py-3">Product</th>
                   <th className="px-4 py-3">Packaging</th>
                   <th className="px-4 py-3">Fulfilment</th>
-                  <th className="px-4 py-3">Remaining / Total TON</th>
+                  <th className="px-4 py-3">Total TON</th>
+                  <th className="px-4 py-3">Remaining TON</th>
                   <th className="px-4 py-3">Start Date</th>
                   <th className="px-4 py-3">End Date</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Customer Rate / TON</th>
+                  <th className="px-4 py-3">Final Customer Rate / TON</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#eceaf0]">
@@ -102,15 +105,23 @@ export function CustomerContracts() {
         {pagination && pagination.totalPages > 1 && (
           <div className="flex items-center justify-between border-t border-[#eceaf0] px-4 py-3 text-sm text-[#64748b]">
             <span>
-              Showing {(pagination.page - 1) * pagination.pageSize + 1}–
+              Showing {(pagination.page - 1) * pagination.pageSize + 1}-
               {Math.min(pagination.page * pagination.pageSize, pagination.total)} of{' '}
               {pagination.total}
             </span>
             <div className="flex gap-2">
-              <button disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="rounded-lg border border-[#e3e1e8] px-3 py-2 disabled:opacity-50">
+              <button
+                disabled={page <= 1}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                className="rounded-lg border border-[#e3e1e8] px-3 py-2 disabled:opacity-50"
+              >
                 <ChevronLeft size={16} />
               </button>
-              <button disabled={page >= pagination.totalPages} onClick={() => setPage((current) => current + 1)} className="rounded-lg border border-[#e3e1e8] px-3 py-2 disabled:opacity-50">
+              <button
+                disabled={page >= pagination.totalPages}
+                onClick={() => setPage((current) => current + 1)}
+                className="rounded-lg border border-[#e3e1e8] px-3 py-2 disabled:opacity-50"
+              >
                 <ChevronRight size={16} />
               </button>
             </div>
@@ -134,8 +145,9 @@ function CustomerContractRow({ contract }: { contract: CustomerContractSummary }
         <p className="text-xs text-[#64748b]">{contract.productCode}</p>
       </td>
       <td className="px-4 py-3">{contract.packaging}</td>
-      <td className="px-4 py-3">{contract.fulfilment}</td>
-      <td className="px-4 py-3">{formatNumber(contract.remainingQuantityTons)} / {formatNumber(contract.totalQuantityTons)}</td>
+      <td className="px-4 py-3">{formatFulfilment(contract.fulfilment)}</td>
+      <td className="px-4 py-3">{formatNumber(contract.totalQuantityTons)}</td>
+      <td className="px-4 py-3">{formatNumber(contract.remainingQuantityTons)}</td>
       <td className="px-4 py-3">{formatDate(contract.startDate)}</td>
       <td className="px-4 py-3">{formatDate(contract.endDate)}</td>
       <td className="px-4 py-3">
@@ -148,14 +160,22 @@ function CustomerContractRow({ contract }: { contract: CustomerContractSummary }
   );
 }
 
+function formatFulfilment(value: string) {
+  if (value === 'DELIVERY') return 'Hader Delivery';
+  if (value === 'PICKUP') return 'Pick-Up';
+  return value;
+}
+
 function formatMoney(value?: number | null) {
-  return value == null ? '—' : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} SAR`;
+  return value == null ? 'Not provided' : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} SAR`;
 }
 
 function formatNumber(value?: number | null) {
-  return value == null ? '—' : value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+  return value == null ? 'Not provided' : value.toLocaleString(undefined, { maximumFractionDigits: 3 });
 }
 
 function formatDate(value?: string | null) {
-  return value ? new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+  return value
+    ? new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Not provided';
 }

@@ -21,6 +21,7 @@ const booleanFromString = z.enum(['true', 'false']).transform((value) => value =
 const schema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
     PORT: z.coerce.number().int().positive().default(3000),
     APP_URL: z.url().default('http://localhost:5173'),
     API_URL: z.url().default('http://localhost:3000/api/v1'),
