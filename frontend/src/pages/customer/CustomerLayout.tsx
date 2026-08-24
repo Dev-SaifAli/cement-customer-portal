@@ -8,6 +8,7 @@ import {
   Menu,
   PackageSearch,
   FileText,
+  BriefcaseBusiness,
   UserCircle,
   Users,
   X,
@@ -61,6 +62,13 @@ const customerNavigation: Array<{
     label: 'Quotations',
     icon: <FileText size={18} />,
     roles: ['CUSTOMER_ADMIN', 'PURCHASER'],
+  },
+  {
+    to: '/customer/contracts',
+    activePrefix: '/customer/contracts',
+    label: 'Contracts',
+    icon: <BriefcaseBusiness size={18} />,
+    roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
   },
 ];
 
@@ -303,6 +311,10 @@ function getPageContext(pathname: string) {
     };
   }
   if (pathname === '/customer/quotations') return { title: 'Quotations' };
+  if (pathname.startsWith('/customer/contracts/')) {
+    return { parent: 'Contracts', title: 'Contract Details' };
+  }
+  if (pathname === '/customer/contracts') return { title: 'Contracts' };
   if (pathname.startsWith('/customer/products/')) {
     return { parent: 'Products', title: 'Product Details' };
   }

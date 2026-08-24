@@ -138,14 +138,62 @@ export interface SalesContractDetails {
   customerAccountId: string;
   customerCompanyName: string | null;
   status: string;
+  productCode?: string | null;
+  productName?: string | null;
+  packaging?: string;
+  uom?: string;
+  quantity?: number;
   startDate: string;
   endDate: string;
   fulfilment: 'PICKUP' | 'DELIVERY';
   deliveryCity: string | null;
   totalQuantityTons: number | null;
+  shippedQuantityTons?: number;
+  remainingQuantityTons?: number;
+  customerRate?: number;
+  productPrice?: number | null;
+  deliveryPrice?: number | null;
+  subtotal?: number | null;
+  vatRate?: number | null;
+  vatAmount?: number | null;
   grandTotal: number | null;
+  paymentTerms?: string | null;
+  commercialNotes?: string | null;
+  customerNotes?: string | null;
+  internalNotes?: string | null;
+  items?: Array<{
+    productCode?: string | null;
+    productName?: string | null;
+    packagingType?: string | null;
+    uom?: string | null;
+    quantity?: number | null;
+    equivalentTons?: number | null;
+    productListPrice?: number | null;
+    productPrice?: number | null;
+    discountMode?: 'PERCENT' | 'SAR_PER_TON' | null;
+    discountValue?: number | null;
+    discountAmountPerTon?: number | null;
+    deliveryPrice?: number | null;
+    customerRate?: number | null;
+    amount?: number | null;
+  }>;
+  statusHistory?: Array<{
+    id: string;
+    previousStatus: string | null;
+    newStatus: string;
+    action: string;
+    reason: string | null;
+    changedByName: string | null;
+    createdAt: string;
+  }>;
+  activatedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SalesContractsList {
+  items: SalesContractDetails[];
+  pagination: SalesApplicationsPagination;
 }
 
 export interface SalesApplicationSummary {
@@ -468,5 +516,51 @@ export const createContractFromSalesQuotation = async (
     body: JSON.stringify(payload),
   });
 
+  return response.data.contract;
+};
+
+export const listSalesContracts = async (params: {
+  page?: number;
+  search?: string;
+  status?: '' | 'DRAFT' | 'ACTIVE' | 'PENDING_SALES_REVIEW';
+}) => {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') query.set(key, String(value));
+  });
+
+  const response = await requestSales<{ success: boolean; data: SalesContractsList }>(
+    `/sales/contracts${query.size ? `?${query}` : ''}`,
+  );
+  return response.data;
+};
+
+export const getSalesContract = async (id: string) => {
+  const response = await requestSales<{
+    success: boolean;
+    data: { contract: SalesContractDetails };
+  }>(`/sales/contracts/${id}`);
+  return response.data.contract;
+};
+
+export const activateSalesContract = async (id: string) => {
+  const response = await requestSales<{
+    success: boolean;
+    data: { contract: SalesContractDetails };
+  }>(`/sales/contracts/${id}/activate`, { method: 'POST' });
+  return response.data.contract;
+};
+
+export const extendSalesContract = async (
+  id: string,
+  payload: { additionalQuantityTons?: number; endDate?: string; reason?: string },
+) => {
+  const response = await requestSales<{
+    success: boolean;
+    data: { contract: SalesContractDetails };
+  }>(`/sales/contracts/${id}/extend`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
   return response.data.contract;
 };

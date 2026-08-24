@@ -3,6 +3,8 @@ import { SalesAuthProvider, useSalesAuth } from '../context/SalesAuthContext';
 import { SalesLayout } from '../pages/sales/SalesLayout';
 import { SalesApplicationDetailsPage } from '../pages/sales/SalesApplicationDetails';
 import { SalesApplicationsPage } from '../pages/sales/SalesApplications';
+import { SalesContractDetailsPage } from '../pages/sales/SalesContractDetails';
+import { SalesContractsPage } from '../pages/sales/SalesContracts';
 import { SalesDashboard } from '../pages/sales/SalesDashboard';
 import { SalesLogin } from '../pages/sales/SalesLogin';
 import { SalesQuotationDetailsPage } from '../pages/sales/SalesQuotationDetails';
@@ -21,6 +23,8 @@ export function SalesRoutes() {
               <Route path="dashboard" element={<SalesDashboard />} />
               <Route path="applications" element={<SalesApplicationsPage />} />
               <Route path="applications/:id" element={<SalesApplicationDetailsPage />} />
+              <Route path="contracts" element={<SalesContractsPage />} />
+              <Route path="contracts/:id" element={<SalesContractDetailsPage />} />
             </Route>
             <Route
               element={

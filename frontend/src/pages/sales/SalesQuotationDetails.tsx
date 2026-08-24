@@ -854,6 +854,9 @@ function ContractCreationModal({
               <button type="button" onClick={onClose} className={secondaryButton}>
                 Back to Quotation
               </button>
+              <Link to={`/sales/contracts/${createdContract.id}`} className={primaryLinkButton}>
+                Open Contract
+              </Link>
             </div>
           </div>
         ) : (
@@ -989,6 +992,8 @@ function LockedPrice({ label, value }: { label: string; value: number | null | u
 const sectionClass = 'rounded-xl border border-[#e3e1e8] bg-white p-4';
 const secondaryButton =
   'inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#e3e1e8] bg-white px-4 text-sm font-bold text-[#1a1b23] hover:bg-[#f8fafc] disabled:opacity-50';
+const primaryLinkButton =
+  'inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#54247a] px-4 text-sm font-bold text-white hover:bg-[#472066]';
 const inputClass =
   'w-full rounded-lg border border-[#e3e1e8] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#54247a] focus:ring-1 focus:ring-[#54247a] disabled:bg-slate-50 disabled:text-[#64748b]';
 function ActionButton({

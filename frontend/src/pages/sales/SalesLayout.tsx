@@ -6,6 +6,7 @@ import {
   FileText,
   LogOut,
   Menu,
+  BriefcaseBusiness,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -30,7 +31,9 @@ export function SalesLayout() {
             title: 'Sales Quotations',
             subtitle: 'Review requirements and prepare customer quotations',
           }
-    : location.pathname.startsWith('/sales/applications')
+    : location.pathname.startsWith('/sales/contracts')
+      ? { title: 'Sales Contracts', subtitle: 'Manage accepted quotation contracts' }
+      : location.pathname.startsWith('/sales/applications')
       ? { title: 'Sales Applications', subtitle: 'Review submitted customer applications' }
       : { title: 'Sales Portal', subtitle: 'Internal customer review workspace' };
 
@@ -88,6 +91,13 @@ export function SalesLayout() {
                 collapsed={sidebarCollapsed}
               >
                 Applications
+              </SalesNavLink>
+              <SalesNavLink
+                to="/sales/contracts"
+                icon={<BriefcaseBusiness size={18} />}
+                collapsed={sidebarCollapsed}
+              >
+                Contracts
               </SalesNavLink>
             </>
           )}
