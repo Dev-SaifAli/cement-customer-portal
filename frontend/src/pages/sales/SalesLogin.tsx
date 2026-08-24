@@ -1,9 +1,10 @@
 import { AlertCircle, Lock, Mail } from 'lucide-react';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import Logo from '../../components/Logo/Logo';
 import { useSalesAuth } from '../../context/SalesAuthContext';
 import { SalesApiError } from '../../services/salesService';
+import { getSalesLandingPath } from '../../utils/salesRouting';
 
 export function SalesLogin() {
   const { user, loading, login } = useSalesAuth();
@@ -15,15 +16,14 @@ export function SalesLogin() {
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
 
-  useEffect(() => {
-    if (user) {
-      navigate('/sales/dashboard', { replace: true });
-    }
-  }, [navigate, user]);
+  const from = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from;
+  const requestedDestination =
+    from?.pathname && from.pathname !== '/sales/login'
+      ? `${from.pathname}${from.search ?? ''}`
+      : null;
 
   if (!loading && user) {
-    const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
-    return <Navigate to={from && from !== '/sales/login' ? from : '/sales/dashboard'} replace />;
+    return <Navigate to={requestedDestination ?? getSalesLandingPath(user.role)} replace />;
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -39,8 +39,8 @@ export function SalesLogin() {
 
     setSubmitting(true);
     try {
-      await login({ email, password });
-      navigate('/sales/dashboard', { replace: true });
+      const loggedInUser = await login({ email, password });
+      navigate(requestedDestination ?? getSalesLandingPath(loggedInUser.role), { replace: true });
     } catch (loginError) {
       setError(
         loginError instanceof SalesApiError

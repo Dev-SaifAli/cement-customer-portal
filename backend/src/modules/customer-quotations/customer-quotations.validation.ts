@@ -85,6 +85,14 @@ export const customerQuotationPayloadSchema = z
 
 export const customerQuotationIdSchema = z.string().uuid();
 
+export const customerQuotationDecisionMessageSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(3, 'Please provide a reason or message.')
+    .max(1000, 'Reason or message must be 1000 characters or fewer.'),
+});
+
 export const listCustomerQuotationsSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   reference: optionalText(100),

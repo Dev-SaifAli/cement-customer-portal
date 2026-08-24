@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useSalesAuth } from '../../context/SalesAuthContext';
 import {
   listSalesQuotations,
   type SalesApplicationsPagination,
@@ -16,6 +17,7 @@ const emptyPagination: SalesApplicationsPagination = {
 };
 
 export function SalesQuotationsPage() {
+  const { user } = useSalesAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<SalesQuotationSummary[]>([]);
   const [pagination, setPagination] = useState(emptyPagination);
@@ -77,14 +79,25 @@ export function SalesQuotationsPage() {
   const from = pagination.total ? (pagination.page - 1) * 10 + 1 : 0;
   const to = Math.min(pagination.page * 10, pagination.total);
   const pages = useMemo(() => visiblePages(pagination.page, pagination.totalPages), [pagination]);
+  const approvalRole = user?.role === 'HADER_MANAGER' || user?.role === 'PRICE_MANAGER';
+  const pageTitle =
+    user?.role === 'HADER_MANAGER'
+      ? 'Delivery Price Approvals'
+      : user?.role === 'PRICE_MANAGER'
+        ? 'Product Price Approvals'
+        : 'Quotations';
+  const pageDescription =
+    user?.role === 'HADER_MANAGER'
+      ? 'Review quotations currently waiting for Hader delivery-price approval.'
+      : user?.role === 'PRICE_MANAGER'
+        ? 'Review quotations currently waiting for product-price approval.'
+        : 'Review customer requirements and prepare commercial quotations.';
 
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight text-[#1a1b23]">Quotations</h1>
-        <p className="mt-1 text-sm text-[#64748b]">
-          Review customer requirements and prepare commercial quotations.
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight text-[#1a1b23]">{pageTitle}</h1>
+        <p className="mt-1 text-sm text-[#64748b]">{pageDescription}</p>
       </header>
 
       <section className="overflow-hidden rounded-xl border border-[#e3e1e8] bg-white">
@@ -173,19 +186,25 @@ export function SalesQuotationsPage() {
                     </th>
                     <th />
                     <th className="p-2">
-                      <select
-                        aria-label="Status"
-                        value={status}
-                        onChange={(e) => updateParams({ status: e.target.value })}
-                        className={filterClass}
-                      >
-                        <option value="">All Statuses</option>
-                        {statusOptions.map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
+                      {approvalRole ? (
+                        <div className={`${filterClass} flex items-center text-[#64748b]`}>
+                          Assigned only
+                        </div>
+                      ) : (
+                        <select
+                          aria-label="Status"
+                          value={status}
+                          onChange={(e) => updateParams({ status: e.target.value })}
+                          className={filterClass}
+                        >
+                          <option value="">All Statuses</option>
+                          {statusOptions.map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </th>
                   </tr>
                 </thead>

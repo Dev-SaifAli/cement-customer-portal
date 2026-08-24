@@ -123,6 +123,7 @@ describe('customer products API', () => {
             isActive: true,
             createdAt: '2026-08-23T08:00:00.000Z',
             updatedAt: '2026-08-23T09:00:00.000Z',
+            priceDisplay: 'PRICE_ON_REQUEST',
           },
         ],
         pagination: {
@@ -167,6 +168,7 @@ describe('customer products API', () => {
           isActive: true,
           createdAt: '2026-08-23T08:00:00.000Z',
           updatedAt: '2026-08-23T09:00:00.000Z',
+          priceDisplay: 'PRICE_ON_REQUEST',
         },
       },
     });

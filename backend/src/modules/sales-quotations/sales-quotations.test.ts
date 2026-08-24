@@ -23,6 +23,7 @@ import { salesTokenService } from '../sales-auth/sales-token.service.js';
 
 const salesUserId = '11111111-1111-4111-8111-111111111111';
 const quotationId = '22222222-2222-4222-8222-222222222222';
+const pricingCityId = '66666666-6666-4666-8666-666666666666';
 const salesUser = {
   id: salesUserId,
   name: 'Sales Reviewer',
@@ -36,6 +37,8 @@ const quotation = {
   reference: 'QT-2026-000123',
   customer_account_id: '33333333-3333-4333-8333-333333333333',
   customer_company_name: 'ABC Construction',
+  pricing_city_id: pricingCityId,
+  pricing_city_name: 'Jeddah',
   status: 'PENDING_HADER_APPROVAL',
   fulfilment_type: 'DELIVERY',
   pickup_location_id: null,
@@ -76,6 +79,48 @@ describe('sales quotations API', () => {
     expect(response.body.error.code).toBe('SALES_AUTH_REQUIRED');
   });
 
+  it('rejects a Pricing Administrator from Sales quotations', async () => {
+    query.mockResolvedValueOnce({ rows: [{ ...salesUser, role: 'PRICING_ADMIN' }] });
+
+    const response = await request(createApp())
+      .get('/api/v1/sales/quotations')
+      .set('Authorization', authorization());
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('SALES_ROLE_FORBIDDEN');
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it('scopes a Hader Manager list to pending Hader approvals', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ ...salesUser, role: 'HADER_MANAGER' }] })
+      .mockResolvedValueOnce({ rows: [{ total: '0' }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const response = await request(createApp())
+      .get('/api/v1/sales/quotations?page=1')
+      .set('Authorization', authorization());
+
+    expect(response.status).toBe(200);
+    expect(query).toHaveBeenNthCalledWith(2, expect.stringContaining('quotations.status = $1'), [
+      'PENDING_HADER_APPROVAL',
+    ]);
+  });
+
+  it('prevents an approval manager from opening a quotation outside their stage', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ ...salesUser, role: 'HADER_MANAGER' }] })
+      .mockResolvedValueOnce({ rows: [{ ...quotation, status: 'UNDER_REVIEW' }] });
+
+    const response = await request(createApp())
+      .get(`/api/v1/sales/quotations/${quotationId}`)
+      .set('Authorization', authorization());
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('QUOTATION_ACCESS_FORBIDDEN');
+    expect(query).toHaveBeenCalledTimes(2);
+  });
+
   it('lists submitted quotations with fixed pagination', async () => {
     query
       .mockResolvedValueOnce({ rows: [salesUser] })
@@ -101,6 +146,65 @@ describe('sales quotations API', () => {
     });
   });
 
+  it('resolves product and Hader baselines using the quotation destination city', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [salesUser] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            ...quotation,
+            status: 'UNDER_REVIEW',
+            delivery_locations: [
+              { id: 'location-1', name: 'Main Site', city: 'Jeddah', region: 'Makkah' },
+            ],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: '44444444-4444-4444-8444-444444444444',
+            product_id: '55555555-5555-4555-8555-555555555555',
+            product_code: 'CEM-OPC-50KG',
+            product_name: 'Ordinary Portland Cement',
+            product_image: null,
+            unit_weight_kg: '50.000',
+            is_white_cement: false,
+            equivalent_tons: '0.500000',
+            quantity: '10',
+            uom: 'TON',
+            packaging_type: 'Bag',
+            product_list_price: null,
+            product_price: null,
+            delivery_list_price: null,
+            delivery_price: null,
+            customer_rate: null,
+            amount: null,
+            catalog_list_price: '150.00',
+            catalog_delivery_list_price: '25.00',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const response = await request(createApp())
+      .get(`/api/v1/sales/quotations/${quotationId}`)
+      .set('Authorization', authorization());
+
+    expect(response.status).toBe(200);
+    expect(query).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining('from product_list_prices'),
+      [quotationId, pricingCityId],
+    );
+    expect(response.body.data.quotation.items[0]).toMatchObject({
+      productListPrice: 150,
+      productPrice: 150,
+      deliveryListPrice: 25,
+      deliveryPrice: 25,
+    });
+  });
+
   it('does not allow a Sales representative to perform Hader approval', async () => {
     query.mockResolvedValueOnce({ rows: [salesUser] });
     connect.mockResolvedValueOnce({ query: clientQuery, release });
@@ -118,6 +222,64 @@ describe('sales quotations API', () => {
     expect(
       clientQuery.mock.calls.some(([sql]) => String(sql).includes('HADER_MANAGER_APPROVED')),
     ).toBe(false);
+  });
+
+  it('does not allow an approval manager to prepare commercial pricing', async () => {
+    query.mockResolvedValueOnce({ rows: [{ ...salesUser, role: 'HADER_MANAGER' }] });
+
+    const response = await request(createApp())
+      .post(`/api/v1/sales/quotations/${quotationId}/start-review`)
+      .set('Authorization', authorization());
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('QUOTATION_COMMERCIAL_ACTION_FORBIDDEN');
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it('starts Sales review without locking nullable joined tables', async () => {
+    const item = {
+      id: '44444444-4444-4444-8444-444444444444',
+      product_id: '55555555-5555-4555-8555-555555555555',
+      product_code: 'CEM-OPC-50KG',
+      product_name: 'Ordinary Portland Cement',
+      product_image: null,
+      unit_weight_kg: '50.000',
+      is_white_cement: false,
+      equivalent_tons: '0.500000',
+      quantity: '10',
+      uom: 'TON',
+      packaging_type: 'Bag',
+      product_list_price: null,
+      product_price: null,
+      delivery_list_price: null,
+      delivery_price: null,
+      customer_rate: null,
+      amount: null,
+      catalog_list_price: '150.00',
+      catalog_delivery_list_price: '25.00',
+    };
+    query
+      .mockResolvedValueOnce({ rows: [salesUser] })
+      .mockResolvedValueOnce({ rows: [{ ...quotation, status: 'UNDER_REVIEW' }] })
+      .mockResolvedValueOnce({ rows: [item] })
+      .mockResolvedValueOnce({ rows: [] });
+    connect.mockResolvedValueOnce({ query: clientQuery, release });
+    clientQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ ...quotation, status: 'PENDING_SALES_REVIEW' }] })
+      .mockResolvedValueOnce({ rows: [item] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const response = await request(createApp())
+      .post(`/api/v1/sales/quotations/${quotationId}/start-review`)
+      .set('Authorization', authorization());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.quotation.status).toBe('UNDER_REVIEW');
+    expect(clientQuery.mock.calls[1]?.[0]).toContain('for update of quotations');
   });
 
   it('requires a rejection reason before accessing the workflow', async () => {

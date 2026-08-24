@@ -149,6 +149,18 @@ describe('sales applications API', () => {
       expect(query).not.toHaveBeenCalled();
     });
 
+    it('rejects approval managers from the Applications module', async () => {
+      query.mockResolvedValueOnce({ rows: [{ ...salesUserRow, role: 'HADER_MANAGER' }] });
+
+      const response = await request(createApp())
+        .get('/api/v1/sales/applications')
+        .set('Authorization', authHeader());
+
+      expect(response.status).toBe(403);
+      expect(response.body.error.code).toBe('SALES_ROLE_FORBIDDEN');
+      expect(query).toHaveBeenCalledTimes(1);
+    });
+
     it('searches useful Sales fields', async () => {
       mockAuthenticatedSalesUser();
       query.mockResolvedValueOnce({ rows: [{ total: '1' }] });

@@ -8,7 +8,7 @@ export interface SalesUser {
   role: SalesRole;
 }
 
-export type SalesRole = 'SALES_REP' | 'HADER_MANAGER' | 'PRICE_MANAGER';
+export type SalesRole = 'SALES_REP' | 'HADER_MANAGER' | 'PRICE_MANAGER' | 'PRICING_ADMIN';
 
 export interface SalesUserRecord extends SalesUser {
   passwordHash: string;

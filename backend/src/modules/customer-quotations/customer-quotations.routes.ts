@@ -36,3 +36,20 @@ customerQuotationsRouter.post(
   '/:id/submit',
   asyncHandler(customerQuotationsController.submit.bind(customerQuotationsController)),
 );
+
+customerQuotationsRouter.post(
+  '/:id/accept',
+  asyncHandler(customerQuotationsController.accept.bind(customerQuotationsController)),
+);
+
+customerQuotationsRouter.post(
+  '/:id/reject',
+  asyncHandler(customerQuotationsController.reject.bind(customerQuotationsController)),
+);
+
+customerQuotationsRouter.post(
+  '/:id/request-clarification',
+  asyncHandler(
+    customerQuotationsController.requestClarification.bind(customerQuotationsController),
+  ),
+);

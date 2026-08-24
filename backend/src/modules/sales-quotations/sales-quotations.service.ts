@@ -7,6 +7,10 @@ import type {
   SalesQuotationPricingPayload,
 } from './sales-quotations.validation.js';
 import type { PoolClient } from 'pg';
+import {
+  pricingLookupService,
+  type QuotationPricingItemRow,
+} from '../pricing/pricing-lookup.service.js';
 
 const pageSize = 10;
 const pickupLocations = [
@@ -30,6 +34,8 @@ interface QuotationRow {
   reference: string | null;
   customer_account_id: string;
   customer_company_name: string;
+  pricing_city_id: string | null;
+  pricing_city_name: string | null;
   status: QuotationStatus;
   fulfilment_type: 'PICKUP' | 'DELIVERY';
   pickup_location_id: string | null;
@@ -52,26 +58,10 @@ interface QuotationRow {
   price_approval_status: ApprovalStatus;
   contact: Record<string, unknown> | null;
   delivery_locations: Array<Record<string, unknown>> | null;
+  contract_id: string | null;
+  contract_reference: string | null;
+  contract_status: string | null;
   item_count?: string;
-}
-
-interface ItemRow {
-  id: string;
-  product_id: string;
-  product_code: string;
-  product_name: string;
-  product_image: string | null;
-  quantity: string;
-  uom: string;
-  packaging_type: string;
-  product_list_price: string | null;
-  product_price: string | null;
-  delivery_list_price: string | null;
-  delivery_price: string | null;
-  customer_rate: string | null;
-  amount: string | null;
-  catalog_list_price: string | null;
-  catalog_delivery_list_price: string | null;
 }
 
 interface EventRow {
@@ -84,20 +74,28 @@ interface EventRow {
   changed_by_customer_user_id: string | null;
   sales_user_name: string | null;
   customer_user_name: string | null;
+  sales_user_role: SalesRole | null;
+  customer_user_role: string | null;
   created_at: string | Date;
 }
 
 const quotationSelect = `
   select quotations.*,
          accounts.company_name as customer_company_name,
+         pricing_cities.name as pricing_city_name,
          registrations.contact,
-         registrations.delivery_locations
+         registrations.delivery_locations,
+         contracts.id as contract_id,
+         contracts.reference as contract_reference,
+         contracts.status as contract_status
   from customer_quotations quotations
   inner join customer_accounts accounts on accounts.id = quotations.customer_account_id
-  inner join registration_drafts registrations on registrations.id = accounts.registration_id`;
+  left join ksa_cities pricing_cities on pricing_cities.id = quotations.pricing_city_id
+  inner join registration_drafts registrations on registrations.id = accounts.registration_id
+  left join contracts on contracts.quotation_id = quotations.id`;
 
 export class SalesQuotationsService {
-  async list(query: ListSalesQuotationsQuery) {
+  async list(query: ListSalesQuotationsQuery, user: SalesUser) {
     const values: unknown[] = [];
     const conditions = [`quotations.status <> 'DRAFT'`];
     const add = (sql: string, value: unknown) => {
@@ -110,6 +108,8 @@ export class SalesQuotationsService {
     if (query.submittedDate) add('quotations.submitted_at::date = ?::date', query.submittedDate);
     if (query.fulfilmentType) add('quotations.fulfilment_type = ?', query.fulfilmentType);
     if (query.status) add('quotations.status = ?', query.status);
+    if (user.role === 'HADER_MANAGER') add('quotations.status = ?', 'PENDING_HADER_APPROVAL');
+    if (user.role === 'PRICE_MANAGER') add('quotations.status = ?', 'PENDING_PRICE_APPROVAL');
 
     const where = conditions.join(' and ');
     const count = await pool.query<{ total: string }>(
@@ -158,39 +158,54 @@ export class SalesQuotationsService {
 
   async getById(id: string, user: SalesUser) {
     const quotation = await this.getQuotation(id);
-    const [items, events] = await Promise.all([this.getItems(id), this.getEvents(id)]);
+    requireQuotationVisibility(quotation, user.role);
+    const [items, events] = await Promise.all([
+      this.getItems(id, quotation.pricing_city_id),
+      this.getEvents(id),
+    ]);
     return this.mapDetails(quotation, items, events, user);
   }
 
   async startReview(id: string, user: SalesUser) {
+    requireSalesRepresentative(user);
     const client = await pool.connect();
     try {
       await client.query('begin');
       const current = await this.lockQuotation(client, id);
-      requireStatus(current, 'PENDING_SALES_REVIEW', 'Quotation is not pending Sales review.');
-      await client.query(
-        `update customer_quotation_items items
-         set product_list_price = products.list_price,
-             product_price = products.list_price,
-             delivery_list_price = case when $2 = 'DELIVERY' then products.delivery_list_price else null end,
-             delivery_price = case when $2 = 'DELIVERY' then products.delivery_list_price else null end,
-             customer_rate = case
-               when products.list_price is null then null
-               when $2 = 'DELIVERY' and products.delivery_list_price is null then null
-               when $2 = 'DELIVERY' then products.list_price + products.delivery_list_price
-               else products.list_price
-             end,
-             amount = case
-               when products.list_price is null then null
-               when $2 = 'DELIVERY' and products.delivery_list_price is null then null
-               when $2 = 'DELIVERY' then round(items.quantity * (products.list_price + products.delivery_list_price), 2)
-               else round(items.quantity * products.list_price, 2)
-             end,
-             updated_at = now()
-         from product_catalog products
-         where items.quotation_id = $1 and products.id = items.product_id`,
-        [id, current.fulfilment_type],
-      );
+      if (!['PENDING_SALES_REVIEW', 'CLARIFICATION_REQUESTED'].includes(current.status)) {
+        throw new AppError(
+          'Quotation is not pending Sales review.',
+          409,
+          'QUOTATION_STATUS_CONFLICT',
+        );
+      }
+      if (current.status === 'PENDING_SALES_REVIEW') {
+        const items = await this.getItemsForUpdate(client, id, current.pricing_city_id);
+        for (const item of items) {
+          const productList = nullableNumber(item.catalog_list_price);
+          const deliveryList =
+            current.fulfilment_type === 'DELIVERY'
+              ? nullableNumber(item.catalog_delivery_list_price)
+              : null;
+          const rate =
+            productList === null ||
+            (current.fulfilment_type === 'DELIVERY' && deliveryList === null)
+              ? null
+              : money(productList + (deliveryList ?? 0));
+          const equivalentTons = requireEquivalentTons(item);
+          const amount = rate === null ? null : money(equivalentTons * rate);
+          await client.query(
+            `update customer_quotation_items
+             set product_list_price = $2, product_price = $2,
+                 delivery_list_price = $3, delivery_price = $3,
+                 customer_rate = $4,
+                 amount = $6,
+                 updated_at = now()
+             where id = $1 and quotation_id = $5`,
+            [item.id, productList, deliveryList, rate, id, amount],
+          );
+        }
+      }
       await client.query(
         `update customer_quotations
          set status = 'UNDER_REVIEW', updated_at = now()
@@ -202,7 +217,9 @@ export class SalesQuotationsService {
         id,
         current.status,
         'UNDER_REVIEW',
-        'SALES_STARTED_REVIEW',
+        current.status === 'CLARIFICATION_REQUESTED'
+          ? 'SALES_RESUMED_AFTER_CLARIFICATION'
+          : 'SALES_STARTED_REVIEW',
         null,
         user.id,
       );
@@ -217,11 +234,19 @@ export class SalesQuotationsService {
   }
 
   async updatePricing(id: string, payload: SalesQuotationPricingPayload, user: SalesUser) {
+    requireSalesRepresentative(user);
     const client = await pool.connect();
     try {
       await client.query('begin');
       const current = await this.lockQuotation(client, id);
       requireStatus(current, 'UNDER_REVIEW', 'Pricing can only be updated while under review.');
+      if (!current.pricing_city_id) {
+        throw new AppError(
+          'Pricing city is not configured for this quotation.',
+          409,
+          'PRICING_CITY_NOT_CONFIGURED',
+        );
+      }
       if (new Date(`${payload.validUntil}T23:59:59Z`).getTime() < Date.now()) {
         throw new AppError(
           'Quotation validity must be today or later.',
@@ -230,7 +255,7 @@ export class SalesQuotationsService {
         );
       }
 
-      const items = await this.getItemsForUpdate(client, id);
+      const items = await this.getItemsForUpdate(client, id, current.pricing_city_id);
       if (items.length !== payload.items.length) {
         throw new AppError(
           'All quotation items must be priced.',
@@ -242,6 +267,8 @@ export class SalesQuotationsService {
       let subtotal = 0;
       let productChanged = false;
       let deliveryChanged = false;
+      let productValueChanged = false;
+      let deliveryValueChanged = false;
       let valuesChanged = false;
 
       for (const item of items) {
@@ -261,14 +288,24 @@ export class SalesQuotationsService {
           (current.fulfilment_type === 'DELIVERY' && deliveryList === null)
         ) {
           throw new AppError(
-            `List pricing is not configured for ${item.product_code}.`,
+            `List pricing is not configured for ${item.product_code} (${current.pricing_city_name ?? 'unmapped city'} · ${item.packaging_type} · ${item.uom}).`,
             409,
             'QUOTATION_LIST_PRICE_NOT_CONFIGURED',
           );
         }
-        const productPrice = money(input.productPrice);
+        const discount = calculateProductDiscount(productList, input.discountMode, input.discountValue);
+        const productPrice = discount
+          ? money(productList - discount.amountPerTon)
+          : money(input.productPrice);
         const deliveryPrice =
           current.fulfilment_type === 'DELIVERY' ? money(input.deliveryPrice ?? -1) : 0;
+        if (productPrice <= 0) {
+          throw new AppError(
+            `Final product price must be greater than zero for ${item.product_code}.`,
+            400,
+            'QUOTATION_PRODUCT_PRICE_INVALID',
+          );
+        }
         if (deliveryPrice < 0) {
           throw new AppError(
             'Delivery price is required for delivery quotations.',
@@ -277,27 +314,40 @@ export class SalesQuotationsService {
           );
         }
         const rate = money(productPrice + deliveryPrice);
-        const amount = money(Number(item.quantity) * rate);
+        const amount = money(requireEquivalentTons(item) * rate);
         subtotal = money(subtotal + amount);
         productChanged ||= !sameMoney(productPrice, productList);
         deliveryChanged ||=
           current.fulfilment_type === 'DELIVERY' && !sameMoney(deliveryPrice, deliveryList ?? 0);
+        const productValueWasChanged = !sameMoney(productPrice, nullableNumber(item.product_price));
+        const discountValueWasChanged =
+          (discount?.mode ?? null) !== item.discount_mode ||
+          !sameMoney(discount?.value ?? 0, nullableNumber(item.discount_value) ?? 0);
+        const deliveryValueWasChanged =
+          current.fulfilment_type === 'DELIVERY' &&
+          !sameMoney(deliveryPrice, nullableNumber(item.delivery_price));
+        productValueChanged ||= productValueWasChanged || discountValueWasChanged;
+        deliveryValueChanged ||= deliveryValueWasChanged;
         valuesChanged ||=
-          !sameMoney(productPrice, nullableNumber(item.product_price)) ||
-          (current.fulfilment_type === 'DELIVERY' &&
-            !sameMoney(deliveryPrice, nullableNumber(item.delivery_price))) ||
+          productValueWasChanged ||
+          discountValueWasChanged ||
+          deliveryValueWasChanged ||
           !sameMoney(amount, nullableNumber(item.amount));
 
         await client.query(
           `update customer_quotation_items
            set product_list_price = $2, product_price = $3,
-               delivery_list_price = $4, delivery_price = $5,
-               customer_rate = $6, amount = $7, updated_at = now()
-           where id = $1 and quotation_id = $8`,
+               discount_mode = $4, discount_value = $5, discount_amount_per_ton = $6,
+               delivery_list_price = $7, delivery_price = $8,
+               customer_rate = $9, amount = $10, updated_at = now()
+           where id = $1 and quotation_id = $11`,
           [
             item.id,
             productList,
             productPrice,
+            discount?.mode ?? null,
+            discount?.value ?? null,
+            discount?.amountPerTon ?? null,
             current.fulfilment_type === 'DELIVERY' ? deliveryList : null,
             current.fulfilment_type === 'DELIVERY' ? deliveryPrice : null,
             rate,
@@ -314,6 +364,16 @@ export class SalesQuotationsService {
         payload.validUntil !== dateOnly(current.valid_until) ||
         payload.paymentTerms !== (current.payment_terms ?? '') ||
         payload.commercialNotes !== (current.commercial_notes ?? '');
+      const haderApprovalStatus = deliveryChanged
+        ? current.hader_approval_status === 'APPROVED' && !deliveryValueChanged
+          ? 'APPROVED'
+          : 'REQUIRED'
+        : 'NOT_REQUIRED';
+      const priceApprovalStatus = productChanged
+        ? current.price_approval_status === 'APPROVED' && !productValueChanged
+          ? 'APPROVED'
+          : 'REQUIRED'
+        : 'NOT_REQUIRED';
 
       await client.query(
         `update customer_quotations
@@ -333,8 +393,8 @@ export class SalesQuotationsService {
           grandTotal,
           productChanged,
           deliveryChanged,
-          deliveryChanged ? 'REQUIRED' : 'NOT_REQUIRED',
-          productChanged ? 'REQUIRED' : 'NOT_REQUIRED',
+          haderApprovalStatus,
+          priceApprovalStatus,
         ],
       );
       if (valuesChanged) {
@@ -359,6 +419,7 @@ export class SalesQuotationsService {
   }
 
   async submitForApproval(id: string, user: SalesUser) {
+    requireSalesRepresentative(user);
     const client = await pool.connect();
     try {
       await client.query('begin');
@@ -484,6 +545,7 @@ export class SalesQuotationsService {
   }
 
   async sendToCustomer(id: string, user: SalesUser) {
+    requireSalesRepresentative(user);
     const client = await pool.connect();
     try {
       await client.query('begin');
@@ -533,11 +595,13 @@ export class SalesQuotationsService {
   private async lockQuotation(client: PoolClient, id: string) {
     const result = await client.query<QuotationRow>(
       `select quotations.*, accounts.company_name as customer_company_name,
+              pricing_cities.name as pricing_city_name,
               registrations.contact, registrations.delivery_locations
        from customer_quotations quotations
        inner join customer_accounts accounts on accounts.id = quotations.customer_account_id
+       left join ksa_cities pricing_cities on pricing_cities.id = quotations.pricing_city_id
        inner join registration_drafts registrations on registrations.id = accounts.registration_id
-       where quotations.id = $1 for update`,
+       where quotations.id = $1 for update of quotations`,
       [id],
     );
     const row = result.rows[0];
@@ -545,19 +609,18 @@ export class SalesQuotationsService {
     return row;
   }
 
-  private async getItems(id: string) {
-    const result = await pool.query<ItemRow>(itemSelect, [id]);
-    return result.rows;
+  private async getItems(id: string, cityId: string | null) {
+    return pricingLookupService.getQuotationItems(id, cityId);
   }
 
-  private async getItemsForUpdate(client: PoolClient, id: string) {
-    const result = await client.query<ItemRow>(`${itemSelect} for update of items`, [id]);
-    return result.rows;
+  private async getItemsForUpdate(client: PoolClient, id: string, cityId: string | null) {
+    return pricingLookupService.getQuotationItems(id, cityId, client, true);
   }
 
   private async getEvents(id: string) {
     const result = await pool.query<EventRow>(
-      `select events.*, sales.name as sales_user_name, customers.name as customer_user_name
+      `select events.*, sales.name as sales_user_name, customers.name as customer_user_name,
+              sales.role as sales_user_role, customers.role as customer_user_role
        from quotation_status_events events
        left join sales_users sales on sales.id = events.changed_by_sales_user_id
        left join customer_users customers on customers.id = events.changed_by_customer_user_id
@@ -569,13 +632,15 @@ export class SalesQuotationsService {
 
   private mapDetails(
     quotation: QuotationRow,
-    items: ItemRow[],
+    items: QuotationPricingItemRow[],
     events: EventRow[],
     user: SalesUser,
   ) {
     const contact = quotation.contact ?? {};
     const destination = resolveDestination(quotation);
+    const submittedBy = events.find((event) => event.action === 'CUSTOMER_SUBMITTED');
     const pricingComplete = Boolean(
+      quotation.pricing_city_id &&
       quotation.valid_until &&
       quotation.payment_terms &&
       items.length > 0 &&
@@ -592,8 +657,12 @@ export class SalesQuotationsService {
         email: stringValue(contact.workEmail) ?? stringValue(contact.email),
         phone: stringValue(contact.phone),
       },
+      submittedBy: submittedBy?.customer_user_name ?? null,
       requestedDate: dateOnly(quotation.requested_date),
       fulfilmentType: quotation.fulfilment_type,
+      pricingCity: quotation.pricing_city_id
+        ? { id: quotation.pricing_city_id, name: quotation.pricing_city_name }
+        : null,
       destination,
       notes: quotation.notes,
       submittedAt: iso(quotation.submitted_at),
@@ -618,15 +687,24 @@ export class SalesQuotationsService {
         productCode: item.product_code,
         productName: item.product_name,
         image: item.product_image,
+        unitWeightKg: Number(item.unit_weight_kg),
+        equivalentTons: Number(item.equivalent_tons),
         quantity: Number(item.quantity),
         uom: item.uom,
         packagingType: item.packaging_type,
         productListPrice: nullableNumber(item.product_list_price ?? item.catalog_list_price),
-        productPrice: nullableNumber(item.product_price),
-        deliveryListPrice: nullableNumber(
-          item.delivery_list_price ?? item.catalog_delivery_list_price,
-        ),
-        deliveryPrice: nullableNumber(item.delivery_price),
+        productPrice: nullableNumber(item.product_price ?? item.catalog_list_price),
+        discountMode: item.discount_mode,
+        discountValue: nullableNumber(item.discount_value),
+        discountAmountPerTon: nullableNumber(item.discount_amount_per_ton),
+        deliveryListPrice:
+          quotation.fulfilment_type === 'DELIVERY'
+            ? nullableNumber(item.delivery_list_price ?? item.catalog_delivery_list_price)
+            : null,
+        deliveryPrice:
+          quotation.fulfilment_type === 'DELIVERY'
+            ? nullableNumber(item.delivery_price ?? item.catalog_delivery_list_price)
+            : null,
         customerRate: nullableNumber(item.customer_rate),
         amount: nullableNumber(item.amount),
       })),
@@ -638,23 +716,22 @@ export class SalesQuotationsService {
         reason: event.reason,
         changedBy: event.sales_user_name ?? event.customer_user_name ?? 'Portal user',
         actorType: event.changed_by_sales_user_id ? 'SALES' : 'CUSTOMER',
+        actorRole: event.sales_user_role ?? event.customer_user_role,
         createdAt: iso(event.created_at),
       })),
+      contract: quotation.contract_id
+        ? {
+            id: quotation.contract_id,
+            reference: quotation.contract_reference,
+            status: quotation.contract_status,
+          }
+        : null,
       allowedActions: allowedActions(quotation, pricingComplete, user.role),
     };
   }
 }
 
 export const salesQuotationsService = new SalesQuotationsService();
-
-const itemSelect = `
-  select items.*, products.product_code, products.product_name, products.image as product_image,
-         products.list_price as catalog_list_price,
-         products.delivery_list_price as catalog_delivery_list_price
-  from customer_quotation_items items
-  inner join product_catalog products on products.id = items.product_id
-  where items.quotation_id = $1
-  order by items.display_order asc`;
 
 async function insertEvent(
   client: PoolClient,
@@ -688,23 +765,57 @@ function activeApproval(quotation: QuotationRow, role: SalesRole) {
 }
 
 function allowedActions(quotation: QuotationRow, pricingComplete: boolean, role: SalesRole) {
+  const canPrepareCommercialQuote = role === 'SALES_REP';
   return {
-    startReview: quotation.status === 'PENDING_SALES_REVIEW',
-    editPricing: quotation.status === 'UNDER_REVIEW',
+    startReview:
+      canPrepareCommercialQuote &&
+      ['PENDING_SALES_REVIEW', 'CLARIFICATION_REQUESTED'].includes(quotation.status),
+    editPricing: canPrepareCommercialQuote && quotation.status === 'UNDER_REVIEW',
     submitApproval:
+      canPrepareCommercialQuote &&
       quotation.status === 'UNDER_REVIEW' &&
       pricingComplete &&
       (quotation.product_price_changed || quotation.delivery_price_changed) &&
       !approvalsComplete(quotation),
     sendToCustomer:
-      quotation.status === 'UNDER_REVIEW' && pricingComplete && approvalsComplete(quotation),
+      canPrepareCommercialQuote &&
+      quotation.status === 'UNDER_REVIEW' &&
+      pricingComplete &&
+      approvalsComplete(quotation),
     approve:
       (quotation.status === 'PENDING_HADER_APPROVAL' && role === 'HADER_MANAGER') ||
       (quotation.status === 'PENDING_PRICE_APPROVAL' && role === 'PRICE_MANAGER'),
     reject:
       (quotation.status === 'PENDING_HADER_APPROVAL' && role === 'HADER_MANAGER') ||
       (quotation.status === 'PENDING_PRICE_APPROVAL' && role === 'PRICE_MANAGER'),
+    createContract:
+      canPrepareCommercialQuote && quotation.status === 'ACCEPTED' && !quotation.contract_id,
   };
+}
+
+function requireSalesRepresentative(user: SalesUser) {
+  if (user.role !== 'SALES_REP') {
+    throw new AppError(
+      'Only a Sales representative can prepare and send commercial quotations.',
+      403,
+      'QUOTATION_COMMERCIAL_ACTION_FORBIDDEN',
+    );
+  }
+}
+
+function requireQuotationVisibility(quotation: QuotationRow, role: SalesRole) {
+  if (role === 'SALES_REP') return;
+  const canReviewDeliveryException =
+    role === 'HADER_MANAGER' && quotation.status === 'PENDING_HADER_APPROVAL';
+  const canReviewProductException =
+    role === 'PRICE_MANAGER' && quotation.status === 'PENDING_PRICE_APPROVAL';
+  if (!canReviewDeliveryException && !canReviewProductException) {
+    throw new AppError(
+      'This quotation is not assigned to your approval stage.',
+      403,
+      'QUOTATION_ACCESS_FORBIDDEN',
+    );
+  }
 }
 
 function approvalsComplete(quotation: QuotationRow) {
@@ -771,6 +882,40 @@ function nullableNumber(value: string | number | null | undefined) {
 }
 function money(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+function requireEquivalentTons(item: { equivalent_tons?: string | number | null; product_code: string }) {
+  const equivalentTons = nullableNumber(item.equivalent_tons);
+  if (equivalentTons === null || equivalentTons <= 0) {
+    throw new AppError(
+      `Product unit weight is not configured for ${item.product_code}.`,
+      409,
+      'PRODUCT_UNIT_WEIGHT_NOT_CONFIGURED',
+    );
+  }
+  return equivalentTons;
+}
+function calculateProductDiscount(
+  productListPrice: number,
+  mode: 'PERCENT' | 'SAR_PER_TON' | null | undefined,
+  value: number | null | undefined,
+) {
+  if (!mode || value === null || value === undefined || Number(value) === 0) return null;
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue < 0) {
+    throw new AppError('Discount must be zero or greater.', 400, 'QUOTATION_DISCOUNT_INVALID');
+  }
+
+  const amountPerTon =
+    mode === 'PERCENT' ? money((productListPrice * numericValue) / 100) : money(numericValue);
+  if (amountPerTon < 0 || amountPerTon >= productListPrice) {
+    throw new AppError(
+      'Discount must keep the final product price greater than zero.',
+      400,
+      'QUOTATION_DISCOUNT_INVALID',
+    );
+  }
+
+  return { mode, value: numericValue, amountPerTon };
 }
 function sameMoney(left: number, right: number | null) {
   return right !== null && Math.abs(left - right) < 0.005;

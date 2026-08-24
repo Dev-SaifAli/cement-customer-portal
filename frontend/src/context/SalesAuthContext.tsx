@@ -18,7 +18,7 @@ import {
 interface SalesAuthContextValue {
   user: SalesUser | null;
   loading: boolean;
-  login: (payload: { email: string; password: string }) => Promise<void>;
+  login: (payload: { email: string; password: string }) => Promise<SalesUser>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -52,6 +52,7 @@ export function SalesAuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (payload: { email: string; password: string }) => {
     const loggedInUser = await salesLogin(payload);
     setUser(loggedInUser);
+    return loggedInUser;
   }, []);
 
   const logout = useCallback(async () => {

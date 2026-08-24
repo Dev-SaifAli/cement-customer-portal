@@ -1190,6 +1190,7 @@ function fromQuotation(quotation: CustomerQuotation): FormState {
       product: {
         ...item.product,
         displayOrder: 0,
+        priceDisplay: 'PRICE_ON_REQUEST',
         isActive: true,
         createdAt: quotation.createdAt,
         updatedAt: quotation.updatedAt,

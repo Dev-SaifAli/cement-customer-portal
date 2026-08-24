@@ -14,7 +14,7 @@ export interface SalesUser {
   name: string;
   email: string;
   isActive: boolean;
-  role: 'SALES_REP' | 'HADER_MANAGER' | 'PRICE_MANAGER';
+  role: 'SALES_REP' | 'HADER_MANAGER' | 'PRICE_MANAGER' | 'PRICING_ADMIN';
 }
 
 export type SalesQuotationStatus =
@@ -52,8 +52,10 @@ export interface SalesQuotationDetails {
     email: string | null;
     phone: string | null;
   };
+  submittedBy: string | null;
   requestedDate: string | null;
   fulfilmentType: 'PICKUP' | 'DELIVERY';
+  pricingCity: { id: string; name: string | null } | null;
   destination: {
     id?: string;
     name?: string;
@@ -83,11 +85,16 @@ export interface SalesQuotationDetails {
     productCode: string;
     productName: string;
     image: string | null;
+    unitWeightKg: number;
+    equivalentTons: number;
     quantity: number;
     uom: string;
     packagingType: string;
     productListPrice: number | null;
     productPrice: number | null;
+    discountMode: 'PERCENT' | 'SAR_PER_TON' | null;
+    discountValue: number | null;
+    discountAmountPerTon: number | null;
     deliveryListPrice: number | null;
     deliveryPrice: number | null;
     customerRate: number | null;
@@ -101,8 +108,14 @@ export interface SalesQuotationDetails {
     reason: string | null;
     changedBy: string;
     actorType: 'SALES' | 'CUSTOMER';
+    actorRole: string | null;
     createdAt: string;
   }>;
+  contract: {
+    id: string;
+    reference: string | null;
+    status: string | null;
+  } | null;
   allowedActions: {
     startReview: boolean;
     editPricing: boolean;
@@ -110,7 +123,29 @@ export interface SalesQuotationDetails {
     sendToCustomer: boolean;
     approve: boolean;
     reject: boolean;
+    createContract: boolean;
   };
+}
+
+export interface SalesContractDetails {
+  id: string;
+  reference: string | null;
+  sourceQuotation: {
+    id: string;
+    reference: string | null;
+    acceptedAt: string | null;
+  } | null;
+  customerAccountId: string;
+  customerCompanyName: string | null;
+  status: string;
+  startDate: string;
+  endDate: string;
+  fulfilment: 'PICKUP' | 'DELIVERY';
+  deliveryCity: string | null;
+  totalQuantityTons: number | null;
+  grandTotal: number | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface SalesApplicationSummary {
@@ -398,7 +433,13 @@ export const startSalesQuotationReview = (id: string) => quotationAction(id, 'st
 export const updateSalesQuotationPricing = (
   id: string,
   payload: {
-    items: Array<{ id: string; productPrice: number; deliveryPrice?: number }>;
+    items: Array<{
+      id: string;
+      productPrice: number;
+      deliveryPrice?: number;
+      discountMode?: 'PERCENT' | 'SAR_PER_TON' | null;
+      discountValue?: number | null;
+    }>;
     validUntil: string;
     paymentTerms: string;
     commercialNotes: string;
@@ -409,3 +450,23 @@ export const approveSalesQuotation = (id: string) => quotationAction(id, 'approv
 export const rejectSalesQuotation = (id: string, reason: string) =>
   quotationAction(id, 'reject', { reason });
 export const sendSalesQuotationToCustomer = (id: string) => quotationAction(id, 'send-to-customer');
+
+export const createContractFromSalesQuotation = async (
+  id: string,
+  payload: {
+    startDate: string;
+    endDate: string;
+    totalQuantityTons: number;
+    internalNotes?: string;
+  },
+) => {
+  const response = await requestSales<{
+    success: boolean;
+    data: { contract: SalesContractDetails };
+  }>(`/sales/quotations/${id}/contract`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return response.data.contract;
+};

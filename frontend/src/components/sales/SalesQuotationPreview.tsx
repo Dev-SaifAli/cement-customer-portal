@@ -28,17 +28,17 @@ export function SalesQuotationPreview({
       });
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const width = pdf.internal.pageSize.getWidth();
-      const height = (canvas.height * width) / canvas.width;
-      pdf.addImage(
-        canvas.toDataURL('image/jpeg', 0.96),
-        'JPEG',
-        0,
-        0,
-        width,
-        height,
-        undefined,
-        'FAST',
-      );
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imageHeight = (canvas.height * width) / canvas.width;
+      const image = canvas.toDataURL('image/jpeg', 0.96);
+      let offset = 0;
+      let page = 0;
+      while (offset < imageHeight) {
+        if (page > 0) pdf.addPage();
+        pdf.addImage(image, 'JPEG', 0, -offset, width, imageHeight, undefined, 'FAST');
+        offset += pageHeight;
+        page += 1;
+      }
       pdf.save(`${quotation.reference ?? 'QUOTATION'}.pdf`);
     } finally {
       setDownloading(false);
@@ -144,7 +144,8 @@ export function SalesQuotationPreview({
                     <th className={th}>Item Name</th>
                     <th className={th}>Qty</th>
                     <th className={th}>UOM</th>
-                    <th className={th}>Unit Rate</th>
+                    <th className={th}>Equivalent</th>
+                    <th className={th}>Unit Rate / TON</th>
                     <th className={th}>Amount</th>
                   </tr>
                 </thead>
@@ -156,6 +157,9 @@ export function SalesQuotationPreview({
                       <td className={td}>{item.productName}</td>
                       <td className={`${td} text-right`}>{formatQuantity(item.quantity)}</td>
                       <td className={`${td} text-center`}>{item.uom}</td>
+                      <td className={`${td} text-right`}>
+                        {formatQuantity(item.equivalentTons)} TON
+                      </td>
                       <td className={`${td} text-right`}>{money(item.customerRate)}</td>
                       <td className={`${td} text-right font-bold`}>{money(item.amount)}</td>
                     </tr>
@@ -184,7 +188,7 @@ export function SalesQuotationPreview({
             <footer className="mt-auto flex justify-between border-t border-[#d9d5de] pt-3 text-[8px] text-slate-500">
               <span>AlSafwa Cement Customer Portal</span>
               <span>Generated on {formatDate(new Date().toISOString())}</span>
-              <span>Page 1</span>
+              <span>Commercial quotation</span>
             </footer>
           </article>
         </div>

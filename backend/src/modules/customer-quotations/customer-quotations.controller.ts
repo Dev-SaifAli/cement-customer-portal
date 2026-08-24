@@ -4,6 +4,7 @@ import type { CustomerAuthenticatedRequest } from '../customer-auth/customer-aut
 import { customerQuotationsService } from './customer-quotations.service.js';
 import {
   customerQuotationIdSchema,
+  customerQuotationDecisionMessageSchema,
   customerQuotationPayloadSchema,
   listCustomerQuotationsSchema,
 } from './customer-quotations.validation.js';
@@ -55,6 +56,36 @@ export class CustomerQuotationsController {
     const customerUser = getCustomerUser(request);
     const quotationId = customerQuotationIdSchema.parse(request.params.id);
     const quotation = await customerQuotationsService.submit(customerUser, quotationId);
+
+    response.status(200).json({ success: true, data: { quotation } });
+  }
+
+  async accept(request: CustomerAuthenticatedRequest, response: Response) {
+    const customerUser = getCustomerUser(request);
+    const quotationId = customerQuotationIdSchema.parse(request.params.id);
+    const quotation = await customerQuotationsService.accept(customerUser, quotationId);
+
+    response.status(200).json({ success: true, data: { quotation } });
+  }
+
+  async reject(request: CustomerAuthenticatedRequest, response: Response) {
+    const customerUser = getCustomerUser(request);
+    const quotationId = customerQuotationIdSchema.parse(request.params.id);
+    const { reason } = customerQuotationDecisionMessageSchema.parse(request.body);
+    const quotation = await customerQuotationsService.reject(customerUser, quotationId, reason);
+
+    response.status(200).json({ success: true, data: { quotation } });
+  }
+
+  async requestClarification(request: CustomerAuthenticatedRequest, response: Response) {
+    const customerUser = getCustomerUser(request);
+    const quotationId = customerQuotationIdSchema.parse(request.params.id);
+    const { reason } = customerQuotationDecisionMessageSchema.parse(request.body);
+    const quotation = await customerQuotationsService.requestClarification(
+      customerUser,
+      quotationId,
+      reason,
+    );
 
     response.status(200).json({ success: true, data: { quotation } });
   }

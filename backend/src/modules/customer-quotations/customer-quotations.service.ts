@@ -23,6 +23,7 @@ const pickupLocations = [
 interface QuotationRow {
   id: string;
   customer_account_id: string;
+  pricing_city_id: string | null;
   reference: string | null;
   status: QuotationStatus;
   fulfilment_type: FulfilmentType;
@@ -33,6 +34,13 @@ interface QuotationRow {
   submitted_at: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  valid_until: Date | string | null;
+  payment_terms: string | null;
+  commercial_notes: string | null;
+  subtotal: string | null;
+  vat_rate: string | null;
+  vat_amount: string | null;
+  grand_total: string | null;
   item_count?: string;
 }
 
@@ -65,6 +73,11 @@ interface QuotationItemRow {
   short_description: string | null;
   image: string | null;
   category: string;
+  unit_weight_kg: string;
+  equivalent_tons: string;
+  discount_amount_per_ton: string | null;
+  customer_rate: string | null;
+  amount: string | null;
 }
 
 type FulfilmentType = 'PICKUP' | 'DELIVERY';
@@ -171,7 +184,7 @@ export class CustomerQuotationsService {
 
   async create(customerUser: CustomerUser, payload: CustomerQuotationPayload) {
     requireWritableRole(customerUser);
-    await this.validateRelatedData(customerUser, payload);
+    const { pricingCityKey } = await this.validateRelatedData(customerUser, payload);
 
     const client = await pool.connect();
 
@@ -186,9 +199,11 @@ export class CustomerQuotationsService {
            pickup_location_id,
            ship_to_location_id,
            requested_date,
-           notes
+           notes,
+           pricing_city_id
          )
-         values ($1, $2, $3, $4, $5, $6, $7)
+         values ($1, $2, $3, $4, $5, $6, $7,
+           (select id from ksa_cities where name_key = $8 and is_active = true limit 1))
          returning *`,
         [
           customerUser.account.id,
@@ -198,6 +213,7 @@ export class CustomerQuotationsService {
           payload.shipToLocationId ?? null,
           payload.requestedDate ?? null,
           payload.notes ?? null,
+          pricingCityKey,
         ],
       );
 
@@ -220,7 +236,7 @@ export class CustomerQuotationsService {
 
   async update(customerUser: CustomerUser, quotationId: string, payload: CustomerQuotationPayload) {
     requireWritableRole(customerUser);
-    await this.validateRelatedData(customerUser, payload);
+    const { pricingCityKey } = await this.validateRelatedData(customerUser, payload);
 
     const client = await pool.connect();
 
@@ -238,6 +254,9 @@ export class CustomerQuotationsService {
              ship_to_location_id = $5,
              requested_date = $6,
              notes = $7,
+             pricing_city_id = (
+               select id from ksa_cities where name_key = $8 and is_active = true limit 1
+             ),
              updated_at = now()
          where id = $2
            and customer_account_id = $1
@@ -250,6 +269,7 @@ export class CustomerQuotationsService {
           payload.shipToLocationId ?? null,
           payload.requestedDate ?? null,
           payload.notes ?? null,
+          pricingCityKey,
         ],
       );
 
@@ -336,6 +356,30 @@ export class CustomerQuotationsService {
     }
   }
 
+  async accept(customerUser: CustomerUser, quotationId: string) {
+    return this.recordCustomerDecision(customerUser, quotationId, 'ACCEPTED', 'CUSTOMER_ACCEPTED');
+  }
+
+  async reject(customerUser: CustomerUser, quotationId: string, reason: string) {
+    return this.recordCustomerDecision(
+      customerUser,
+      quotationId,
+      'REJECTED',
+      'CUSTOMER_REJECTED',
+      reason,
+    );
+  }
+
+  async requestClarification(customerUser: CustomerUser, quotationId: string, reason: string) {
+    return this.recordCustomerDecision(
+      customerUser,
+      quotationId,
+      'CLARIFICATION_REQUESTED',
+      'CUSTOMER_CLARIFICATION_REQUESTED',
+      reason,
+    );
+  }
+
   async getById(customerUser: CustomerUser, quotationId: string) {
     const result = await pool.query<QuotationRow>(
       `select *
@@ -358,6 +402,7 @@ export class CustomerQuotationsService {
   }
 
   private async validateRelatedData(customerUser: CustomerUser, payload: CustomerQuotationPayload) {
+    let pricingCity: string;
     if (
       payload.fulfilmentType === 'PICKUP' &&
       !pickupLocations.some((location) => location.id === payload.pickupLocationId)
@@ -366,8 +411,16 @@ export class CustomerQuotationsService {
     }
 
     const locations = await customerLocationsService.listLocations(customerUser);
-    if (!locations.some((location) => location.id === payload.shipToLocationId)) {
-      throw new AppError('Ship-to location was not found.', 400, 'SHIP_TO_LOCATION_NOT_FOUND');
+    if (payload.fulfilmentType === 'PICKUP') {
+      pricingCity = pickupLocations.find(
+        (location) => location.id === payload.pickupLocationId,
+      )!.city;
+    } else {
+      const shipTo = locations.find((location) => location.id === payload.shipToLocationId);
+      if (!shipTo) {
+        throw new AppError('Ship-to location was not found.', 400, 'SHIP_TO_LOCATION_NOT_FOUND');
+      }
+      pricingCity = shipTo.city;
     }
 
     const productIds = Array.from(new Set(payload.items.map((item) => item.productId)));
@@ -398,6 +451,53 @@ export class CustomerQuotationsService {
         );
       }
     });
+
+    return { pricingCityKey: normalizeCity(pricingCity) };
+  }
+
+  private async recordCustomerDecision(
+    customerUser: CustomerUser,
+    quotationId: string,
+    newStatus: Extract<QuotationStatus, 'ACCEPTED' | 'REJECTED' | 'CLARIFICATION_REQUESTED'>,
+    action: string,
+    reason: string | null = null,
+  ) {
+    requireQuotationDecisionRole(customerUser);
+    const client = await pool.connect();
+
+    try {
+      await client.query('begin');
+      const current = await this.getScopedQuotationForUpdate(client, customerUser, quotationId);
+      if (current.status !== 'READY_FOR_CUSTOMER') {
+        throw new AppError(
+          'This quotation is no longer awaiting your decision.',
+          409,
+          'CUSTOMER_QUOTATION_DECISION_CONFLICT',
+        );
+      }
+
+      await client.query(
+        `update customer_quotations
+         set status = $3, updated_at = now()
+         where customer_account_id = $1 and id = $2`,
+        [customerUser.account.id, quotationId, newStatus],
+      );
+      await client.query(
+        `insert into quotation_status_events (
+           quotation_id, previous_status, new_status, action, reason,
+           changed_by_customer_user_id
+         ) values ($1, 'READY_FOR_CUSTOMER', $2, $3, $4, $5)`,
+        [quotationId, newStatus, action, reason, customerUser.id],
+      );
+      await client.query('commit');
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    return this.getById(customerUser, quotationId);
   }
 
   private async replaceItems(
@@ -485,7 +585,10 @@ export class CustomerQuotationsService {
          product_catalog.description,
          product_catalog.short_description,
          product_catalog.image,
-         product_catalog.category
+         product_catalog.category,
+         product_catalog.unit_weight_kg,
+         round((customer_quotation_items.quantity * product_catalog.unit_weight_kg) / 1000, 6)
+           as equivalent_tons
        from customer_quotation_items
        inner join product_catalog
          on product_catalog.id = customer_quotation_items.product_id
@@ -519,6 +622,16 @@ function requireWritableRole(customerUser: CustomerUser) {
   }
 }
 
+function requireQuotationDecisionRole(customerUser: CustomerUser) {
+  if (customerUser.role !== 'CUSTOMER_ADMIN') {
+    throw new AppError(
+      'Only a Customer Administrator can approve quotation decisions.',
+      403,
+      'CUSTOMER_QUOTATION_DECISION_FORBIDDEN',
+    );
+  }
+}
+
 function quotationNotFoundError() {
   return new AppError('Quotation was not found.', 404, 'CUSTOMER_QUOTATION_NOT_FOUND');
 }
@@ -528,6 +641,12 @@ function mapQuotation(
   items: QuotationItemRow[],
   locations: Awaited<ReturnType<typeof customerLocationsService.listLocations>>,
 ) {
+  const commercialTermsVisible = [
+    'READY_FOR_CUSTOMER',
+    'ACCEPTED',
+    'REJECTED',
+    'CLARIFICATION_REQUESTED',
+  ].includes(quotation.status);
   const shipToLocation = locations.find(
     (location) => location.id === quotation.ship_to_location_id,
   );
@@ -548,6 +667,14 @@ function mapQuotation(
     submittedAt: quotation.submitted_at ? dateTime(quotation.submitted_at) : null,
     createdAt: dateTime(quotation.created_at),
     updatedAt: dateTime(quotation.updated_at),
+    validUntil:
+      commercialTermsVisible && quotation.valid_until ? dateOnly(quotation.valid_until) : null,
+    paymentTerms: commercialTermsVisible ? quotation.payment_terms : null,
+    commercialNotes: commercialTermsVisible ? quotation.commercial_notes : null,
+    subtotal: commercialTermsVisible ? nullableNumber(quotation.subtotal) : null,
+    vatRate: commercialTermsVisible ? nullableNumber(quotation.vat_rate) : null,
+    vatAmount: commercialTermsVisible ? nullableNumber(quotation.vat_amount) : null,
+    grandTotal: commercialTermsVisible ? nullableNumber(quotation.grand_total) : null,
     items: items.map((item) => ({
       id: item.id,
       productId: item.product_id,
@@ -565,9 +692,17 @@ function mapQuotation(
       packagingType: item.packaging_type,
       uom: item.uom,
       quantity: Number(item.quantity),
+      unitWeightKg: Number(item.unit_weight_kg),
+      equivalentTons: Number(item.equivalent_tons),
       palletRequired: item.pallet_required,
       palletType: item.pallet_type,
       palletQuantity: item.pallet_quantity,
+      customerRate: commercialTermsVisible ? nullableNumber(item.customer_rate) : null,
+      amount: commercialTermsVisible ? nullableNumber(item.amount) : null,
+      commercialDiscountApplied:
+        commercialTermsVisible && nullableNumber(item.discount_amount_per_ton) !== null
+          ? (nullableNumber(item.discount_amount_per_ton) ?? 0) > 0
+          : false,
     })),
   };
 }
@@ -603,4 +738,12 @@ function dateTime(value: Date | string) {
 
 function dateOnly(value: Date | string) {
   return new Date(String(value)).toISOString().slice(0, 10);
+}
+
+function normalizeCity(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function nullableNumber(value: string | null) {
+  return value === null ? null : Number(value);
 }
