@@ -114,19 +114,22 @@ export class CustomerQuotationsService {
 
     try {
       await client.query('begin');
+      const reference = await this.nextReference(client);
       const result = await client.query<QuotationRow>(
         `insert into customer_quotations (
            customer_account_id,
+           reference,
            fulfilment_type,
            pickup_location_id,
            ship_to_location_id,
            requested_date,
            notes
          )
-         values ($1, $2, $3, $4, $5, $6)
+         values ($1, $2, $3, $4, $5, $6, $7)
          returning *`,
         [
           customerUser.account.id,
+          reference,
           payload.fulfilmentType,
           payload.pickupLocationId ?? null,
           payload.shipToLocationId ?? null,
@@ -230,7 +233,7 @@ export class CustomerQuotationsService {
         throw new AppError('At least one product is required.', 400, 'QUOTATION_ITEMS_REQUIRED');
       }
 
-      const reference = await this.nextReference(client);
+      const reference = current.reference ?? (await this.nextReference(client));
       const result = await client.query<QuotationRow>(
         `update customer_quotations
          set status = 'PENDING_SALES_REVIEW',

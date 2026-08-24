@@ -22,6 +22,7 @@ export function CustomerRoutes() {
             <Route path="products" element={<CustomerProducts />} />
             <Route path="products/:id" element={<CustomerProductDetails />} />
             <Route path="quotations/new" element={<CustomerQuotationNew />} />
+            <Route path="quotations/:id" element={<CustomerQuotationNew />} />
             <Route path="users" element={<CustomerUsers />} />
           </Route>
         </Route>
