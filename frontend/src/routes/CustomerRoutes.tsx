@@ -1,5 +1,7 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { CustomerAuthProvider, useCustomerAuth } from '../context/CustomerAuthContext';
+import { CustomerContractDetailsPage } from '../pages/customer/CustomerContractDetails';
+import { CustomerContracts } from '../pages/customer/CustomerContracts';
 import { CustomerLayout } from '../pages/customer/CustomerLayout';
 import { CustomerLanding } from '../pages/customer/CustomerLanding';
 import { CustomerLocations } from '../pages/customer/CustomerLocations';
@@ -26,6 +28,8 @@ export function CustomerRoutes() {
             <Route path="quotations" element={<CustomerQuotations />} />
             <Route path="quotations/new" element={<CustomerQuotationNew />} />
             <Route path="quotations/:id" element={<CustomerQuotationRoute />} />
+            <Route path="contracts" element={<CustomerContracts />} />
+            <Route path="contracts/:id" element={<CustomerContractDetailsPage />} />
             <Route path="users" element={<CustomerUsers />} />
           </Route>
         </Route>

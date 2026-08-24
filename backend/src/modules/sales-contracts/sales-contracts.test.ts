@@ -260,7 +260,12 @@ describe('sales contracts API', () => {
       .set('Authorization', authHeader());
 
     expect(response.status).toBe(200);
-    expect(clientQuery.mock.calls[3]?.[1]).toEqual([contractId, 'CT-2026-000001', 'ACTIVE']);
+    expect(clientQuery.mock.calls[3]?.[1]).toEqual([
+      contractId,
+      'CT-2026-000001',
+      'ACTIVE',
+      salesUserId,
+    ]);
     expect(clientQuery.mock.calls[4]?.[1]).toEqual([
       contractId,
       'DRAFT',
@@ -296,6 +301,7 @@ describe('sales contracts API', () => {
       contractId,
       'CT-2026-000001',
       'PENDING_SALES_REVIEW',
+      salesUserId,
     ]);
     expect(clientQuery.mock.calls[4]?.[1]).toEqual([
       contractId,
