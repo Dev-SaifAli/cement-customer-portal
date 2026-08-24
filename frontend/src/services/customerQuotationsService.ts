@@ -8,6 +8,8 @@ export type QuotationStatus =
   | 'DRAFT'
   | 'PENDING_SALES_REVIEW'
   | 'UNDER_REVIEW'
+  | 'PENDING_HADER_APPROVAL'
+  | 'PENDING_PRICE_APPROVAL'
   | 'READY_FOR_CUSTOMER'
   | 'ACCEPTED'
   | 'REJECTED'

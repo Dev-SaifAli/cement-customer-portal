@@ -13,6 +13,7 @@ import { registrationRouter } from '../modules/registrations/registration.routes
 import { salesApplicationRouter } from '../modules/sales-applications/sales-application.routes.js';
 import { salesAuthRouter } from '../modules/sales-auth/sales-auth.routes.js';
 import { salesContractsRouter } from '../modules/sales-contracts/sales-contracts.routes.js';
+import { salesQuotationsRouter } from '../modules/sales-quotations/sales-quotations.routes.js';
 
 export const v1Router = Router();
 v1Router.use('/applications', applicationRouter);
@@ -29,3 +30,4 @@ v1Router.use('/registrations', registrationRouter);
 v1Router.use('/sales/applications', salesApplicationRouter);
 v1Router.use('/sales/auth', salesAuthRouter);
 v1Router.use('/sales/contracts', salesContractsRouter);
+v1Router.use('/sales/quotations', salesQuotationsRouter);

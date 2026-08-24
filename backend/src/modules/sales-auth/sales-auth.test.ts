@@ -24,6 +24,7 @@ const activeSalesUser = async () => ({
   email: 'sales@example.com',
   password_hash: await bcrypt.hash('correct-password', 4),
   is_active: true,
+  role: 'SALES_REP',
 });
 
 function createValidCustomerToken() {
@@ -73,6 +74,7 @@ describe('sales authentication API', () => {
           name: 'Sales Reviewer',
           email: 'sales@example.com',
           isActive: true,
+          role: 'SALES_REP',
         },
       },
     });
@@ -170,6 +172,7 @@ describe('sales authentication API', () => {
           name: 'Sales Reviewer',
           email: 'sales@example.com',
           isActive: true,
+          role: 'SALES_REP',
         },
       },
     });

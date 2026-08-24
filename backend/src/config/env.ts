@@ -32,6 +32,7 @@ const schema = z
     PG_PASSWORD: z.string().default(''),
     PG_SSL: booleanFromString.default(false),
     PG_POOL_MAX: z.coerce.number().int().positive().default(10),
+    QUOTATION_VAT_RATE: z.coerce.number().min(0).max(1).default(0.15),
     JWT_SECRET: z.string().min(32).optional(),
     JWT_EXPIRES_IN: z.string().default('1h'),
     SESSION_SECRET: z.string().min(32).optional(),

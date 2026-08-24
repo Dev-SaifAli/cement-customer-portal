@@ -38,7 +38,7 @@ export class SalesAuthService {
 
   private async findSalesUserByEmail(email: string): Promise<SalesUserRecord | null> {
     const result = await pool.query(
-      `select id, name, email, password_hash, is_active
+      `select id, name, email, password_hash, is_active, role
        from sales_users
        where email = $1
        limit 1`,
@@ -50,7 +50,7 @@ export class SalesAuthService {
 
   private async findSalesUserById(id: string): Promise<SalesUserRecord | null> {
     const result = await pool.query(
-      `select id, name, email, password_hash, is_active
+      `select id, name, email, password_hash, is_active, role
        from sales_users
        where id = $1
        limit 1`,
@@ -69,6 +69,7 @@ interface SalesUserRow {
   email: string;
   password_hash: string;
   is_active: boolean;
+  role?: SalesUser['role'];
 }
 
 function mapSalesUserRecord(row: SalesUserRow): SalesUserRecord {
@@ -78,6 +79,7 @@ function mapSalesUserRecord(row: SalesUserRow): SalesUserRecord {
     email: row.email,
     passwordHash: row.password_hash,
     isActive: row.is_active,
+    role: row.role ?? 'SALES_REP',
   };
 }
 
@@ -87,5 +89,6 @@ function toSafeSalesUser(user: SalesUserRecord): SalesUser {
     name: user.name,
     email: user.email,
     isActive: user.isActive,
+    role: user.role,
   };
 }
