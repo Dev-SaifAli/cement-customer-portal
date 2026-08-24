@@ -126,6 +126,58 @@ html[data-customer-theme='dark'] .customer-portal input[type='date']::-webkit-ca
 .customer-portal thead { background: var(--customer-surface-secondary); }
 .customer-portal :focus-visible { outline: 2px solid var(--customer-primary); outline-offset: 2px; }
 
+.customer-portal .customer-quotation-row {
+  background: var(--customer-surface);
+  border-color: var(--customer-border);
+  color: var(--customer-text);
+}
+.customer-portal .customer-quotation-row:hover {
+  background: var(--customer-surface-secondary);
+}
+
+/* Normalize light-only Tailwind hover utilities across existing Customer pages. */
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-white']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-slate-50']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-slate-100']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-slate-200']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-[#f8fafc]']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-[#faf9fb]']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-[#fdfafd]']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-[#fdfbfd]']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-[#f6f2fa]']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-[#f4edf7]']:hover {
+  background-color: var(--customer-surface-secondary) !important;
+}
+
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-red-50']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-red-100']:hover {
+  background-color: rgb(180 35 24 / 0.16) !important;
+}
+
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-emerald-50']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-emerald-100']:hover {
+  background-color: rgb(15 139 95 / 0.16) !important;
+}
+
+html[data-customer-theme='dark'] .customer-portal [class~='hover:text-slate-700']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:text-slate-800']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:text-slate-900']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:text-slate-950']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:text-[#1a1b23]']:hover {
+  color: var(--customer-text) !important;
+}
+
+html[data-customer-theme='dark'] .customer-portal [class~='hover:text-[#54247a]']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:text-[#472066]']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:text-[#7f1d73]']:hover {
+  color: var(--customer-primary-hover) !important;
+}
+
+html[data-customer-theme='dark'] .customer-portal [class~='hover:border-[#54247a]']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:border-[#decbe5]']:hover {
+  border-color: var(--customer-primary) !important;
+}
+
 /* Generated quotation/PDF pages intentionally remain paper-white. */
 html[data-customer-theme='dark'] .customer-portal .quotation-document,
 html[data-customer-theme='dark'] .customer-portal .quotation-document * {

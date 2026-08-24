@@ -374,7 +374,7 @@ function QuotationRow({
   selected: boolean;
 }) {
   return (
-    <tr className="border-b border-[#e3e1e8] text-[#1a1b23] transition last:border-b-0 hover:bg-[#faf9fb]">
+    <tr className="customer-quotation-row border-b transition last:border-b-0">
       <td className="px-4 py-3 text-center">
         <input
           type="checkbox"
