@@ -56,6 +56,7 @@ export function SalesQuotationDetailsPage() {
     startDate: today(),
     endDate: today(),
     totalQuantityTons: '',
+    pickupLocationId: '',
     internalNotes: '',
   });
 
@@ -193,6 +194,7 @@ export function SalesQuotationDetailsPage() {
       startDate: today(),
       endDate: quotation.validUntil ?? today(),
       totalQuantityTons: acceptedQuantity.toFixed(3),
+      pickupLocationId: quotation.fulfilmentType === 'PICKUP' ? (quotation.destination?.id ?? '') : '',
       internalNotes: '',
     });
     setContractError('');
@@ -202,14 +204,8 @@ export function SalesQuotationDetailsPage() {
 
   const submitContract = async () => {
     if (!quotation || contractSubmitting) return;
-    const quantity = Number(contractForm.totalQuantityTons);
-    const acceptedQuantity = totalEquivalentTons(quotation);
     if (!contractForm.startDate || !contractForm.endDate || contractForm.endDate < contractForm.startDate) {
       setContractError('Enter valid contract start and end dates.');
-      return;
-    }
-    if (!Number.isFinite(quantity) || Math.abs(quantity - acceptedQuantity) >= 0.001) {
-      setContractError('Initial contract quantity must match the accepted quotation quantity.');
       return;
     }
     setContractSubmitting(true);
@@ -218,7 +214,9 @@ export function SalesQuotationDetailsPage() {
       const contract = await createContractFromSalesQuotation(quotation.id, {
         startDate: contractForm.startDate,
         endDate: contractForm.endDate,
-        totalQuantityTons: quantity,
+        ...(contractForm.pickupLocationId.trim()
+          ? { pickupLocationId: contractForm.pickupLocationId.trim() }
+          : {}),
         ...(contractForm.internalNotes.trim()
           ? { internalNotes: contractForm.internalNotes.trim() }
           : {}),
@@ -345,9 +343,9 @@ export function SalesQuotationDetailsPage() {
             </ActionButton>
           )}
           {!quotation.allowedActions.createContract && quotation.contract && (
-            <button type="button" disabled className={secondaryButton}>
+            <Link to={`/sales/contracts/${quotation.contract.id}`} className={secondaryButton}>
               <BriefcaseBusiness size={15} /> Contract {quotation.contract.reference ?? 'created'}
-            </button>
+            </Link>
           )}
         </div>
       </header>
@@ -785,12 +783,19 @@ function ContractCreationModal({
   onClose,
 }: {
   quotation: SalesQuotationDetails;
-  form: { startDate: string; endDate: string; totalQuantityTons: string; internalNotes: string };
+  form: {
+    startDate: string;
+    endDate: string;
+    totalQuantityTons: string;
+    pickupLocationId: string;
+    internalNotes: string;
+  };
   onChange: React.Dispatch<
     React.SetStateAction<{
       startDate: string;
       endDate: string;
       totalQuantityTons: string;
+      pickupLocationId: string;
       internalNotes: string;
     }>
   >;
@@ -919,12 +924,25 @@ function ContractCreationModal({
                     disabled
                     step="0.001"
                     value={form.totalQuantityTons}
-                    onChange={(event) =>
-                      onChange((current) => ({ ...current, totalQuantityTons: event.target.value }))
-                    }
                     className={inputClass}
                   />
                 </Field>
+                {quotation.fulfilmentType === 'PICKUP' && (
+                  <Field label="Pickup From">
+                    <select
+                      value={form.pickupLocationId}
+                      onChange={(event) =>
+                        onChange((current) => ({
+                          ...current,
+                          pickupLocationId: event.target.value,
+                        }))
+                      }
+                      className={inputClass}
+                    >
+                      <option value="ALSAFWA_PLANT_MAIN">AlSafwa Cement Plant</option>
+                    </select>
+                  </Field>
+                )}
                 <Field label="Ship-To Location">
                   <input
                     disabled

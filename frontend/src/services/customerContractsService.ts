@@ -10,6 +10,8 @@ export interface CustomerContractSummary {
   uom: string;
   fulfilment: 'PICKUP' | 'DELIVERY';
   haderCity: string | null;
+  pickupLocation: { id: string; name: string; city: string | null } | null;
+  shipTo: { id: string | null; name: string | null; city: string | null; region: string | null } | null;
   totalQuantityTons: number;
   shippedQuantityTons: number;
   remainingQuantityTons: number;

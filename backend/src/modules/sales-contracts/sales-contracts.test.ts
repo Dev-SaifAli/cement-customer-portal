@@ -84,9 +84,42 @@ const contractRow = {
   product_price: '150.00',
   delivery_list_price: '35.00',
   delivery_price: '35.00',
+  quotation_id: '77777777-7777-4777-8777-777777777777',
+  quotation_reference: 'QT-2026-000001',
+  accepted_at: '2026-08-24T09:00:00.000Z',
+  pricing_city_id: 'city-jeddah',
+  total_quantity_tons: '100.000',
+  shipped_quantity_tons: '0.000',
+  remaining_quantity_tons: null,
+  subtotal: '18500.00',
+  vat_rate: '0.150000',
+  vat_amount: '2775.00',
+  grand_total: '21275.00',
+  payment_terms: '30 Days',
+  commercial_notes: 'Accepted commercial terms.',
+  customer_notes: 'Customer note.',
+  internal_notes: null,
+  items_snapshot: [
+    {
+      productId,
+      productCode: 'CEM-OPC-50KG',
+      productName: 'Ordinary Portland Cement',
+      packagingType: 'Bag',
+      uom: 'TON',
+      quantity: 100,
+      equivalentTons: 100,
+      productPrice: 150,
+      deliveryPrice: 35,
+      customerRate: 185,
+      amount: 18500,
+    },
+  ],
   sales_user_id: salesUserId,
   sales_user_name: 'Sales Reviewer',
+  registration_delivery_locations: accountRow.delivery_locations,
   status: 'DRAFT',
+  activated_by: null,
+  activated_at: null,
   created_at: '2026-08-24T08:00:00.000Z',
   updated_at: '2026-08-24T08:00:00.000Z',
 };
@@ -172,7 +205,7 @@ describe('sales contracts API', () => {
     });
     expect(response.body.data.pagination).toEqual({
       page: 1,
-      pageSize: 20,
+      pageSize: 10,
       total: 1,
       totalPages: 1,
     });
@@ -240,14 +273,16 @@ describe('sales contracts API', () => {
     expect(connect).not.toHaveBeenCalled();
   });
 
-  it('submits list-price contracts directly as active contracts', async () => {
+  it('activates draft contracts directly without commercial re-approval', async () => {
     mockAuthenticatedSalesUser();
     mockTransactionClient();
     clientQuery
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ ...contractRow, reference: null }] })
+      .mockResolvedValueOnce({ rows: [accountRow] })
       .mockResolvedValueOnce({ rows: [{ sequence: '1' }] })
       .mockResolvedValueOnce({ rows: [{ ...contractRow, status: 'ACTIVE' }] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
     query.mockResolvedValueOnce({ rows: [{ ...contractRow, status: 'ACTIVE' }] });
@@ -256,60 +291,128 @@ describe('sales contracts API', () => {
     });
 
     const response = await request(createApp())
-      .post(`/api/v1/sales/contracts/${contractId}/submit`)
+      .post(`/api/v1/sales/contracts/${contractId}/activate`)
       .set('Authorization', authHeader());
 
     expect(response.status).toBe(200);
-    expect(clientQuery.mock.calls[3]?.[1]).toEqual([
+    expect(clientQuery.mock.calls[4]?.[1]).toEqual([
       contractId,
       'CT-2026-000001',
-      'ACTIVE',
       salesUserId,
     ]);
-    expect(clientQuery.mock.calls[4]?.[1]).toEqual([
+    expect(clientQuery.mock.calls[5]?.[1]).toEqual([
       contractId,
       'DRAFT',
       'ACTIVE',
-      'SUBMIT_ACTIVATE',
-      null,
+      'CONTRACT_ACTIVATED',
+      'Contract activated from accepted quotation commercial terms.',
       salesUserId,
     ]);
   });
 
-  it('submits custom-price contracts for approval', async () => {
+  it('activates accepted quotation contracts even when pricing differs from list price', async () => {
     mockAuthenticatedSalesUser();
     mockTransactionClient();
     const customContract = { ...contractRow, reference: null, product_price: '145.00' };
     clientQuery
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [customContract] })
+      .mockResolvedValueOnce({ rows: [accountRow] })
       .mockResolvedValueOnce({ rows: [{ sequence: '1' }] })
-      .mockResolvedValueOnce({ rows: [{ ...customContract, status: 'PENDING_SALES_REVIEW' }] })
+      .mockResolvedValueOnce({ rows: [{ ...customContract, status: 'ACTIVE' }] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
-    query.mockResolvedValueOnce({ rows: [{ ...customContract, status: 'PENDING_SALES_REVIEW' }] });
+    query.mockResolvedValueOnce({ rows: [{ ...customContract, status: 'ACTIVE' }] });
     query.mockResolvedValueOnce({
-      rows: [{ ...statusEventRow, previous_status: 'DRAFT', new_status: 'PENDING_SALES_REVIEW' }],
+      rows: [{ ...statusEventRow, previous_status: 'DRAFT', new_status: 'ACTIVE' }],
     });
 
     const response = await request(createApp())
-      .post(`/api/v1/sales/contracts/${contractId}/submit`)
+      .post(`/api/v1/sales/contracts/${contractId}/activate`)
       .set('Authorization', authHeader());
 
     expect(response.status).toBe(200);
-    expect(clientQuery.mock.calls[3]?.[1]).toEqual([
-      contractId,
-      'CT-2026-000001',
-      'PENDING_SALES_REVIEW',
-      salesUserId,
-    ]);
     expect(clientQuery.mock.calls[4]?.[1]).toEqual([
       contractId,
-      'DRAFT',
-      'PENDING_SALES_REVIEW',
-      'SUBMIT_FOR_APPROVAL',
-      'Contract includes custom pricing and requires approval.',
+      'CT-2026-000001',
       salesUserId,
     ]);
+    expect(clientQuery.mock.calls[5]?.[1]).toEqual([
+      contractId,
+      'DRAFT',
+      'ACTIVE',
+      'CONTRACT_ACTIVATED',
+      'Contract activated from accepted quotation commercial terms.',
+      salesUserId,
+    ]);
+  });
+
+  it('extends active contracts by increasing quantity and moving the end date later', async () => {
+    mockAuthenticatedSalesUser();
+    mockTransactionClient();
+    const activeContract = {
+      ...contractRow,
+      status: 'ACTIVE',
+      total_quantity_tons: '100.000',
+      remaining_quantity_tons: '40.000',
+      end_date: '2026-12-31',
+    };
+    clientQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [activeContract] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            ...activeContract,
+            total_quantity_tons: '125.000',
+            remaining_quantity_tons: '65.000',
+            end_date: '2027-01-31',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+    query.mockResolvedValueOnce({ rows: [{ ...activeContract, total_quantity_tons: '125.000' }] });
+    query.mockResolvedValueOnce({
+      rows: [{ ...statusEventRow, action: 'CONTRACT_QUANTITY_AND_END_DATE_EXTENDED' }],
+    });
+
+    const response = await request(createApp())
+      .post(`/api/v1/sales/contracts/${contractId}/extend`)
+      .set('Authorization', authHeader())
+      .send({
+        additionalQuantityTons: 25,
+        endDate: '2027-01-31',
+        reason: 'Customer requested larger allocation.',
+      });
+
+    expect(response.status).toBe(200);
+    expect(clientQuery.mock.calls[2]?.[1]).toEqual([contractId, 125, 65, '2027-01-31']);
+    expect(JSON.parse(String(clientQuery.mock.calls[4]?.[1]?.[6]))).toMatchObject({
+      previousTotalQuantityTons: 100,
+      newTotalQuantityTons: 125,
+      previousRemainingQuantityTons: 40,
+      newRemainingQuantityTons: 65,
+      previousEndDate: '2026-12-31',
+      newEndDate: '2027-01-31',
+    });
+  });
+
+  it('rejects contract extensions with an earlier or unchanged end date', async () => {
+    mockAuthenticatedSalesUser();
+    mockTransactionClient();
+    clientQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ ...contractRow, status: 'ACTIVE' }] });
+
+    const response = await request(createApp())
+      .post(`/api/v1/sales/contracts/${contractId}/extend`)
+      .set('Authorization', authHeader())
+      .send({ endDate: '2026-12-31' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('CONTRACT_END_DATE_NOT_EXTENDED');
   });
 });
