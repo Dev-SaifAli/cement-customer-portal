@@ -33,6 +33,7 @@ interface QuotationRow {
   submitted_at: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  item_count?: string;
 }
 
 interface ProductRow {
@@ -67,7 +68,14 @@ interface QuotationItemRow {
 }
 
 type FulfilmentType = 'PICKUP' | 'DELIVERY';
-type QuotationStatus = 'DRAFT' | 'PENDING_SALES_REVIEW';
+type QuotationStatus =
+  | 'DRAFT'
+  | 'PENDING_SALES_REVIEW'
+  | 'UNDER_REVIEW'
+  | 'READY_FOR_CUSTOMER'
+  | 'ACCEPTED'
+  | 'REJECTED'
+  | 'CLARIFICATION_REQUESTED';
 
 export class CustomerQuotationsService {
   getPickupLocations() {
@@ -76,27 +84,80 @@ export class CustomerQuotationsService {
 
   async list(customerUser: CustomerUser, query: ListCustomerQuotationsQuery) {
     const offset = (query.page - 1) * customerQuotationPageSize;
+    const locations = await customerLocationsService.listLocations(customerUser);
+    const values: unknown[] = [customerUser.account.id];
+    const conditions = ['customer_quotations.customer_account_id = $1'];
+
+    const addCondition = (condition: string, value: unknown) => {
+      values.push(value);
+      conditions.push(condition.replace('?', `$${values.length}`));
+    };
+
+    if (query.reference) {
+      addCondition('customer_quotations.reference ilike ?', `%${query.reference}%`);
+    }
+    if (query.createdDate) {
+      addCondition('customer_quotations.created_at::date = ?::date', query.createdDate);
+    }
+    if (query.requestedDate) {
+      addCondition('customer_quotations.requested_date = ?::date', query.requestedDate);
+    }
+    if (query.fulfilmentType) {
+      addCondition('customer_quotations.fulfilment_type = ?', query.fulfilmentType);
+    }
+    if (query.status) {
+      addCondition('customer_quotations.status = ?', query.status);
+    }
+    if (query.deliveryLocation) {
+      const search = query.deliveryLocation.toLocaleLowerCase();
+      const shipToIds = locations
+        .filter((location) =>
+          [location.name, location.city, location.region, location.streetAddress].some((value) =>
+            value.toLocaleLowerCase().includes(search),
+          ),
+        )
+        .map((location) => location.id);
+      const pickupIds = pickupLocations
+        .filter((location) =>
+          [location.name, location.city, location.region].some((value) =>
+            value.toLocaleLowerCase().includes(search),
+          ),
+        )
+        .map((location) => location.id);
+      values.push(shipToIds, pickupIds);
+      conditions.push(
+        `(customer_quotations.ship_to_location_id = any($${values.length - 1}::text[])
+          or customer_quotations.pickup_location_id = any($${values.length}::text[]))`,
+      );
+    }
+
+    const whereClause = conditions.join('\n         and ');
     const countResult = await pool.query<{ total: string }>(
       `select count(*)::text as total
        from customer_quotations
-       where customer_account_id = $1`,
-      [customerUser.account.id],
+       where ${whereClause}`,
+      values,
     );
 
+    const listValues = [...values, customerQuotationPageSize, offset];
     const result = await pool.query<QuotationRow>(
-      `select *
+      `select customer_quotations.*,
+              count(customer_quotation_items.id)::text as item_count
        from customer_quotations
-       where customer_account_id = $1
-       order by updated_at desc
-       limit $2
-       offset $3`,
-      [customerUser.account.id, customerQuotationPageSize, offset],
+       left join customer_quotation_items
+         on customer_quotation_items.quotation_id = customer_quotations.id
+       where ${whereClause}
+       group by customer_quotations.id
+       order by customer_quotations.updated_at desc
+       limit $${listValues.length - 1}
+       offset $${listValues.length}`,
+      listValues,
     );
 
     const total = Number(countResult.rows[0]?.total ?? 0);
 
     return {
-      items: result.rows.map(mapQuotationSummary),
+      items: result.rows.map((quotation) => mapQuotationSummary(quotation, locations)),
       pagination: {
         page: query.page,
         pageSize: customerQuotationPageSize,
@@ -497,13 +558,25 @@ function mapQuotation(
   };
 }
 
-function mapQuotationSummary(quotation: QuotationRow) {
+function mapQuotationSummary(
+  quotation: QuotationRow,
+  locations: Awaited<ReturnType<typeof customerLocationsService.listLocations>>,
+) {
+  const shipToLocation = locations.find(
+    (location) => location.id === quotation.ship_to_location_id,
+  );
+  const pickupLocation = pickupLocations.find(
+    (location) => location.id === quotation.pickup_location_id,
+  );
+
   return {
     id: quotation.id,
     reference: quotation.reference,
     status: quotation.status,
     fulfilmentType: quotation.fulfilment_type,
+    deliveryLocation: shipToLocation?.name ?? pickupLocation?.name ?? null,
     requestedDate: quotation.requested_date ? dateOnly(quotation.requested_date) : null,
+    itemCount: Number(quotation.item_count ?? 0),
     submittedAt: quotation.submitted_at ? dateTime(quotation.submitted_at) : null,
     createdAt: dateTime(quotation.created_at),
     updatedAt: dateTime(quotation.updated_at),

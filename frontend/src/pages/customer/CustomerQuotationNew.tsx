@@ -122,7 +122,7 @@ export function CustomerQuotationNew() {
     typeof selectedShipTo?.latitude === 'number' && typeof selectedShipTo.longitude === 'number';
   const validationErrors = useMemo(() => validateForm(form), [form]);
   const isValid = validationErrors.length === 0;
-  const isSubmitted = quotation?.status === 'PENDING_SALES_REVIEW';
+  const isSubmitted = Boolean(quotation && quotation.status !== 'DRAFT');
   const documentTitle = quotation?.reference ?? 'New Quotation';
   const currentSnapshot = useMemo(() => serializeForm(form), [form]);
   const isDirty = currentSnapshot !== lastSavedSnapshot;
@@ -335,10 +335,7 @@ export function CustomerQuotationNew() {
         <header className="flex min-h-[58px] flex-col gap-3 border-b border-[#eceaf0] px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             <h1 className="text-lg font-semibold text-[#1a1b23]">{documentTitle}</h1>
-            <StatusDot
-              label={isSubmitted ? 'Pending Sales Review' : 'Draft'}
-              submitted={isSubmitted}
-            />
+            <StatusDot label={formatQuotationStatus(quotation?.status)} submitted={isSubmitted} />
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -1220,4 +1217,17 @@ function serializeForm(form: FormState) {
       palletQuantity: item.palletQuantity,
     })),
   });
+}
+
+function formatQuotationStatus(status: CustomerQuotation['status'] | undefined) {
+  const labels: Record<CustomerQuotation['status'], string> = {
+    DRAFT: 'Draft',
+    PENDING_SALES_REVIEW: 'Pending Sales Review',
+    UNDER_REVIEW: 'Under Review',
+    READY_FOR_CUSTOMER: 'Ready for Customer',
+    ACCEPTED: 'Accepted',
+    REJECTED: 'Rejected',
+    CLARIFICATION_REQUESTED: 'Clarification Requested',
+  };
+  return status ? labels[status] : 'Draft';
 }

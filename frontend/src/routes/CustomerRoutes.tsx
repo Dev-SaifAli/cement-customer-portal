@@ -7,6 +7,7 @@ import { CustomerProductDetails } from '../pages/customer/CustomerProductDetails
 import { CustomerProfile } from '../pages/customer/CustomerProfile';
 import { CustomerProducts } from '../pages/customer/CustomerProducts';
 import { CustomerQuotationNew } from '../pages/customer/CustomerQuotationNew';
+import { CustomerQuotations } from '../pages/customer/CustomerQuotations';
 import { CustomerUsers } from '../pages/customer/CustomerUsers';
 
 export function CustomerRoutes() {
@@ -21,6 +22,7 @@ export function CustomerRoutes() {
             <Route path="locations" element={<CustomerLocations />} />
             <Route path="products" element={<CustomerProducts />} />
             <Route path="products/:id" element={<CustomerProductDetails />} />
+            <Route path="quotations" element={<CustomerQuotations />} />
             <Route path="quotations/new" element={<CustomerQuotationNew />} />
             <Route path="quotations/:id" element={<CustomerQuotationNew />} />
             <Route path="users" element={<CustomerUsers />} />

@@ -87,6 +87,22 @@ export const customerQuotationIdSchema = z.string().uuid();
 
 export const listCustomerQuotationsSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
+  reference: optionalText(100),
+  createdDate: z.string().date().optional(),
+  requestedDate: z.string().date().optional(),
+  fulfilmentType: z.enum(['PICKUP', 'DELIVERY']).optional(),
+  deliveryLocation: optionalText(200),
+  status: z
+    .enum([
+      'DRAFT',
+      'PENDING_SALES_REVIEW',
+      'UNDER_REVIEW',
+      'READY_FOR_CUSTOMER',
+      'ACCEPTED',
+      'REJECTED',
+      'CLARIFICATION_REQUESTED',
+    ])
+    .optional(),
 });
 
 export type CustomerQuotationPayload = z.infer<typeof customerQuotationPayloadSchema>;

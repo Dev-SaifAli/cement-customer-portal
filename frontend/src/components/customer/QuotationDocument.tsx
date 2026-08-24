@@ -183,7 +183,16 @@ function DocumentLabel({
 }
 
 function formatStatus(status: CustomerQuotation['status']) {
-  return status === 'PENDING_SALES_REVIEW' ? 'Pending Sales Review' : 'Draft';
+  const labels: Record<CustomerQuotation['status'], string> = {
+    DRAFT: 'Draft',
+    PENDING_SALES_REVIEW: 'Pending Sales Review',
+    UNDER_REVIEW: 'Under Review',
+    READY_FOR_CUSTOMER: 'Ready for Customer',
+    ACCEPTED: 'Accepted',
+    REJECTED: 'Rejected',
+    CLARIFICATION_REQUESTED: 'Clarification Requested',
+  };
+  return labels[status];
 }
 
 function formatFulfilment(value: CustomerQuotation['fulfilmentType']) {
