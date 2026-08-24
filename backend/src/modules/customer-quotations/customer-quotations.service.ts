@@ -72,6 +72,8 @@ type QuotationStatus =
   | 'DRAFT'
   | 'PENDING_SALES_REVIEW'
   | 'UNDER_REVIEW'
+  | 'PENDING_HADER_APPROVAL'
+  | 'PENDING_PRICE_APPROVAL'
   | 'READY_FOR_CUSTOMER'
   | 'ACCEPTED'
   | 'REJECTED'
@@ -311,6 +313,18 @@ export class CustomerQuotationsService {
       if (!quotation) {
         throw quotationNotFoundError();
       }
+
+      await client.query(
+        `insert into quotation_status_events (
+           quotation_id,
+           previous_status,
+           new_status,
+           action,
+           changed_by_customer_user_id
+         )
+         values ($1, 'DRAFT', 'PENDING_SALES_REVIEW', 'CUSTOMER_SUBMITTED', $2)`,
+        [quotationId, customerUser.id],
+      );
 
       await client.query('commit');
       return this.getById(customerUser, quotation.id);

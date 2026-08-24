@@ -14,6 +14,103 @@ export interface SalesUser {
   name: string;
   email: string;
   isActive: boolean;
+  role: 'SALES_REP' | 'HADER_MANAGER' | 'PRICE_MANAGER';
+}
+
+export type SalesQuotationStatus =
+  | 'PENDING_SALES_REVIEW'
+  | 'UNDER_REVIEW'
+  | 'PENDING_HADER_APPROVAL'
+  | 'PENDING_PRICE_APPROVAL'
+  | 'READY_FOR_CUSTOMER'
+  | 'ACCEPTED'
+  | 'REJECTED'
+  | 'CLARIFICATION_REQUESTED';
+
+export type SalesQuotationApprovalStatus =
+  'NOT_REQUIRED' | 'REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface SalesQuotationSummary {
+  id: string;
+  reference: string | null;
+  customer: string;
+  submittedAt: string | null;
+  itemCount: number;
+  fulfilmentType: 'PICKUP' | 'DELIVERY';
+  total: number | null;
+  status: SalesQuotationStatus;
+}
+
+export interface SalesQuotationDetails {
+  id: string;
+  reference: string | null;
+  status: SalesQuotationStatus;
+  customer: {
+    id: string;
+    companyName: string;
+    contactName: string | null;
+    email: string | null;
+    phone: string | null;
+  };
+  requestedDate: string | null;
+  fulfilmentType: 'PICKUP' | 'DELIVERY';
+  destination: {
+    id?: string;
+    name?: string;
+    city?: string;
+    region?: string;
+    streetAddress?: string;
+    postalCode?: string;
+    country?: string;
+  } | null;
+  notes: string | null;
+  submittedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  validUntil: string | null;
+  paymentTerms: string | null;
+  commercialNotes: string | null;
+  subtotal: number | null;
+  vatRate: number;
+  vatAmount: number | null;
+  grandTotal: number | null;
+  productPriceChanged: boolean;
+  deliveryPriceChanged: boolean;
+  approvals: { hader: SalesQuotationApprovalStatus; price: SalesQuotationApprovalStatus };
+  items: Array<{
+    id: string;
+    productId: string;
+    productCode: string;
+    productName: string;
+    image: string | null;
+    quantity: number;
+    uom: string;
+    packagingType: string;
+    productListPrice: number | null;
+    productPrice: number | null;
+    deliveryListPrice: number | null;
+    deliveryPrice: number | null;
+    customerRate: number | null;
+    amount: number | null;
+  }>;
+  events: Array<{
+    id: string;
+    previousStatus: SalesQuotationStatus | 'DRAFT' | null;
+    newStatus: SalesQuotationStatus;
+    action: string;
+    reason: string | null;
+    changedBy: string;
+    actorType: 'SALES' | 'CUSTOMER';
+    createdAt: string;
+  }>;
+  allowedActions: {
+    startReview: boolean;
+    editPricing: boolean;
+    submitApproval: boolean;
+    sendToCustomer: boolean;
+    approve: boolean;
+    reject: boolean;
+  };
 }
 
 export interface SalesApplicationSummary {
@@ -255,3 +352,60 @@ export const getSalesApplicationDocumentUrl = (
   `${apiBaseUrl}/sales/applications/${applicationId}/documents/${documentId}${
     options.download ? '?download=1' : ''
   }`;
+
+export const listSalesQuotations = async (params: {
+  page?: number;
+  reference?: string;
+  customer?: string;
+  submittedDate?: string;
+  fulfilmentType?: '' | 'PICKUP' | 'DELIVERY';
+  status?: '' | SalesQuotationStatus;
+}) => {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') query.set(key, String(value));
+  });
+  const response = await requestSales<{
+    success: boolean;
+    data: {
+      items: SalesQuotationSummary[];
+      pagination: SalesApplicationsPagination;
+    };
+  }>(`/sales/quotations${query.size ? `?${query}` : ''}`);
+  return response.data;
+};
+
+export const getSalesQuotation = async (id: string) => {
+  const response = await requestSales<{
+    success: boolean;
+    data: { quotation: SalesQuotationDetails };
+  }>(`/sales/quotations/${id}`);
+  return response.data.quotation;
+};
+
+const quotationAction = async (id: string, action: string, body?: unknown) => {
+  const response = await requestSales<{
+    success: boolean;
+    data: { quotation: SalesQuotationDetails };
+  }>(`/sales/quotations/${id}/${action}`, {
+    method: action === 'pricing' ? 'PATCH' : 'POST',
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  return response.data.quotation;
+};
+
+export const startSalesQuotationReview = (id: string) => quotationAction(id, 'start-review');
+export const updateSalesQuotationPricing = (
+  id: string,
+  payload: {
+    items: Array<{ id: string; productPrice: number; deliveryPrice?: number }>;
+    validUntil: string;
+    paymentTerms: string;
+    commercialNotes: string;
+  },
+) => quotationAction(id, 'pricing', payload);
+export const submitSalesQuotationApproval = (id: string) => quotationAction(id, 'submit-approval');
+export const approveSalesQuotation = (id: string) => quotationAction(id, 'approve');
+export const rejectSalesQuotation = (id: string, reason: string) =>
+  quotationAction(id, 'reject', { reason });
+export const sendSalesQuotationToCustomer = (id: string) => quotationAction(id, 'send-to-customer');

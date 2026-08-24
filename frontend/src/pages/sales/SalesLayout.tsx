@@ -1,4 +1,13 @@
-import { BarChart3, ChevronLeft, ChevronRight, ClipboardList, LogOut, Menu, X } from 'lucide-react';
+import {
+  BarChart3,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  FileText,
+  LogOut,
+  Menu,
+  X,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import Logo from '../../components/Logo/Logo';
@@ -63,6 +72,13 @@ export function SalesLayout() {
             collapsed={sidebarCollapsed}
           >
             Applications
+          </SalesNavLink>
+          <SalesNavLink
+            to="/sales/quotations"
+            icon={<FileText size={18} />}
+            collapsed={sidebarCollapsed}
+          >
+            Quotations
           </SalesNavLink>
         </nav>
       </aside>

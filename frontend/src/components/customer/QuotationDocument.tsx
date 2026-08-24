@@ -187,6 +187,8 @@ function formatStatus(status: CustomerQuotation['status']) {
     DRAFT: 'Draft',
     PENDING_SALES_REVIEW: 'Pending Sales Review',
     UNDER_REVIEW: 'Under Review',
+    PENDING_HADER_APPROVAL: 'Pending Hader Approval',
+    PENDING_PRICE_APPROVAL: 'Pending Price Approval',
     READY_FOR_CUSTOMER: 'Ready for Customer',
     ACCEPTED: 'Accepted',
     REJECTED: 'Rejected',

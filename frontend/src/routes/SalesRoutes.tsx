@@ -5,6 +5,8 @@ import { SalesApplicationDetailsPage } from '../pages/sales/SalesApplicationDeta
 import { SalesApplicationsPage } from '../pages/sales/SalesApplications';
 import { SalesDashboard } from '../pages/sales/SalesDashboard';
 import { SalesLogin } from '../pages/sales/SalesLogin';
+import { SalesQuotationDetailsPage } from '../pages/sales/SalesQuotationDetails';
+import { SalesQuotationsPage } from '../pages/sales/SalesQuotations';
 
 export function SalesRoutes() {
   return (
@@ -17,6 +19,8 @@ export function SalesRoutes() {
             <Route path="dashboard" element={<SalesDashboard />} />
             <Route path="applications" element={<SalesApplicationsPage />} />
             <Route path="applications/:id" element={<SalesApplicationDetailsPage />} />
+            <Route path="quotations" element={<SalesQuotationsPage />} />
+            <Route path="quotations/:id" element={<SalesQuotationDetailsPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/sales/dashboard" replace />} />
