@@ -4,7 +4,47 @@ import type { CustomerProduct } from './customerProductsService';
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
 
 export type QuotationFulfilmentType = 'PICKUP' | 'DELIVERY';
-export type QuotationStatus = 'DRAFT' | 'PENDING_SALES_REVIEW';
+export type QuotationStatus =
+  | 'DRAFT'
+  | 'PENDING_SALES_REVIEW'
+  | 'UNDER_REVIEW'
+  | 'READY_FOR_CUSTOMER'
+  | 'ACCEPTED'
+  | 'REJECTED'
+  | 'CLARIFICATION_REQUESTED';
+
+export interface CustomerQuotationSummary {
+  id: string;
+  reference: string | null;
+  status: QuotationStatus;
+  fulfilmentType: QuotationFulfilmentType;
+  deliveryLocation: string | null;
+  requestedDate: string | null;
+  itemCount: number;
+  submittedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerQuotationListFilters {
+  page?: number;
+  reference?: string;
+  createdDate?: string;
+  requestedDate?: string;
+  fulfilmentType?: QuotationFulfilmentType | '';
+  deliveryLocation?: string;
+  status?: QuotationStatus | '';
+}
+
+export interface CustomerQuotationListResult {
+  items: CustomerQuotationSummary[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+}
 
 export interface PickupLocation {
   id: string;
@@ -82,6 +122,11 @@ interface QuotationResponse {
   };
 }
 
+interface QuotationListResponse {
+  success: boolean;
+  data: CustomerQuotationListResult;
+}
+
 interface ApiErrorBody {
   error?: {
     message?: string;
@@ -102,6 +147,24 @@ export const getPickupLocations = async () => {
   );
 
   return response.data.locations;
+};
+
+export const listCustomerQuotations = async (filters: CustomerQuotationListFilters = {}) => {
+  const searchParams = new URLSearchParams();
+  if (filters.page) searchParams.set('page', String(filters.page));
+  if (filters.reference?.trim()) searchParams.set('reference', filters.reference.trim());
+  if (filters.createdDate) searchParams.set('createdDate', filters.createdDate);
+  if (filters.requestedDate) searchParams.set('requestedDate', filters.requestedDate);
+  if (filters.fulfilmentType) searchParams.set('fulfilmentType', filters.fulfilmentType);
+  if (filters.deliveryLocation?.trim())
+    searchParams.set('deliveryLocation', filters.deliveryLocation.trim());
+  if (filters.status) searchParams.set('status', filters.status);
+
+  const response = await requestCustomerQuotations<QuotationListResponse>(
+    `/customer/quotations${searchParams.size ? `?${searchParams.toString()}` : ''}`,
+  );
+
+  return response.data;
 };
 
 export const createCustomerQuotation = async (payload: CustomerQuotationPayload) => {

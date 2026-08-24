@@ -3,17 +3,29 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  Download,
+  Eye,
   ExternalLink,
   Loader2,
   MapPin,
+  MoreVertical,
   Plus,
+  Printer,
   Search,
   Trash2,
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ProductImage } from '../../components/customer/ProductImage';
+import {
+  QuotationPreviewModal,
+  type QuotationPreviewAction,
+} from '../../components/customer/QuotationPreviewModal';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import {
+  getCustomerDashboard,
+  type CustomerDashboardData,
+} from '../../services/customerDashboardService';
 import {
   getCustomerLocations,
   type CustomerLocation,
@@ -31,6 +43,7 @@ import {
   type QuotationFulfilmentType,
 } from '../../services/customerQuotationsService';
 import { createClientId } from '../../utils/createClientId';
+import { useNavigate, useParams } from 'react-router-dom';
 
 type FormItem = {
   key: string;
@@ -73,11 +86,14 @@ const createInitialForm = (): FormState => ({
 });
 
 export function CustomerQuotationNew() {
+  const navigate = useNavigate();
+  const { id: routeQuotationId } = useParams<{ id: string }>();
   const { account, user } = useCustomerAuth();
   const canManageQuotation = Boolean(user?.role && writableRoles.has(user.role));
   const [form, setForm] = useState<FormState>(createInitialForm);
   const [quotationId, setQuotationId] = useState<string | null>(null);
   const [quotation, setQuotation] = useState<CustomerQuotation | null>(null);
+  const [dashboard, setDashboard] = useState<CustomerDashboardData | null>(null);
   const [pickupLocations, setPickupLocations] = useState<PickupLocation[]>([]);
   const [deliveryLocations, setDeliveryLocations] = useState<CustomerLocation[]>([]);
   const [productResults, setProductResults] = useState<CustomerProduct[]>([]);
@@ -93,6 +109,9 @@ export function CustomerQuotationNew() {
   const [savedMessage, setSavedMessage] = useState('');
   const [showValidation, setShowValidation] = useState(false);
   const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [previewAction, setPreviewAction] = useState<QuotationPreviewAction | null>(null);
+  const [previewQuotation, setPreviewQuotation] = useState<CustomerQuotation | null>(null);
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState('');
   const firstInvalidRef = useRef<HTMLDivElement>(null);
 
@@ -103,7 +122,7 @@ export function CustomerQuotationNew() {
     typeof selectedShipTo?.latitude === 'number' && typeof selectedShipTo.longitude === 'number';
   const validationErrors = useMemo(() => validateForm(form), [form]);
   const isValid = validationErrors.length === 0;
-  const isSubmitted = quotation?.status === 'PENDING_SALES_REVIEW';
+  const isSubmitted = Boolean(quotation && quotation.status !== 'DRAFT');
   const documentTitle = quotation?.reference ?? 'New Quotation';
   const currentSnapshot = useMemo(() => serializeForm(form), [form]);
   const isDirty = currentSnapshot !== lastSavedSnapshot;
@@ -116,12 +135,14 @@ export function CustomerQuotationNew() {
       setError('');
 
       try {
-        const [pickup, locations] = await Promise.all([
+        const [pickup, locations, dashboardData] = await Promise.all([
           getPickupLocations(),
           getCustomerLocations(),
+          getCustomerDashboard().catch(() => null),
         ]);
         setPickupLocations(pickup);
         setDeliveryLocations(locations);
+        setDashboard(dashboardData);
 
         let nextForm: FormState = {
           ...createInitialForm(),
@@ -129,13 +150,13 @@ export function CustomerQuotationNew() {
           shipToLocationId: locations.find((location) => location.isPrimary)?.id ?? '',
         };
 
-        const draftId = localStorage.getItem(draftStorageKey);
-        if (draftId) {
-          const draft = await getCustomerQuotation(draftId);
-          if (draft.status === 'DRAFT') {
-            setQuotationId(draft.id);
-            setQuotation(draft);
-            nextForm = fromQuotation(draft);
+        const quotationToLoad = routeQuotationId ?? localStorage.getItem(draftStorageKey);
+        if (quotationToLoad) {
+          const savedQuotation = await getCustomerQuotation(quotationToLoad);
+          if (routeQuotationId || savedQuotation.status === 'DRAFT') {
+            setQuotationId(savedQuotation.id);
+            setQuotation(savedQuotation);
+            nextForm = fromQuotation(savedQuotation);
           } else {
             localStorage.removeItem(draftStorageKey);
           }
@@ -151,7 +172,7 @@ export function CustomerQuotationNew() {
     };
 
     void loadFoundation();
-  }, []);
+  }, [routeQuotationId]);
 
   useEffect(() => {
     if (!activePickerKey) return;
@@ -180,7 +201,7 @@ export function CustomerQuotationNew() {
       window.requestAnimationFrame(() =>
         firstInvalidRef.current?.scrollIntoView({ behavior: 'smooth' }),
       );
-      return false;
+      return null;
     }
 
     setSaving(true);
@@ -195,10 +216,10 @@ export function CustomerQuotationNew() {
       localStorage.setItem(draftStorageKey, saved.id);
       setLastSavedSnapshot(serializeForm(form));
       setSavedMessage('Saved just now');
-      return true;
+      return saved;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save quotation draft.');
-      return false;
+      return null;
     } finally {
       setSaving(false);
     }
@@ -229,6 +250,7 @@ export function CustomerQuotationNew() {
       setQuotation(submitted);
       setLastSavedSnapshot(serializeForm(form));
       localStorage.removeItem(draftStorageKey);
+      navigate(`/customer/quotations/${submitted.id}`, { replace: true });
     } catch (submitError) {
       setError(
         submitError instanceof Error ? submitError.message : 'Unable to submit quotation request.',
@@ -236,7 +258,7 @@ export function CustomerQuotationNew() {
     } finally {
       setSubmitting(false);
     }
-  }, [form, isValid, quotationId]);
+  }, [form, isValid, navigate, quotationId]);
 
   useEffect(() => {
     const handleKeyboardSave = (event: KeyboardEvent) => {
@@ -294,19 +316,29 @@ export function CustomerQuotationNew() {
     setForm((current) => ({ ...current, ...patch }));
   };
 
+  const openPreview = async (action: QuotationPreviewAction) => {
+    setMoreMenuOpen(false);
+    let printableQuotation = quotation;
+
+    if (!printableQuotation || (printableQuotation.status === 'DRAFT' && isDirty)) {
+      printableQuotation = await saveDraft();
+    }
+
+    if (!printableQuotation) return;
+    setPreviewQuotation(printableQuotation);
+    setPreviewAction(action);
+  };
+
   return (
     <div className="mx-auto w-full max-w-[1500px] space-y-3">
       <section className="overflow-visible rounded-lg border border-[#e3e1e8] bg-white">
         <header className="flex min-h-[58px] flex-col gap-3 border-b border-[#eceaf0] px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             <h1 className="text-lg font-semibold text-[#1a1b23]">{documentTitle}</h1>
-            <StatusDot
-              label={isSubmitted ? 'Pending Sales Review' : 'Draft'}
-              submitted={isSubmitted}
-            />
+            <StatusDot label={formatQuotationStatus(quotation?.status)} submitted={isSubmitted} />
           </div>
 
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3">
             {!isSubmitted && (
               <div className="hidden items-center gap-4 text-xs font-medium text-[#64748b] md:flex">
                 <span>Ctrl + S to save draft</span>
@@ -332,6 +364,43 @@ export function CustomerQuotationNew() {
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit'}
               </button>
             )}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMoreMenuOpen((current) => !current)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#e3e1e8] bg-white text-slate-600 transition hover:border-[#54247a] hover:text-[#54247a]"
+                aria-label="Quotation actions"
+                aria-expanded={moreMenuOpen}
+                aria-haspopup="menu"
+              >
+                <MoreVertical size={17} />
+              </button>
+              {moreMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-11 z-30 w-44 overflow-hidden rounded-lg border border-[#e3e1e8] bg-white p-1.5 shadow-xl shadow-slate-900/10"
+                >
+                  <QuotationMenuItem
+                    icon={<Eye size={15} />}
+                    onClick={() => void openPreview('preview')}
+                  >
+                    Preview
+                  </QuotationMenuItem>
+                  <QuotationMenuItem
+                    icon={<Printer size={15} />}
+                    onClick={() => void openPreview('print')}
+                  >
+                    {isSubmitted ? 'Print' : 'Print Draft'}
+                  </QuotationMenuItem>
+                  <QuotationMenuItem
+                    icon={<Download size={15} />}
+                    onClick={() => void openPreview('download')}
+                  >
+                    Download PDF
+                  </QuotationMenuItem>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -508,6 +577,19 @@ export function CustomerQuotationNew() {
           busy={submitting}
           onCancel={() => setShowSubmitConfirmation(false)}
           onConfirm={() => void submitQuotation()}
+        />
+      )}
+      {previewAction && previewQuotation && account && user && (
+        <QuotationPreviewModal
+          account={account}
+          initialAction={previewAction}
+          quotation={previewQuotation}
+          user={user}
+          phone={dashboard?.administrator.phone ?? dashboard?.contact.phone}
+          onClose={() => {
+            setPreviewAction(null);
+            setPreviewQuotation(null);
+          }}
         />
       )}
     </div>
@@ -955,6 +1037,28 @@ function InlineMessage({ tone, message }: { tone: 'error' | 'success'; message: 
   );
 }
 
+function QuotationMenuItem({
+  children,
+  icon,
+  onClick,
+}: {
+  children: string;
+  icon: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-[#f6f2fa] hover:text-[#54247a]"
+    >
+      {icon}
+      {children}
+    </button>
+  );
+}
+
 function ConfirmationDialog({
   busy,
   onCancel,
@@ -1113,4 +1217,17 @@ function serializeForm(form: FormState) {
       palletQuantity: item.palletQuantity,
     })),
   });
+}
+
+function formatQuotationStatus(status: CustomerQuotation['status'] | undefined) {
+  const labels: Record<CustomerQuotation['status'], string> = {
+    DRAFT: 'Draft',
+    PENDING_SALES_REVIEW: 'Pending Sales Review',
+    UNDER_REVIEW: 'Under Review',
+    READY_FOR_CUSTOMER: 'Ready for Customer',
+    ACCEPTED: 'Accepted',
+    REJECTED: 'Rejected',
+    CLARIFICATION_REQUESTED: 'Clarification Requested',
+  };
+  return status ? labels[status] : 'Draft';
 }

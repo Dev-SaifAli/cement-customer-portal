@@ -56,7 +56,7 @@ const customerNavigation: Array<{
     roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
   },
   {
-    to: '/customer/quotations/new',
+    to: '/customer/quotations',
     activePrefix: '/customer/quotations',
     label: 'Quotations',
     icon: <FileText size={18} />,
