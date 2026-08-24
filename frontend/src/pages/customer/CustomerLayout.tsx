@@ -1,4 +1,5 @@
 import {
+  Bell,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -6,17 +7,24 @@ import {
   LogOut,
   MapPin,
   Menu,
+  Monitor,
+  Moon,
   PackageSearch,
   FileText,
   BriefcaseBusiness,
   UserCircle,
   Users,
+  Sun,
   X,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Logo from '../../components/Logo/Logo';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import {
+  useCustomerTheme,
+  type CustomerThemePreference,
+} from '../../context/CustomerThemeContext';
 import type { CustomerRole } from '../../services/customerAuthService';
 
 const customerNavigation: Array<{
@@ -74,11 +82,13 @@ const customerNavigation: Array<{
 
 export function CustomerLayout() {
   const { account, logout, user } = useCustomerAuth();
+  const { preference: themePreference, setPreference: setThemePreference } = useCustomerTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const visibleNavigation = customerNavigation.filter(
     (item) => user?.role && item.roles.includes(user.role),
   );
@@ -91,9 +101,9 @@ export function CustomerLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-['Manrope',system-ui,sans-serif] text-slate-950">
+    <div className="customer-portal customer-page-bg min-h-screen font-['Manrope',system-ui,sans-serif] customer-text">
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-[232px] flex-col border-r border-[#e3e1e8] bg-white transition-all duration-200 lg:translate-x-0 ${
+        className={`customer-surface customer-border fixed inset-y-0 left-0 z-40 flex w-[232px] flex-col border-r transition-all duration-200 lg:translate-x-0 ${
           sidebarCollapsed ? 'lg:w-[68px]' : 'lg:w-[232px]'
         } ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
@@ -191,7 +201,7 @@ export function CustomerLayout() {
           sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-[232px]'
         }`}
       >
-        <header className="sticky top-0 z-20 flex h-[60px] items-center justify-between border-b border-[#e3e1e8] bg-white/95 px-4 backdrop-blur lg:px-6">
+        <header className="customer-surface customer-border sticky top-0 z-20 flex h-[60px] items-center justify-between border-b px-4 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -212,11 +222,44 @@ export function CustomerLayout() {
             </div>
           </div>
 
-          <div className="relative flex items-center gap-3">
+          <div className="relative flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setProfileMenuOpen((current) => !current)}
-              className="inline-flex items-center gap-2 rounded-lg border border-[#e3e1e8] bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-[#54247a] hover:bg-[#f6f2fa] hover:text-[#54247a]"
+              onClick={() => {
+                setNotificationsOpen((current) => !current);
+                setProfileMenuOpen(false);
+              }}
+              className="customer-border customer-secondary inline-flex h-10 w-10 items-center justify-center rounded-lg border transition hover:bg-[var(--customer-primary-soft)] hover:text-[var(--customer-primary)]"
+              aria-expanded={notificationsOpen}
+              aria-haspopup="menu"
+              aria-label="Notifications"
+            >
+              <Bell size={18} />
+            </button>
+            {notificationsOpen && (
+              <div
+                role="menu"
+                className="customer-card absolute right-0 top-12 z-30 w-72 rounded-xl border p-2"
+              >
+                <div className="customer-border-soft border-b px-3 py-2.5">
+                  <p className="customer-text text-sm font-bold">Notifications</p>
+                </div>
+                <div className="px-3 py-5 text-center">
+                  <span className="customer-primary-soft customer-primary mx-auto flex h-9 w-9 items-center justify-center rounded-full">
+                    <Bell size={17} />
+                  </span>
+                  <p className="customer-text mt-3 text-sm font-semibold">You&apos;re all caught up</p>
+                  <p className="customer-muted mt-1 text-xs">No new notifications.</p>
+                </div>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setProfileMenuOpen((current) => !current);
+                setNotificationsOpen(false);
+              }}
+              className="customer-surface customer-border customer-secondary inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm font-semibold transition hover:bg-[var(--customer-primary-soft)] hover:text-[var(--customer-primary)]"
               aria-expanded={profileMenuOpen}
               aria-haspopup="menu"
               aria-label={`Account menu for ${user?.name ?? 'customer user'}`}
@@ -230,20 +273,30 @@ export function CustomerLayout() {
             {profileMenuOpen && (
               <div
                 role="menu"
-                className="absolute right-0 top-12 z-30 w-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-900/10"
+                className="customer-card absolute right-0 top-12 z-30 w-72 rounded-xl border p-2"
               >
-                <div className="border-b border-slate-100 px-3 py-3">
-                  <p className="truncate text-sm font-bold text-slate-950">{user?.name}</p>
-                  <p className="mt-0.5 truncate text-xs text-slate-500">{user?.email}</p>
-                  <p className="mt-2 truncate text-xs font-semibold text-[#4b2c71]">
+                <div className="customer-border-soft border-b px-3 py-3">
+                  <p className="customer-text truncate text-sm font-bold">{user?.name}</p>
+                  <p className="customer-muted mt-0.5 truncate text-xs">{user?.email}</p>
+                  <p className="customer-primary mt-2 truncate text-xs font-semibold">
                     {account?.companyName}
                   </p>
+                </div>
+                <div className="customer-border-soft border-b px-2 py-3">
+                  <p className="customer-muted px-1 pb-2 text-[11px] font-bold uppercase tracking-[0.08em]">
+                    Appearance
+                  </p>
+                  <div className="grid grid-cols-3 gap-1" role="group" aria-label="Appearance">
+                    <ThemeOption icon={<Sun size={15} />} label="Light" value="light" selected={themePreference === 'light'} onSelect={setThemePreference} />
+                    <ThemeOption icon={<Moon size={15} />} label="Dark" value="dark" selected={themePreference === 'dark'} onSelect={setThemePreference} />
+                    <ThemeOption icon={<Monitor size={15} />} label="System" value="system" selected={themePreference === 'system'} onSelect={setThemePreference} />
+                  </div>
                 </div>
                 <button
                   type="button"
                   role="menuitem"
                   onClick={handleLogout}
-                  className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-[#f6f2fa] hover:text-[#4b2c71]"
+                  className="customer-secondary mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition hover:bg-[var(--customer-primary-soft)] hover:text-[var(--customer-primary)]"
                 >
                   <LogOut size={16} />
                   Logout
@@ -258,6 +311,36 @@ export function CustomerLayout() {
         </main>
       </div>
     </div>
+  );
+}
+
+function ThemeOption({
+  icon,
+  label,
+  value,
+  selected,
+  onSelect,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: CustomerThemePreference;
+  selected: boolean;
+  onSelect: (value: CustomerThemePreference) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(value)}
+      className={`flex flex-col items-center gap-1 rounded-lg px-2 py-2 text-[11px] font-semibold transition ${
+        selected
+          ? 'bg-[var(--customer-primary-soft)] text-[var(--customer-primary)]'
+          : 'customer-secondary hover:bg-[var(--customer-surface-secondary)]'
+      }`}
+      aria-pressed={selected}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 

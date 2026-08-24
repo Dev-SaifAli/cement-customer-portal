@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { CustomerAuthProvider, useCustomerAuth } from '../context/CustomerAuthContext';
+import { CustomerThemeProvider } from '../context/CustomerThemeContext';
 import { CustomerContractDetailsPage } from '../pages/customer/CustomerContractDetails';
 import { CustomerContracts } from '../pages/customer/CustomerContracts';
 import { CustomerLayout } from '../pages/customer/CustomerLayout';
@@ -15,8 +16,9 @@ import { CustomerUsers } from '../pages/customer/CustomerUsers';
 
 export function CustomerRoutes() {
   return (
-    <CustomerAuthProvider>
-      <Routes>
+    <CustomerThemeProvider>
+      <CustomerAuthProvider>
+        <Routes>
         <Route element={<RequireCustomerAuth />}>
           <Route element={<CustomerLayout />}>
             <Route index element={<Navigate to="dashboard" replace />} />
@@ -34,8 +36,9 @@ export function CustomerRoutes() {
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/customer/dashboard" replace />} />
-      </Routes>
-    </CustomerAuthProvider>
+        </Routes>
+      </CustomerAuthProvider>
+    </CustomerThemeProvider>
   );
 }
 
