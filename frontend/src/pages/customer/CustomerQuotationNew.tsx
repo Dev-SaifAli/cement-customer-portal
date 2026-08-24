@@ -1,19 +1,17 @@
 import {
   AlertCircle,
   CalendarDays,
-  CheckCircle2,
+  Check,
+  ChevronDown,
+  ExternalLink,
   Loader2,
   MapPin,
   Plus,
-  RefreshCw,
-  Save,
-  Send,
+  Search,
   Trash2,
-  Truck,
-  Warehouse,
+  X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ProductImage } from '../../components/customer/ProductImage';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import {
@@ -32,6 +30,7 @@ import {
   type PickupLocation,
   type QuotationFulfilmentType,
 } from '../../services/customerQuotationsService';
+import { createClientId } from '../../utils/createClientId';
 
 type FormItem = {
   key: string;
@@ -53,9 +52,10 @@ type FormState = {
 
 const draftStorageKey = 'alsafwa_customer_quotation_draft_id';
 const writableRoles = new Set(['CUSTOMER_ADMIN', 'PURCHASER']);
+const today = new Date().toISOString().slice(0, 10);
 
 const initialItem = (): FormItem => ({
-  key: crypto.randomUUID(),
+  key: createClientId(),
   product: null,
   quantity: '',
   palletRequired: false,
@@ -63,54 +63,52 @@ const initialItem = (): FormItem => ({
   palletQuantity: '',
 });
 
-const today = new Date().toISOString().slice(0, 10);
-
-const initialForm: FormState = {
+const createInitialForm = (): FormState => ({
   fulfilmentType: 'DELIVERY',
   pickupLocationId: '',
   shipToLocationId: '',
   requestedDate: '',
   notes: '',
   items: [initialItem()],
-};
+});
 
 export function CustomerQuotationNew() {
-  const { user } = useCustomerAuth();
+  const { account, user } = useCustomerAuth();
   const canManageQuotation = Boolean(user?.role && writableRoles.has(user.role));
-  const [form, setForm] = useState<FormState>(initialForm);
+  const [form, setForm] = useState<FormState>(createInitialForm);
   const [quotationId, setQuotationId] = useState<string | null>(null);
   const [quotation, setQuotation] = useState<CustomerQuotation | null>(null);
   const [pickupLocations, setPickupLocations] = useState<PickupLocation[]>([]);
   const [deliveryLocations, setDeliveryLocations] = useState<CustomerLocation[]>([]);
   const [productResults, setProductResults] = useState<CustomerProduct[]>([]);
   const [productSearch, setProductSearch] = useState('');
+  const [activePickerKey, setActivePickerKey] = useState<string | null>(null);
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [productsLoading, setProductsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [savedMessage, setSavedMessage] = useState('');
   const [showValidation, setShowValidation] = useState(false);
+  const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false);
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState('');
+  const firstInvalidRef = useRef<HTMLDivElement>(null);
 
   const selectedShipTo = deliveryLocations.find(
     (location) => location.id === form.shipToLocationId,
   );
   const hasCoordinates =
     typeof selectedShipTo?.latitude === 'number' && typeof selectedShipTo.longitude === 'number';
-
   const validationErrors = useMemo(() => validateForm(form), [form]);
-  const itemTotals = useMemo(() => getItemTotals(form.items), [form.items]);
-  const requestedDateError = showValidation ? getRequestedDateError(form) : '';
-  const shipToError =
-    showValidation && !form.shipToLocationId ? 'Delivery location is required.' : '';
-  const pickupError =
-    showValidation && form.fulfilmentType === 'PICKUP' && !form.pickupLocationId
-      ? 'Pickup location is required.'
-      : '';
   const isValid = validationErrors.length === 0;
   const isSubmitted = quotation?.status === 'PENDING_SALES_REVIEW';
   const documentTitle = quotation?.reference ?? 'New Quotation';
-  const statusLabel = isSubmitted ? 'Pending Sales Review' : 'Draft';
+  const currentSnapshot = useMemo(() => serializeForm(form), [form]);
+  const isDirty = currentSnapshot !== lastSavedSnapshot;
+  const allRowsSelected =
+    form.items.length > 0 && form.items.every((item) => selectedRows.has(item.key));
 
   useEffect(() => {
     const loadFoundation = async () => {
@@ -124,12 +122,12 @@ export function CustomerQuotationNew() {
         ]);
         setPickupLocations(pickup);
         setDeliveryLocations(locations);
-        setForm((current) => ({
-          ...current,
-          pickupLocationId: current.pickupLocationId || pickup[0]?.id || '',
-          shipToLocationId:
-            current.shipToLocationId || locations.find((location) => location.isPrimary)?.id || '',
-        }));
+
+        let nextForm: FormState = {
+          ...createInitialForm(),
+          pickupLocationId: pickup[0]?.id ?? '',
+          shipToLocationId: locations.find((location) => location.isPrimary)?.id ?? '',
+        };
 
         const draftId = localStorage.getItem(draftStorageKey);
         if (draftId) {
@@ -137,11 +135,14 @@ export function CustomerQuotationNew() {
           if (draft.status === 'DRAFT') {
             setQuotationId(draft.id);
             setQuotation(draft);
-            setForm(fromQuotation(draft));
+            nextForm = fromQuotation(draft);
           } else {
             localStorage.removeItem(draftStorageKey);
           }
         }
+
+        setForm(nextForm);
+        setLastSavedSnapshot(serializeForm(nextForm));
       } catch {
         setError('Unable to load quotation setup. Please try again.');
       } finally {
@@ -153,6 +154,8 @@ export function CustomerQuotationNew() {
   }, []);
 
   useEffect(() => {
+    if (!activePickerKey) return;
+
     const timer = window.setTimeout(async () => {
       setProductsLoading(true);
       try {
@@ -166,33 +169,18 @@ export function CustomerQuotationNew() {
     }, 250);
 
     return () => window.clearTimeout(timer);
-  }, [productSearch]);
+  }, [activePickerKey, productSearch]);
 
-  if (!canManageQuotation) {
-    return (
-      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm font-semibold text-amber-800">
-        You can view customer portal information, but your role cannot create quotations.
-      </section>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="h-5 w-48 animate-pulse rounded bg-slate-100" />
-        <div className="mt-5 h-96 animate-pulse rounded-2xl bg-slate-100" />
-      </div>
-    );
-  }
-
-  const saveDraft = async () => {
+  const saveDraft = useCallback(async () => {
     setError('');
-    setSuccess('');
+    setSavedMessage('');
     setShowValidation(true);
 
     if (!isValid) {
-      setError(validationErrors[0] ?? 'Please complete the quotation form.');
-      return;
+      window.requestAnimationFrame(() =>
+        firstInvalidRef.current?.scrollIntoView({ behavior: 'smooth' }),
+      );
+      return false;
     }
 
     setSaving(true);
@@ -205,21 +193,27 @@ export function CustomerQuotationNew() {
       setQuotationId(saved.id);
       setQuotation(saved);
       localStorage.setItem(draftStorageKey, saved.id);
-      setSuccess('Draft saved.');
+      setLastSavedSnapshot(serializeForm(form));
+      setSavedMessage('Saved just now');
+      return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save quotation draft.');
+      return false;
     } finally {
       setSaving(false);
     }
-  };
+  }, [form, isValid, quotationId]);
 
-  const submitQuotation = async () => {
+  const submitQuotation = useCallback(async () => {
     setError('');
-    setSuccess('');
+    setSavedMessage('');
     setShowValidation(true);
+    setShowSubmitConfirmation(false);
 
     if (!isValid) {
-      setError(validationErrors[0] ?? 'Please complete the quotation form.');
+      window.requestAnimationFrame(() =>
+        firstInvalidRef.current?.scrollIntoView({ behavior: 'smooth' }),
+      );
       return;
     }
 
@@ -233,6 +227,7 @@ export function CustomerQuotationNew() {
 
       setQuotationId(submitted.id);
       setQuotation(submitted);
+      setLastSavedSnapshot(serializeForm(form));
       localStorage.removeItem(draftStorageKey);
     } catch (submitError) {
       setError(
@@ -241,572 +236,776 @@ export function CustomerQuotationNew() {
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [form, isValid, quotationId]);
 
-  const addProduct = () => {
-    setForm((current) => ({
-      ...current,
-      items: [...current.items, initialItem()],
-    }));
-  };
+  useEffect(() => {
+    const handleKeyboardSave = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 's' || isSubmitted)
+        return;
+
+      event.preventDefault();
+      if (!isDirty && quotationId) {
+        setShowSubmitConfirmation(true);
+        return;
+      }
+
+      void saveDraft();
+    };
+
+    window.addEventListener('keydown', handleKeyboardSave);
+    return () => window.removeEventListener('keydown', handleKeyboardSave);
+  }, [isDirty, isSubmitted, quotationId, saveDraft]);
+
+  if (!canManageQuotation) {
+    return (
+      <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
+        Your role does not have permission to create quotations.
+      </section>
+    );
+  }
+
+  if (loading) return <QuotationSkeleton />;
 
   const updateItem = (key: string, patch: Partial<FormItem>) => {
+    setSavedMessage('');
     setForm((current) => ({
       ...current,
       items: current.items.map((item) => (item.key === key ? { ...item, ...patch } : item)),
     }));
   };
 
-  const removeItem = (key: string) => {
-    setForm((current) => ({
-      ...current,
-      items:
-        current.items.length === 1
-          ? current.items
-          : current.items.filter((item) => item.key !== key),
-    }));
+  const addRow = () => {
+    setSavedMessage('');
+    setForm((current) => ({ ...current, items: [...current.items, initialItem()] }));
+  };
+
+  const removeSelectedRows = () => {
+    if (selectedRows.size === 0) return;
+    setSavedMessage('');
+    setForm((current) => {
+      const remaining = current.items.filter((item) => !selectedRows.has(item.key));
+      return { ...current, items: remaining.length > 0 ? remaining : [initialItem()] };
+    });
+    setSelectedRows(new Set());
+  };
+
+  const updateForm = (patch: Partial<FormState>) => {
+    setSavedMessage('');
+    setForm((current) => ({ ...current, ...patch }));
   };
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-              <span>Quotation</span>
-              <span className="text-slate-300">/</span>
-              <span className="text-[#7c3b7e]">{documentTitle}</span>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <h1 className="truncate text-xl font-bold text-slate-950">{documentTitle}</h1>
-              <StatusIndicator status={statusLabel} />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {isSubmitted ? (
-              <Link
-                to="/customer/dashboard"
-                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-              >
-                Back to Dashboard
-              </Link>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => void saveDraft()}
-                  disabled={saving || submitting}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} />}
-                  {saving ? 'Saving...' : 'Save Draft'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void submitQuotation()}
-                  disabled={saving || submitting}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#54247a] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#462064] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send size={16} />}
-                  {submitting ? 'Submitting...' : 'Submit'}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-3 px-4 pt-4 sm:px-5">
-          {error && <InlineAlert tone="error" message={error} />}
-          {success && <InlineAlert tone="success" message={success} />}
-          {isSubmitted && (
-            <InlineAlert
-              tone="success"
-              message="This quotation has been submitted for Sales review and is now read-only."
+    <div className="mx-auto w-full max-w-[1500px] space-y-3">
+      <section className="overflow-visible rounded-lg border border-[#e3e1e8] bg-white">
+        <header className="flex min-h-[58px] flex-col gap-3 border-b border-[#eceaf0] px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <h1 className="text-lg font-semibold text-[#1a1b23]">{documentTitle}</h1>
+            <StatusDot
+              label={isSubmitted ? 'Pending Sales Review' : 'Draft'}
+              submitted={isSubmitted}
             />
-          )}
-        </div>
-
-        <section className="space-y-5 p-4 sm:p-5">
-          <div>
-            <h2 className="text-base font-bold text-slate-950">Details</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">
-              Select fulfilment, delivery location, products, and requested delivery date.
-            </p>
           </div>
 
-          <div>
-            <h2 className="text-base font-bold text-slate-950">Fulfilment</h2>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <SegmentButton
-                active={form.fulfilmentType === 'PICKUP'}
-                icon={<Warehouse size={17} />}
-                title="Pick-Up"
-                description="Use your own truck to collect."
-                disabled={isSubmitted}
-                onClick={() => setForm((current) => ({ ...current, fulfilmentType: 'PICKUP' }))}
-              />
-              <SegmentButton
-                active={form.fulfilmentType === 'DELIVERY'}
-                icon={<Truck size={17} />}
-                title="Delivery (Hader)"
-                description="AlSafwa ships to your site."
-                disabled={isSubmitted}
-                onClick={() => setForm((current) => ({ ...current, fulfilmentType: 'DELIVERY' }))}
-              />
-            </div>
-          </div>
-
-          {form.fulfilmentType === 'PICKUP' && (
-            <Field label="Pickup From">
-              <select
-                value={form.pickupLocationId}
-                disabled={isSubmitted}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, pickupLocationId: event.target.value }))
-                }
-                className={fieldClass}
-              >
-                {pickupLocations.map((location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.name} — {location.city}
-                  </option>
-                ))}
-              </select>
-              {pickupError && <FieldError message={pickupError} />}
-            </Field>
-          )}
-
-          <Field
-            label={form.fulfilmentType === 'PICKUP' ? 'Ship-To / Destination' : 'Delivery Location'}
-          >
-            <select
-              value={form.shipToLocationId}
-              disabled={isSubmitted}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, shipToLocationId: event.target.value }))
-              }
-              className={fieldClass}
-            >
-              <option value="">Select delivery location</option>
-              {deliveryLocations.map((location) => (
-                <option key={location.id} value={location.id}>
-                  {location.name} — {location.city}, {location.region}
-                </option>
-              ))}
-            </select>
-            {shipToError && <FieldError message={shipToError} />}
-          </Field>
-
-          {selectedShipTo && (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="font-bold text-slate-900">{selectedShipTo.name}</p>
-                  <p className="mt-1 font-medium text-slate-500">
-                    {selectedShipTo.streetAddress}, {selectedShipTo.city}, {selectedShipTo.region}
-                  </p>
-                </div>
-                {hasCoordinates && (
-                  <a
-                    href={`https://www.openstreetmap.org/?mlat=${selectedShipTo.latitude}&mlon=${selectedShipTo.longitude}#map=16/${selectedShipTo.latitude}/${selectedShipTo.longitude}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-[#54247a] hover:bg-[#f6f2fa]"
-                  >
-                    <MapPin size={14} />
-                    View Map
-                  </a>
-                )}
+          <div className="flex flex-wrap items-center gap-4">
+            {!isSubmitted && (
+              <div className="hidden items-center gap-4 text-xs font-medium text-[#64748b] md:flex">
+                <span>Ctrl + S to save draft</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${isDirty ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                  />
+                  {saving
+                    ? 'Saving...'
+                    : isDirty
+                      ? 'Unsaved changes'
+                      : savedMessage || (quotationId ? 'Saved' : 'Not saved yet')}
+                </span>
               </div>
-            </div>
-          )}
-
-          <div className="border-t border-slate-100 pt-4">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-base font-bold text-slate-950">Products</h2>
+            )}
+            {!isSubmitted && (
               <button
                 type="button"
-                onClick={addProduct}
-                disabled={isSubmitted}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void submitQuotation()}
+                disabled={saving || submitting}
+                className="inline-flex h-9 items-center justify-center rounded-lg bg-[#54247a] px-5 text-sm font-semibold text-white transition hover:bg-[#472066] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <Plus size={15} />
-                Add Product
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit'}
               </button>
-            </div>
-
-            <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200">
-              <div className="hidden grid-cols-[44px_minmax(260px,1fr)_120px_120px_90px_190px_52px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.08em] text-slate-500 xl:grid">
-                <span>#</span>
-                <span>Product</span>
-                <span>Quantity</span>
-                <span>Packaging</span>
-                <span>UOM</span>
-                <span>Pallet</span>
-                <span></span>
-              </div>
-              {form.items.map((item, index) => (
-                <ProductLine
-                  key={item.key}
-                  item={item}
-                  index={index}
-                  products={productResults}
-                  productsLoading={productsLoading}
-                  productSearch={productSearch}
-                  canRemove={form.items.length > 1 && !isSubmitted}
-                  readOnly={isSubmitted}
-                  errors={showValidation ? getItemErrors(item, index) : {}}
-                  onSearchChange={setProductSearch}
-                  onChange={(patch) => updateItem(item.key, patch)}
-                  onRemove={() => removeItem(item.key)}
-                />
-              ))}
-              <div className="flex flex-col gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-                <span>Total Items: {form.items.length}</span>
-                <span>{itemTotals.length > 0 ? itemTotals.join(' · ') : 'Total Quantity: 0'}</span>
-              </div>
-            </div>
+            )}
           </div>
+        </header>
 
-          <div className="grid gap-4 border-t border-slate-100 pt-4 md:grid-cols-2">
-            <Field label="Requested Delivery Date">
-              <div className="relative">
-                <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="date"
-                  min={today}
-                  value={form.requestedDate}
+        {(error || isSubmitted) && (
+          <div className="border-b border-[#eceaf0] px-5 py-3">
+            {error ? (
+              <InlineMessage tone="error" message={error} />
+            ) : (
+              <InlineMessage
+                tone="success"
+                message="This quotation is pending Sales review and is now read-only."
+              />
+            )}
+          </div>
+        )}
+
+        <div className="grid divide-y divide-[#eceaf0] lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+          <DocumentSection title="Customer Information">
+            <dl className="grid gap-3 sm:grid-cols-[minmax(120px,0.8fr)_minmax(110px,0.7fr)_minmax(240px,1.5fr)] sm:gap-3">
+              <InfoField label="Company" value={account?.companyName} />
+              <InfoField label="Contact Person" value={user?.name} />
+              <InfoField label="Customer ID" value={account?.id} compact />
+            </dl>
+          </DocumentSection>
+
+          <DocumentSection title="Quotation Details">
+            <div
+              ref={validationErrors.length > 0 ? firstInvalidRef : undefined}
+              className="grid gap-4 sm:grid-cols-2"
+            >
+              <Field
+                label="Requested Delivery Date"
+                error={showValidation ? getRequestedDateError(form) : ''}
+              >
+                <div className="relative">
+                  <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="date"
+                    min={today}
+                    value={form.requestedDate}
+                    disabled={isSubmitted}
+                    onChange={(event) => updateForm({ requestedDate: event.target.value })}
+                    className={`${fieldClass} pl-9`}
+                  />
+                </div>
+              </Field>
+
+              <Field label="Fulfilment">
+                <select
+                  value={form.fulfilmentType}
                   disabled={isSubmitted}
                   onChange={(event) =>
-                    setForm((current) => ({ ...current, requestedDate: event.target.value }))
+                    updateForm({ fulfilmentType: event.target.value as QuotationFulfilmentType })
                   }
-                  className={`${fieldClass} pl-10`}
-                />
-              </div>
-              {requestedDateError && <FieldError message={requestedDateError} />}
-            </Field>
-            <Field label="Notes">
-              <input
-                value={form.notes}
-                maxLength={1000}
-                disabled={isSubmitted}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, notes: event.target.value }))
-                }
-                placeholder="Optional instructions"
-                className={fieldClass}
-              />
-            </Field>
-          </div>
-        </section>
-      </div>
+                  className={fieldClass}
+                >
+                  <option value="DELIVERY">Delivery</option>
+                  <option value="PICKUP">Pick-Up</option>
+                </select>
+              </Field>
+
+              {form.fulfilmentType === 'DELIVERY' ? (
+                <div className="sm:col-span-2">
+                  <div className="flex items-end gap-3">
+                    <div className="min-w-0 flex-1">
+                      <Field
+                        label="Delivery Location"
+                        error={
+                          showValidation && !form.shipToLocationId
+                            ? 'Delivery location is required.'
+                            : ''
+                        }
+                      >
+                        <select
+                          value={form.shipToLocationId}
+                          disabled={isSubmitted}
+                          onChange={(event) => updateForm({ shipToLocationId: event.target.value })}
+                          className={fieldClass}
+                        >
+                          <option value="">Select delivery location</option>
+                          {deliveryLocations.map((location) => (
+                            <option key={location.id} value={location.id}>
+                              {location.name} - {location.city}, {location.region}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    </div>
+                    {hasCoordinates && selectedShipTo && (
+                      <a
+                        href={`https://www.openstreetmap.org/?mlat=${selectedShipTo.latitude}&mlon=${selectedShipTo.longitude}#map=16/${selectedShipTo.latitude}/${selectedShipTo.longitude}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mb-0.5 inline-flex h-9 shrink-0 items-center gap-1.5 px-2 text-xs font-semibold text-[#54247a] hover:text-[#472066]"
+                      >
+                        <MapPin size={14} /> View Map <ExternalLink size={12} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="sm:col-span-2">
+                  <Field
+                    label="Pickup From"
+                    error={
+                      showValidation && !form.pickupLocationId ? 'Pickup location is required.' : ''
+                    }
+                  >
+                    <select
+                      value={form.pickupLocationId}
+                      disabled={isSubmitted}
+                      onChange={(event) => updateForm({ pickupLocationId: event.target.value })}
+                      className={fieldClass}
+                    >
+                      <option value="">Select pickup location</option>
+                      {pickupLocations.map((location) => (
+                        <option key={location.id} value={location.id}>
+                          {location.name} - {location.city}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+              )}
+            </div>
+          </DocumentSection>
+        </div>
+      </section>
+
+      <ItemsTable
+        form={form}
+        isSubmitted={isSubmitted}
+        showValidation={showValidation}
+        activePickerKey={activePickerKey}
+        productSearch={productSearch}
+        productResults={productResults}
+        productsLoading={productsLoading}
+        selectedRows={selectedRows}
+        expandedRows={expandedRows}
+        allRowsSelected={allRowsSelected}
+        onSetSelectedRows={setSelectedRows}
+        onSetExpandedRows={setExpandedRows}
+        onSetActivePickerKey={setActivePickerKey}
+        onSetProductSearch={setProductSearch}
+        onUpdateItem={updateItem}
+        onAddRow={addRow}
+        onRemoveSelectedRows={removeSelectedRows}
+      />
+
+      <section className="rounded-lg border border-[#e3e1e8] bg-white px-5 py-4">
+        <Field
+          label="Special Instructions"
+          error={showValidation && form.notes.length > 1000 ? 'Use 1000 characters or fewer.' : ''}
+        >
+          <textarea
+            value={form.notes}
+            maxLength={1000}
+            rows={3}
+            disabled={isSubmitted}
+            onChange={(event) => updateForm({ notes: event.target.value })}
+            placeholder="Optional delivery/site requirements or quotation comments"
+            className="w-full resize-y rounded-lg border border-[#e3e1e8] bg-white px-3 py-2.5 text-sm text-[#1a1b23] outline-none transition placeholder:text-slate-400 focus:border-[#54247a] focus:ring-2 focus:ring-[#54247a]/10 disabled:bg-slate-50"
+          />
+          <p className="mt-1 text-right text-[11px] text-slate-400">{form.notes.length} / 1000</p>
+        </Field>
+      </section>
+
+      <p className="px-1 text-xs font-medium text-[#64748b]">
+        Last saved: {quotationId ? savedMessage || 'Draft available' : 'Not saved yet'}
+      </p>
+
+      {showSubmitConfirmation && (
+        <ConfirmationDialog
+          busy={submitting}
+          onCancel={() => setShowSubmitConfirmation(false)}
+          onConfirm={() => void submitQuotation()}
+        />
+      )}
     </div>
   );
 }
 
 const fieldClass =
-  'h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#54247a] focus:ring-2 focus:ring-[#54247a]/10';
+  'h-10 w-full rounded-lg border border-[#e3e1e8] bg-white px-3 text-sm font-medium text-[#1a1b23] outline-none transition placeholder:text-slate-400 focus:border-[#54247a] focus:ring-2 focus:ring-[#54247a]/10 disabled:bg-slate-50 disabled:text-slate-600';
+const checkboxClass =
+  'h-4 w-4 rounded border-slate-300 text-[#54247a] accent-[#54247a] focus:ring-[#54247a]';
 
-function ProductLine({
-  item,
-  index,
-  products,
-  productsLoading,
-  productSearch,
-  canRemove,
-  readOnly,
-  errors,
-  onSearchChange,
-  onChange,
-  onRemove,
-}: {
-  item: FormItem;
-  index: number;
-  products: CustomerProduct[];
-  productsLoading: boolean;
+type ItemsTableProps = {
+  form: FormState;
+  isSubmitted: boolean;
+  showValidation: boolean;
+  activePickerKey: string | null;
   productSearch: string;
-  canRemove: boolean;
-  readOnly: boolean;
-  errors: Partial<Record<'product' | 'quantity' | 'palletType' | 'palletQuantity', string>>;
-  onSearchChange: (value: string) => void;
-  onChange: (patch: Partial<FormItem>) => void;
-  onRemove: () => void;
-}) {
-  const isBagProduct = item.product?.packagingType.toLowerCase().includes('bag') ?? false;
-  const [pickerOpen, setPickerOpen] = useState(!item.product);
+  productResults: CustomerProduct[];
+  productsLoading: boolean;
+  selectedRows: Set<string>;
+  expandedRows: Set<string>;
+  allRowsSelected: boolean;
+  onSetSelectedRows: React.Dispatch<React.SetStateAction<Set<string>>>;
+  onSetExpandedRows: React.Dispatch<React.SetStateAction<Set<string>>>;
+  onSetActivePickerKey: (key: string | null) => void;
+  onSetProductSearch: (value: string) => void;
+  onUpdateItem: (key: string, patch: Partial<FormItem>) => void;
+  onAddRow: () => void;
+  onRemoveSelectedRows: () => void;
+};
 
+function ItemsTable(props: ItemsTableProps) {
+  const { form, isSubmitted, selectedRows, expandedRows } = props;
   return (
-    <div className="grid gap-3 border-b border-slate-100 bg-white px-4 py-4 last:border-b-0 xl:grid-cols-[44px_minmax(260px,1fr)_120px_120px_90px_190px_52px] xl:items-start">
-      <div className="flex items-center justify-between gap-3 xl:block xl:pt-3">
-        <h3 className="text-sm font-bold text-slate-500 xl:text-slate-500">{index + 1}</h3>
-        {canRemove && !readOnly && (
+    <section className="overflow-visible rounded-lg border border-[#e3e1e8] bg-white">
+      <div className="border-b border-[#eceaf0] px-5 py-3">
+        <h2 className="text-sm font-semibold text-[#54247a]">Items</h2>
+      </div>
+      <div className={`overflow-x-auto ${props.activePickerKey ? 'pb-72' : ''}`}>
+        <div className="min-w-[940px]">
+          <div className="grid grid-cols-[44px_170px_minmax(280px,1fr)_130px_110px_130px_48px] items-center border-b border-[#e3e1e8] bg-[#f8fafc] px-3 py-2.5 text-xs font-semibold text-[#4b4d5c]">
+            {!isSubmitted ? (
+              <input
+                type="checkbox"
+                checked={props.allRowsSelected}
+                onChange={(event) =>
+                  props.onSetSelectedRows(
+                    event.target.checked ? new Set(form.items.map((item) => item.key)) : new Set(),
+                  )
+                }
+                aria-label="Select all quotation items"
+                className={checkboxClass}
+              />
+            ) : (
+              <span />
+            )}
+            <span>Item Code</span>
+            <span>Item Name</span>
+            <span>Quantity</span>
+            <span>UOM</span>
+            <span>Packaging</span>
+            <span />
+          </div>
+
+          {form.items.map((item, index) => (
+            <QuotationItemRow
+              key={item.key}
+              item={item}
+              selected={selectedRows.has(item.key)}
+              expanded={expandedRows.has(item.key)}
+              readOnly={isSubmitted}
+              pickerOpen={props.activePickerKey === item.key}
+              searchValue={props.activePickerKey === item.key ? props.productSearch : ''}
+              products={props.productResults}
+              productsLoading={props.productsLoading}
+              errors={props.showValidation ? getItemErrors(item, index) : {}}
+              onSelectedChange={(selected) =>
+                props.onSetSelectedRows((current) => {
+                  const next = new Set(current);
+                  if (selected) next.add(item.key);
+                  else next.delete(item.key);
+                  return next;
+                })
+              }
+              onPickerOpen={() => {
+                props.onSetProductSearch('');
+                props.onSetActivePickerKey(item.key);
+              }}
+              onPickerClose={() => props.onSetActivePickerKey(null)}
+              onSearchChange={props.onSetProductSearch}
+              onChange={(patch) => props.onUpdateItem(item.key, patch)}
+              onToggleExpanded={() =>
+                props.onSetExpandedRows((current) => {
+                  const next = new Set(current);
+                  if (next.has(item.key)) next.delete(item.key);
+                  else next.add(item.key);
+                  return next;
+                })
+              }
+            />
+          ))}
+        </div>
+      </div>
+      {!isSubmitted && (
+        <button
+          type="button"
+          onClick={props.onAddRow}
+          className="mx-4 my-3 inline-flex items-center gap-1.5 text-sm font-semibold text-[#54247a] hover:text-[#472066]"
+        >
+          <Plus size={15} /> Add Row
+        </button>
+      )}
+      {!isSubmitted && (
+        <div className="flex min-h-12 items-center justify-between border-t border-[#eceaf0] bg-[#fdfbfd] px-5 py-2">
+          <span className="text-xs font-medium text-[#64748b]">{selectedRows.size} selected</span>
           <button
             type="button"
-            onClick={onRemove}
-            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-red-600 hover:bg-red-50 xl:hidden"
+            disabled={selectedRows.size === 0}
+            onClick={props.onRemoveSelectedRows}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-300"
           >
-            <Trash2 size={14} />
-            Remove
+            <Trash2 size={14} /> Remove
           </button>
-        )}
-      </div>
+        </div>
+      )}
+    </section>
+  );
+}
 
-      <div className="grid gap-3 xl:contents">
-        <div className="min-w-0">
-          {item.product && !pickerOpen ? (
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2">
+type QuotationItemRowProps = {
+  item: FormItem;
+  selected: boolean;
+  expanded: boolean;
+  readOnly: boolean;
+  pickerOpen: boolean;
+  searchValue: string;
+  products: CustomerProduct[];
+  productsLoading: boolean;
+  errors: Partial<Record<'product' | 'quantity' | 'palletType' | 'palletQuantity', string>>;
+  onSelectedChange: (selected: boolean) => void;
+  onPickerOpen: () => void;
+  onPickerClose: () => void;
+  onSearchChange: (value: string) => void;
+  onChange: (patch: Partial<FormItem>) => void;
+  onToggleExpanded: () => void;
+};
+
+function QuotationItemRow(props: QuotationItemRowProps) {
+  const { item, errors } = props;
+  const bagProduct = item.product?.packagingType.toLowerCase().includes('bag') ?? false;
+
+  return (
+    <div className="border-b border-[#eceaf0] last:border-b-0">
+      <div className="grid min-h-[58px] grid-cols-[44px_170px_minmax(280px,1fr)_130px_110px_130px_48px] items-center px-3 text-sm hover:bg-[#fdfbfd]">
+        {!props.readOnly ? (
+          <input
+            type="checkbox"
+            checked={props.selected}
+            onChange={(event) => props.onSelectedChange(event.target.checked)}
+            aria-label={`Select ${item.product?.productName ?? 'blank item'}`}
+            className={checkboxClass}
+          />
+        ) : (
+          <span />
+        )}
+
+        <div className="relative pr-3">
+          {item.product && !props.pickerOpen ? (
+            <button
+              type="button"
+              disabled={props.readOnly}
+              onClick={props.onPickerOpen}
+              className="w-full truncate text-left text-sm font-semibold text-[#1a1b23] disabled:cursor-default"
+            >
+              {item.product.productCode}
+            </button>
+          ) : (
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                autoFocus={props.pickerOpen}
+                value={props.searchValue}
+                disabled={props.readOnly}
+                onFocus={props.onPickerOpen}
+                onChange={(event) => props.onSearchChange(event.target.value)}
+                placeholder="Search item"
+                className={`${fieldClass} h-9 pl-8 pr-8`}
+              />
+              {props.pickerOpen && (
+                <button
+                  type="button"
+                  onClick={props.onPickerClose}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                  aria-label="Close product picker"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          )}
+          {props.pickerOpen && !props.readOnly && (
+            <ProductPicker
+              products={props.products}
+              loading={props.productsLoading}
+              selectedProductId={item.product?.id}
+              onSelect={(product) => {
+                const nextIsBag = product.packagingType.toLowerCase().includes('bag');
+                props.onChange({
+                  product,
+                  palletRequired: nextIsBag ? item.palletRequired : false,
+                  palletType: nextIsBag ? item.palletType : '',
+                  palletQuantity: nextIsBag ? item.palletQuantity : '',
+                });
+                props.onPickerClose();
+              }}
+            />
+          )}
+          {errors.product && <RowError message={errors.product} />}
+        </div>
+
+        <div className="flex min-w-0 items-center gap-3 pr-4">
+          {item.product ? (
+            <>
               <ProductImage
                 image={item.product.image}
                 productName={item.product.productName}
                 size="thumbnail"
               />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-slate-950">
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-[#1a1b23]">
                   {item.product.productName}
-                </p>
-                <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
-                  {item.product.productCode}
-                </p>
-              </div>
-              {!readOnly && (
-                <button
-                  type="button"
-                  onClick={() => setPickerOpen(true)}
-                  className="rounded-lg px-2 py-1 text-xs font-bold text-[#54247a] hover:bg-white"
-                >
-                  Change
-                </button>
-              )}
-            </div>
+                </span>
+                <span className="mt-0.5 block truncate text-xs text-[#64748b]">
+                  {item.product.shortDescription || item.product.category}
+                </span>
+              </span>
+            </>
           ) : (
-            <div className="relative">
-              <input
-                value={productSearch}
-                disabled={readOnly}
-                onChange={(event) => {
-                  onSearchChange(event.target.value);
-                  setPickerOpen(true);
-                }}
-                onFocus={() => setPickerOpen(true)}
-                placeholder="Search product name or code"
-                className={fieldClass}
-              />
-              {!readOnly && (
-                <div className="absolute left-0 right-0 top-12 z-20 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10">
-                  {productsLoading ? (
-                    <div className="flex items-center gap-2 p-3 text-sm font-semibold text-slate-500">
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      Loading products...
-                    </div>
-                  ) : products.length === 0 ? (
-                    <p className="p-3 text-sm font-semibold text-slate-500">
-                      No active products found.
-                    </p>
-                  ) : (
-                    products.map((product) => {
-                      const selected = item.product?.id === product.id;
-                      return (
-                        <button
-                          key={product.id}
-                          type="button"
-                          onClick={() => {
-                            onChange({
-                              product,
-                              palletRequired: product.packagingType.toLowerCase().includes('bag')
-                                ? item.palletRequired
-                                : false,
-                            });
-                            setPickerOpen(false);
-                          }}
-                          className={`flex w-full items-center gap-3 border-b border-slate-100 p-3 text-left last:border-b-0 hover:bg-[#fdfafd] ${
-                            selected ? 'bg-[#f6f2fa]' : 'bg-white'
-                          }`}
-                        >
-                          <ProductImage
-                            image={product.image}
-                            productName={product.productName}
-                            size="thumbnail"
-                          />
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm font-bold text-slate-950">
-                              {product.productName}
-                            </span>
-                            <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">
-                              {product.productCode} · {product.packagingType} · {product.uom}
-                            </span>
-                          </span>
-                          {selected && <CheckCircle2 className="ml-auto h-4 w-4 text-[#54247a]" />}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-            </div>
+            <span className="text-sm text-slate-400">Select an item</span>
           )}
-          {errors.product && <FieldError message={errors.product} />}
         </div>
 
-        <div className="grid gap-3 xl:contents">
-          <Field label="Quantity">
-            <input
-              type="number"
-              min="0"
-              step="0.001"
-              value={item.quantity}
-              disabled={readOnly}
-              onChange={(event) => onChange({ quantity: event.target.value })}
-              placeholder="0"
-              className={fieldClass}
-            />
-            {errors.quantity && <FieldError message={errors.quantity} />}
-          </Field>
-          <ReadOnlyMeta label="Packaging" value={item.product?.packagingType ?? 'Auto'} />
-          <ReadOnlyMeta label="UOM" value={item.product?.uom ?? 'Auto'} />
+        <div className="pr-3">
+          <input
+            type="number"
+            min="0"
+            step="0.001"
+            inputMode="decimal"
+            value={item.quantity}
+            disabled={props.readOnly}
+            onChange={(event) => props.onChange({ quantity: event.target.value })}
+            placeholder="0"
+            className={`${fieldClass} h-9 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+          />
+          {errors.quantity && <RowError message={errors.quantity} />}
         </div>
+        <CompactValue value={item.product?.uom ?? '—'} />
+        <CompactValue value={item.product?.packagingType ?? '—'} />
+        <button
+          type="button"
+          disabled={!bagProduct}
+          onClick={props.onToggleExpanded}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-[#f6f2fa] hover:text-[#54247a] disabled:cursor-default disabled:opacity-25"
+          aria-label="Toggle additional item options"
+        >
+          <ChevronDown size={16} className={`transition ${props.expanded ? 'rotate-180' : ''}`} />
+        </button>
       </div>
 
-      {isBagProduct && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
+      {props.expanded && bagProduct && (
+        <div className="grid gap-4 border-t border-[#eceaf0] bg-[#f8fafc] px-14 py-3 sm:grid-cols-3">
+          <label className="flex h-10 items-center gap-2 text-sm font-medium text-[#1a1b23]">
             <input
               type="checkbox"
               checked={item.palletRequired}
-              disabled={readOnly}
-              onChange={(event) => onChange({ palletRequired: event.target.checked })}
-              className="h-4 w-4 rounded border-slate-300 text-[#54247a] focus:ring-[#54247a]"
+              disabled={props.readOnly}
+              onChange={(event) => props.onChange({ palletRequired: event.target.checked })}
+              className={checkboxClass}
             />
             Pallet Required
           </label>
           {item.palletRequired && (
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <input
-                value={item.palletType}
-                disabled={readOnly}
-                onChange={(event) => onChange({ palletType: event.target.value })}
-                placeholder="Pallet type"
-                className={fieldClass}
-              />
-              <input
-                type="number"
-                min="1"
-                value={item.palletQuantity}
-                disabled={readOnly}
-                onChange={(event) => onChange({ palletQuantity: event.target.value })}
-                placeholder="Pallet quantity"
-                className={fieldClass}
-              />
-            </div>
-          )}
-          {(errors.palletType || errors.palletQuantity) && (
-            <FieldError message={errors.palletType ?? errors.palletQuantity ?? ''} />
+            <>
+              <Field label="Pallet Type" error={errors.palletType}>
+                <input
+                  value={item.palletType}
+                  disabled={props.readOnly}
+                  onChange={(event) => props.onChange({ palletType: event.target.value })}
+                  className={fieldClass}
+                />
+              </Field>
+              <Field label="Pallet Quantity" error={errors.palletQuantity}>
+                <input
+                  type="number"
+                  min="1"
+                  value={item.palletQuantity}
+                  disabled={props.readOnly}
+                  onChange={(event) => props.onChange({ palletQuantity: event.target.value })}
+                  className={fieldClass}
+                />
+              </Field>
+            </>
           )}
         </div>
       )}
-      {!isBagProduct && (
-        <div className="flex h-11 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-400">
-          Not applicable
+    </div>
+  );
+}
+
+function ProductPicker({
+  products,
+  loading,
+  selectedProductId,
+  onSelect,
+}: {
+  products: CustomerProduct[];
+  loading: boolean;
+  selectedProductId?: string | undefined;
+  onSelect: (product: CustomerProduct) => void;
+}) {
+  return (
+    <div className="absolute left-0 top-11 z-30 max-h-72 w-[390px] overflow-y-auto rounded-lg border border-[#e3e1e8] bg-white shadow-xl shadow-slate-900/10">
+      {loading ? (
+        <div className="flex items-center gap-2 px-3 py-4 text-sm text-[#64748b]">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading products
         </div>
+      ) : products.length === 0 ? (
+        <p className="px-3 py-4 text-sm text-[#64748b]">No active products found.</p>
+      ) : (
+        products.map((product) => (
+          <button
+            key={product.id}
+            type="button"
+            onClick={() => onSelect(product)}
+            className={`flex w-full items-center gap-3 border-b border-[#eceaf0] px-3 py-2.5 text-left last:border-b-0 hover:bg-[#f6f2fa] ${selectedProductId === product.id ? 'bg-[#f6f2fa]' : ''}`}
+          >
+            <ProductImage
+              image={product.image}
+              productName={product.productName}
+              size="thumbnail"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs font-semibold text-[#54247a]">
+                {product.productCode}
+              </span>
+              <span className="mt-0.5 block truncate text-sm font-semibold text-[#1a1b23]">
+                {product.productName}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-[#64748b]">
+                {product.packagingType} · {product.uom}
+              </span>
+            </span>
+            {selectedProductId === product.id && <Check size={16} className="text-[#54247a]" />}
+          </button>
+        ))
       )}
-      <div className="hidden justify-end pt-1 xl:flex">
-        {canRemove && !readOnly && (
+    </div>
+  );
+}
+
+function DocumentSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="px-5 py-5">
+      <h2 className="border-b border-[#eceaf0] pb-3 text-sm font-semibold text-[#54247a]">
+        {title}
+      </h2>
+      <div className="pt-5">{children}</div>
+    </section>
+  );
+}
+
+function InfoField({
+  label,
+  value,
+  compact = false,
+}: {
+  label: string;
+  value: string | null | undefined;
+  compact?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-medium text-[#64748b]">{label}</dt>
+      <dd
+        className={`mt-1 font-semibold text-[#1a1b23] ${
+          compact ? 'break-all text-[11px] leading-4' : 'truncate text-sm'
+        }`}
+        title={value ?? undefined}
+      >
+        {value || 'Not provided'}
+      </dd>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+  error,
+}: {
+  label: string;
+  children: ReactNode;
+  error?: string | undefined;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-medium text-[#4b4d5c]">{label}</span>
+      {children}
+      {error && <p className="mt-1 text-xs font-medium text-[#b42318]">{error}</p>}
+    </label>
+  );
+}
+
+function CompactValue({ value }: { value: string }) {
+  return (
+    <span className="mr-3 flex h-9 items-center rounded-lg border border-[#e3e1e8] bg-[#f8fafc] px-3 text-xs font-medium text-[#4b4d5c]">
+      {value}
+    </span>
+  );
+}
+
+function RowError({ message }: { message: string }) {
+  return <p className="mt-1 truncate text-[10px] font-medium text-[#b42318]">{message}</p>;
+}
+
+function StatusDot({ label, submitted }: { label: string; submitted: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#4b4d5c]">
+      <span className={`h-1.5 w-1.5 rounded-full ${submitted ? 'bg-amber-500' : 'bg-slate-500'}`} />
+      {label}
+    </span>
+  );
+}
+
+function InlineMessage({ tone, message }: { tone: 'error' | 'success'; message: string }) {
+  const errorTone = tone === 'error';
+  return (
+    <div
+      className={`flex items-center gap-2 rounded-md px-3 py-2 text-xs font-medium ${errorTone ? 'bg-[#fdecec] text-[#b42318]' : 'bg-emerald-50 text-emerald-700'}`}
+    >
+      {errorTone ? <AlertCircle size={15} /> : <Check size={15} />}
+      {message}
+    </div>
+  );
+}
+
+function ConfirmationDialog({
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="submit-confirmation-title"
+        className="w-full max-w-md rounded-xl border border-[#e3e1e8] bg-white p-5 shadow-2xl"
+      >
+        <h2 id="submit-confirmation-title" className="text-lg font-semibold text-[#1a1b23]">
+          Submit Quotation?
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-[#4b4d5c]">
+          Once submitted, this quotation will be sent to the Sales Team for review and cannot be
+          freely edited.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
-            onClick={onRemove}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-red-600 hover:bg-red-50"
-            aria-label={`Remove product ${index + 1}`}
+            onClick={onCancel}
+            className="h-9 rounded-lg border border-[#e3e1e8] px-4 text-sm font-semibold text-[#4b4d5c] hover:bg-slate-50"
           >
-            <Trash2 size={16} />
+            Cancel
           </button>
-        )}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onConfirm}
+            className="inline-flex h-9 items-center justify-center rounded-lg bg-[#54247a] px-4 text-sm font-semibold text-white hover:bg-[#472066] disabled:opacity-60"
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit'}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function SegmentButton({
-  active,
-  icon,
-  title,
-  description,
-  disabled = false,
-  onClick,
-}: {
-  active: boolean;
-  icon: ReactNode;
-  title: string;
-  description: string;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
+function QuotationSkeleton() {
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => {
-        if (!disabled) onClick();
-      }}
-      className={`rounded-2xl border p-4 text-left transition ${
-        active
-          ? 'border-[#54247a] bg-[#f6f2fa] text-[#54247a] shadow-sm'
-          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-      } disabled:cursor-not-allowed disabled:opacity-60`}
-    >
-      <span className="flex items-center gap-2 text-sm font-bold">
-        {icon}
-        {title}
-      </span>
-      <span className="mt-1 block text-xs font-semibold text-slate-500">{description}</span>
-    </button>
-  );
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-sm font-bold text-slate-900">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function ReadOnlyMeta({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex min-h-11 flex-col justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-      <p className="text-xs font-semibold text-slate-400 xl:hidden">{label}</p>
-      <p className="text-sm font-bold text-slate-800">{value}</p>
-    </div>
-  );
-}
-
-function StatusIndicator({ status }: { status: string }) {
-  const submitted = status === 'Pending Sales Review';
-
-  return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700">
-      <span className={`h-2 w-2 rounded-full ${submitted ? 'bg-amber-500' : 'bg-slate-400'}`} />
-      {status}
-    </span>
-  );
-}
-
-function FieldError({ message }: { message: string }) {
-  return <p className="mt-1.5 text-xs font-semibold text-red-600">{message}</p>;
-}
-
-function InlineAlert({ tone, message }: { tone: 'error' | 'success'; message: string }) {
-  const isError = tone === 'error';
-  return (
-    <div
-      className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold ${
-        isError
-          ? 'border-red-200 bg-red-50 text-red-700'
-          : 'border-emerald-200 bg-emerald-50 text-emerald-700'
-      }`}
-    >
-      {isError ? <AlertCircle size={17} /> : <CheckCircle2 size={17} />}
-      {message}
+    <div className="space-y-3">
+      <div className="h-64 animate-pulse rounded-lg border border-[#e3e1e8] bg-white" />
+      <div className="h-72 animate-pulse rounded-lg border border-[#e3e1e8] bg-white" />
     </div>
   );
 }
@@ -818,65 +1017,35 @@ function getRequestedDateError(form: FormState) {
 }
 
 function getItemErrors(item: FormItem, index: number) {
-  const label = `Product ${index + 1}`;
   const errors: Partial<Record<'product' | 'quantity' | 'palletType' | 'palletQuantity', string>> =
     {};
-
-  if (!item.product) errors.product = `${label} is required.`;
-  if (!item.quantity || Number(item.quantity) <= 0) {
+  if (!item.product) errors.product = `Item ${index + 1} is required.`;
+  if (!item.quantity || Number(item.quantity) <= 0)
     errors.quantity = 'Quantity must be greater than zero.';
-  }
-  if (item.palletRequired && !item.palletType.trim()) {
+  if (item.palletRequired && !item.palletType.trim())
     errors.palletType = 'Pallet type is required.';
-  }
-  if (item.palletRequired && (!item.palletQuantity || Number(item.palletQuantity) <= 0)) {
+  if (item.palletRequired && (!item.palletQuantity || Number(item.palletQuantity) <= 0))
     errors.palletQuantity = 'Pallet quantity must be greater than zero.';
-  }
-
   return errors;
-}
-
-function getItemTotals(items: FormItem[]) {
-  const totals = new Map<string, number>();
-
-  items.forEach((item) => {
-    if (!item.product || !item.quantity || Number(item.quantity) <= 0) return;
-
-    const current = totals.get(item.product.uom) ?? 0;
-    totals.set(item.product.uom, current + Number(item.quantity));
-  });
-
-  return [...totals.entries()].map(([uom, total]) => `${total.toLocaleString()} ${uom}`);
 }
 
 function validateForm(form: FormState) {
   const errors: string[] = [];
-
-  if (form.fulfilmentType === 'PICKUP' && !form.pickupLocationId) {
+  if (form.fulfilmentType === 'PICKUP' && !form.pickupLocationId)
     errors.push('Pickup location is required.');
-  }
-  if (!form.shipToLocationId) errors.push('Ship-to location is required.');
-  if (!form.requestedDate) errors.push('Requested date is required.');
-  if (form.requestedDate && form.requestedDate < today) {
-    errors.push('Requested date cannot be in the past.');
-  }
-
-  form.items.forEach((item, index) => {
-    const label = `Product ${index + 1}`;
-    if (!item.product) errors.push(`${label} is required.`);
-    if (!item.quantity || Number(item.quantity) <= 0) {
-      errors.push(`${label} quantity must be greater than zero.`);
-    }
-    if (item.palletRequired && !item.palletType.trim()) {
-      errors.push(`${label} pallet type is required.`);
-    }
-    if (item.palletRequired && (!item.palletQuantity || Number(item.palletQuantity) <= 0)) {
-      errors.push(`${label} pallet quantity is required.`);
-    }
-  });
-
-  if (form.notes.length > 1000) errors.push('Notes must be 1000 characters or fewer.');
-
+  if (!form.shipToLocationId) errors.push('Delivery location is required.');
+  if (!form.requestedDate) errors.push('Requested delivery date is required.');
+  if (form.requestedDate && form.requestedDate < today)
+    errors.push('Requested delivery date cannot be in the past.');
+  form.items.forEach((item, index) =>
+    errors.push(
+      ...Object.values(getItemErrors(item, index)).filter((message): message is string =>
+        Boolean(message),
+      ),
+    ),
+  );
+  if (form.notes.length > 1000)
+    errors.push('Special instructions must be 1000 characters or fewer.');
   return errors;
 }
 
@@ -885,38 +1054,23 @@ function toPayload(form: FormState): CustomerQuotationPayload {
     fulfilmentType: form.fulfilmentType,
     shipToLocationId: form.shipToLocationId,
     requestedDate: form.requestedDate,
-    items: form.items.map((item) => ({
-      productId: item.product?.id ?? '',
-      quantity: Number(item.quantity),
-      palletRequired: item.palletRequired,
-    })),
+    items: form.items.map((item) => {
+      const line: CustomerQuotationPayload['items'][number] = {
+        productId: item.product?.id ?? '',
+        quantity: Number(item.quantity),
+        palletRequired: item.palletRequired,
+      };
+      return item.palletRequired
+        ? {
+            ...line,
+            palletType: item.palletType.trim(),
+            palletQuantity: Number(item.palletQuantity),
+          }
+        : line;
+    }),
   };
-
-  if (form.fulfilmentType === 'PICKUP') {
-    Object.assign(payload, { pickupLocationId: form.pickupLocationId });
-  }
-
-  const notes = form.notes.trim();
-  if (notes) {
-    Object.assign(payload, { notes });
-  }
-
-  payload.items = form.items.map((item) => {
-    const line: CustomerQuotationPayload['items'][number] = {
-      productId: item.product?.id ?? '',
-      quantity: Number(item.quantity),
-      palletRequired: item.palletRequired,
-    };
-
-    if (!item.palletRequired) return line;
-
-    return {
-      ...line,
-      palletType: item.palletType.trim(),
-      palletQuantity: Number(item.palletQuantity),
-    };
-  });
-
+  if (form.fulfilmentType === 'PICKUP') payload.pickupLocationId = form.pickupLocationId;
+  if (form.notes.trim()) payload.notes = form.notes.trim();
   return payload;
 }
 
@@ -942,4 +1096,21 @@ function fromQuotation(quotation: CustomerQuotation): FormState {
       palletQuantity: item.palletQuantity ? String(item.palletQuantity) : '',
     })),
   };
+}
+
+function serializeForm(form: FormState) {
+  return JSON.stringify({
+    fulfilmentType: form.fulfilmentType,
+    pickupLocationId: form.pickupLocationId,
+    shipToLocationId: form.shipToLocationId,
+    requestedDate: form.requestedDate,
+    notes: form.notes,
+    items: form.items.map((item) => ({
+      productId: item.product?.id ?? null,
+      quantity: item.quantity,
+      palletRequired: item.palletRequired,
+      palletType: item.palletType,
+      palletQuantity: item.palletQuantity,
+    })),
+  });
 }

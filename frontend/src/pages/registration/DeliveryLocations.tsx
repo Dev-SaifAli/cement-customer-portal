@@ -28,6 +28,7 @@ import {
   useRegistration,
   type DeliveryLocation,
 } from '../../context/RegistrationContext';
+import { createClientId } from '../../utils/createClientId';
 
 type DeliveryLocationForm = {
   name: string;
@@ -164,7 +165,7 @@ export default function DeliveryLocations() {
       );
     } else {
       const newLocation: DeliveryLocation = {
-        id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
+        id: createClientId(),
         name: form.name,
         siteId: `LOC-${Math.floor(100 + Math.random() * 900)}-${form.city
           .slice(0, 3)
