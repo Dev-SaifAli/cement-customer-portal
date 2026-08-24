@@ -7,18 +7,24 @@ import {
   MapPin,
   Menu,
   PackageSearch,
-  FilePlus2,
+  FileText,
   UserCircle,
   Users,
   X,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Logo from '../../components/Logo/Logo';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import type { CustomerRole } from '../../services/customerAuthService';
 
-const customerNavigation = [
+const customerNavigation: Array<{
+  to: string;
+  label: string;
+  icon: ReactNode;
+  activePrefix?: string;
+  roles: CustomerRole[];
+}> = [
   {
     to: '/customer/dashboard',
     label: 'Dashboard',
@@ -51,26 +57,25 @@ const customerNavigation = [
   },
   {
     to: '/customer/quotations/new',
-    label: 'New Quotation',
-    icon: <FilePlus2 size={18} />,
+    activePrefix: '/customer/quotations',
+    label: 'Quotations',
+    icon: <FileText size={18} />,
     roles: ['CUSTOMER_ADMIN', 'PURCHASER'],
   },
-] satisfies Array<{
-  to: string;
-  label: string;
-  icon: ReactNode;
-  roles: CustomerRole[];
-}>;
+];
 
 export function CustomerLayout() {
   const { account, logout, user } = useCustomerAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const visibleNavigation = customerNavigation.filter(
     (item) => user?.role && item.roles.includes(user.role),
   );
+  const pageContext = getPageContext(location.pathname);
+  const initials = getInitials(user?.name);
 
   const handleLogout = async () => {
     await logout();
@@ -80,28 +85,38 @@ export function CustomerLayout() {
   return (
     <div className="min-h-screen bg-slate-50 font-['Manrope',system-ui,sans-serif] text-slate-950">
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-72 border-r border-slate-200 bg-white transition-all duration-200 lg:translate-x-0 ${
-          sidebarCollapsed ? 'lg:w-[72px]' : 'lg:w-64'
+        className={`fixed inset-y-0 left-0 z-40 flex w-[232px] flex-col border-r border-[#e3e1e8] bg-white transition-all duration-200 lg:translate-x-0 ${
+          sidebarCollapsed ? 'lg:w-[68px]' : 'lg:w-[232px]'
         } ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div
-          className={`flex h-16 items-center border-b border-slate-200 ${
-            sidebarCollapsed ? 'justify-center px-3' : 'justify-between px-5'
+          className={`relative flex h-[60px] items-center border-b border-[#eceaf0] ${
+            sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-4'
           }`}
         >
           <Link
             to="/customer/dashboard"
-            className={`flex min-w-0 items-center gap-3 ${sidebarCollapsed ? 'lg:hidden' : ''}`}
+            className={`flex min-w-0 items-center gap-2.5 ${sidebarCollapsed ? 'lg:hidden' : ''}`}
           >
             <Logo size="sm" />
+            <span className="min-w-0 border-l border-[#e3e1e8] pl-2.5">
+              <span className="block truncate text-sm font-bold leading-tight text-[#54247a]">
+                AlSafwa Cement
+              </span>
+              <span className="mt-0.5 block truncate text-[11px] font-medium text-slate-500">
+                Customer Portal
+              </span>
+            </span>
           </Link>
           <button
             type="button"
-            className="hidden rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:inline-flex"
+            className={`absolute -right-3 top-[18px] hidden h-6 w-6 items-center justify-center rounded-full border border-[#e3e1e8] bg-white text-slate-500 shadow-sm transition hover:border-[#54247a] hover:text-[#54247a] lg:inline-flex ${
+              sidebarCollapsed ? '' : ''
+            }`}
             onClick={() => setSidebarCollapsed((current) => !current)}
             aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
-            {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+            {sidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
           </button>
           <button
             type="button"
@@ -113,12 +128,13 @@ export function CustomerLayout() {
           </button>
         </div>
 
-        <nav className={`space-y-2 ${sidebarCollapsed ? 'p-3' : 'p-4'}`}>
+        <nav className={`flex-1 space-y-2 overflow-y-auto ${sidebarCollapsed ? 'p-2.5' : 'p-3'}`}>
           {visibleNavigation.map((item) => (
             <CustomerNavLink
               key={item.to}
               to={item.to}
               icon={item.icon}
+              activePrefix={item.activePrefix}
               collapsed={sidebarCollapsed}
               onClick={() => setSidebarOpen(false)}
             >
@@ -126,6 +142,31 @@ export function CustomerLayout() {
             </CustomerNavLink>
           ))}
         </nav>
+
+        <div className={`border-t border-[#eceaf0] ${sidebarCollapsed ? 'p-2.5' : 'p-3'}`}>
+          <div
+            className={`group relative flex items-center rounded-lg border border-[#eceaf0] bg-white ${
+              sidebarCollapsed ? 'justify-center p-2' : 'gap-2.5 px-2.5 py-2'
+            }`}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f6f2fa] text-xs font-bold text-[#54247a]">
+              {initials}
+            </span>
+            <span className={sidebarCollapsed ? 'lg:hidden' : 'min-w-0'}>
+              <span className="block truncate text-xs font-semibold text-[#1a1b23]">
+                {user?.name ?? 'Customer user'}
+              </span>
+              <span className="mt-0.5 block truncate text-[10px] text-[#64748b]">
+                {account?.companyName ?? 'Customer account'}
+              </span>
+            </span>
+            {sidebarCollapsed && (
+              <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 hidden -translate-y-1/2 whitespace-nowrap rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-medium text-white opacity-0 shadow-lg transition group-hover:opacity-100 lg:block">
+                {user?.name ?? 'Customer user'}
+              </span>
+            )}
+          </div>
+        </div>
       </aside>
 
       {sidebarOpen && (
@@ -138,9 +179,11 @@ export function CustomerLayout() {
       )}
 
       <div
-        className={`transition-all duration-200 ${sidebarCollapsed ? 'lg:pl-[72px]' : 'lg:pl-64'}`}
+        className={`min-w-0 transition-all duration-200 ${
+          sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-[232px]'
+        }`}
       >
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur lg:px-8">
+        <header className="sticky top-0 z-20 flex h-[60px] items-center justify-between border-b border-[#e3e1e8] bg-white/95 px-4 backdrop-blur lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -150,28 +193,30 @@ export function CustomerLayout() {
             >
               <Menu size={20} />
             </button>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-900">Dashboard</p>
-              <p className="truncate text-xs text-slate-500">
-                {account?.companyName ?? 'AlSafwa Cement customer account'}
-              </p>
+            <div className="flex min-w-0 items-center gap-2 text-sm">
+              {pageContext.parent && (
+                <>
+                  <span className="truncate font-medium text-[#64748b]">{pageContext.parent}</span>
+                  <span className="text-[#c5c1ca]">/</span>
+                </>
+              )}
+              <span className="truncate font-semibold text-[#1a1b23]">{pageContext.title}</span>
             </div>
           </div>
 
           <div className="relative flex items-center gap-3">
-            <div className="hidden text-right sm:block">
-              <p className="text-sm font-semibold text-slate-900">{user?.name}</p>
-              <p className="text-xs text-slate-500">{user?.email}</p>
-            </div>
             <button
               type="button"
               onClick={() => setProfileMenuOpen((current) => !current)}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#4b2c71] hover:bg-[#f6f2fa] hover:text-[#4b2c71]"
+              className="inline-flex items-center gap-2 rounded-lg border border-[#e3e1e8] bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-[#54247a] hover:bg-[#f6f2fa] hover:text-[#54247a]"
               aria-expanded={profileMenuOpen}
               aria-haspopup="menu"
+              aria-label={`Account menu for ${user?.name ?? 'customer user'}`}
             >
-              <UserCircle size={18} />
-              <span className="hidden sm:inline">Account</span>
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f6f2fa] text-[11px] font-bold text-[#54247a]">
+                {initials}
+              </span>
+              <span className="hidden max-w-36 truncate sm:inline">{user?.name}</span>
               <ChevronDown size={15} />
             </button>
             {profileMenuOpen && (
@@ -200,7 +245,7 @@ export function CustomerLayout() {
           </div>
         </header>
 
-        <main className="px-4 py-6 lg:px-8">
+        <main className="min-w-0 px-4 py-5 lg:px-6 lg:py-6">
           <Outlet />
         </main>
       </div>
@@ -213,25 +258,29 @@ function CustomerNavLink({
   icon,
   children,
   collapsed,
+  activePrefix,
   onClick,
 }: {
   to: string;
   icon: ReactNode;
   children: string;
   collapsed: boolean;
+  activePrefix?: string | undefined;
   onClick?: () => void;
 }) {
+  const location = useLocation();
+
   return (
     <NavLink
       to={to}
       onClick={onClick}
       className={({ isActive }) =>
-        `group relative flex items-center rounded-xl border text-sm font-semibold transition ${
-          collapsed ? 'justify-center px-3 py-3' : 'gap-3 px-4 py-3'
+        `group relative flex h-10 items-center rounded-lg text-[13px] font-medium transition ${
+          collapsed ? 'justify-center px-2' : 'gap-3 px-3'
         } ${
-          isActive
-            ? 'border-[#decbe5] bg-[#f6f2fa] text-[#4b2c71] shadow-sm'
-            : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950'
+          (activePrefix ? location.pathname.startsWith(activePrefix) : isActive)
+            ? 'bg-[#f6f2fa] text-[#54247a] before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-[#54247a]'
+            : 'text-[#4b4d5c] hover:bg-slate-50 hover:text-[#1a1b23]'
         }`
       }
     >
@@ -244,4 +293,38 @@ function CustomerNavLink({
       )}
     </NavLink>
   );
+}
+
+function getPageContext(pathname: string) {
+  if (pathname.startsWith('/customer/quotations/')) {
+    return {
+      parent: 'Quotation',
+      title: pathname.endsWith('/new') ? 'New Quotation' : 'Quotation Details',
+    };
+  }
+  if (pathname === '/customer/quotations') return { title: 'Quotations' };
+  if (pathname.startsWith('/customer/products/')) {
+    return { parent: 'Products', title: 'Product Details' };
+  }
+
+  const labels: Record<string, string> = {
+    '/customer/dashboard': 'Dashboard',
+    '/customer/profile': 'Profile',
+    '/customer/locations': 'Delivery Locations',
+    '/customer/users': 'Users',
+    '/customer/products': 'Products',
+  };
+
+  return { title: labels[pathname] ?? 'Customer Portal' };
+}
+
+function getInitials(name: string | null | undefined) {
+  if (!name?.trim()) return 'CU';
+
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
 }
