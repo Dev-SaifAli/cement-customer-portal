@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useEffect } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -59,6 +59,223 @@ describe('authentication routes', () => {
       .mock.calls.filter(([input]) => String(input).includes('/registrations'));
 
     expect(registrationCalls).toHaveLength(0);
+  });
+
+  it('validates customer login required fields on the existing /login page', async () => {
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /sign in/i }));
+
+    expect(await screen.findByText('Email address is required.')).toBeInTheDocument();
+    expect(screen.getByText('Password is required.')).toBeInTheDocument();
+    expect(screen.getByText('Please complete the security verification.')).toBeInTheDocument();
+  });
+
+  it('blocks customer login before the API call when CAPTCHA is blank or incorrect', async () => {
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(await screen.findByLabelText(/email/i), {
+      target: { value: 'admin@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText(/password/i, { selector: 'input' }), {
+      target: { value: 'correct-password' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+    expect(
+      await screen.findByText('Please complete the security verification.'),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/security verification/i), {
+      target: { value: '999' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    expect(
+      await screen.findByText('Security verification answer is incorrect. Please try again.'),
+    ).toBeInTheDocument();
+
+    const customerLoginCalls = vi
+      .mocked(fetch)
+      .mock.calls.filter(([input]) => String(input).endsWith('/customer/auth/login'));
+    expect(customerLoginCalls).toHaveLength(0);
+  });
+
+  it('refreshes the customer login CAPTCHA challenge', async () => {
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    const initialChallenge = await findCaptchaChallengeText();
+    fireEvent.click(screen.getByRole('button', { name: /refresh security challenge/i }));
+
+    await waitFor(async () => {
+      expect(await findCaptchaChallengeText()).not.toBe(initialChallenge);
+    });
+  });
+
+  it('shows a generic customer login error for invalid credentials on /login', async () => {
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(await screen.findByLabelText(/email/i), {
+      target: { value: 'wrong@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText(/password/i, { selector: 'input' }), {
+      target: { value: 'wrong-password' },
+    });
+    fillCaptchaAnswer();
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    expect(await screen.findByText('Invalid email or password.')).toBeInTheDocument();
+  });
+
+  it('redirects customer login to the authenticated customer dashboard route', async () => {
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(await screen.findByLabelText(/email/i), {
+      target: { value: 'admin@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText(/password/i, { selector: 'input' }), {
+      target: { value: 'correct-password' },
+    });
+    fillCaptchaAnswer();
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    expect(
+      await screen.findByRole('heading', {
+        name: /customer dashboard/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /account/i })).toBeInTheDocument();
+  });
+
+  it('keeps customer login show/hide password working', async () => {
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    const passwordInput = await screen.findByLabelText(/password/i, {
+      selector: 'input',
+    });
+    expect(passwordInput).toHaveAttribute('type', 'password');
+
+    fireEvent.click(screen.getByRole('button', { name: /show password/i }));
+    expect(passwordInput).toHaveAttribute('type', 'text');
+  });
+
+  it('redirects protected customer routes to the existing /login page when unauthenticated', async () => {
+    render(
+      <MemoryRouter initialEntries={['/customer/dashboard']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: 'Welcome Back', level: 1 }),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    {
+      role: 'CUSTOMER_ADMIN',
+      visible: [/dashboard/i, /profile/i, /delivery locations/i, /products/i, /^users$/i],
+      hidden: [],
+    },
+    {
+      role: 'PURCHASER',
+      visible: [/dashboard/i, /profile/i, /delivery locations/i, /products/i],
+      hidden: [/^users$/i],
+    },
+    {
+      role: 'FINANCE_USER',
+      visible: [/dashboard/i, /profile/i, /products/i],
+      hidden: [/delivery locations/i, /^users$/i],
+    },
+    {
+      role: 'VIEWER',
+      visible: [/dashboard/i, /profile/i, /products/i],
+      hidden: [/delivery locations/i, /^users$/i],
+    },
+  ])('shows role-aware customer navigation for $role', async ({ hidden, role, visible }) => {
+    window.sessionStorage.setItem('test_customer_session', 'active');
+    window.sessionStorage.setItem('test_customer_role', role);
+
+    render(
+      <MemoryRouter initialEntries={['/customer/dashboard']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('heading', { name: /customer dashboard/i });
+    const sidebar = screen.getByRole('navigation');
+
+    visible.forEach((name) => {
+      expect(within(sidebar).getByRole('link', { name })).toBeInTheDocument();
+    });
+    hidden.forEach((name) => {
+      expect(within(sidebar).queryByRole('link', { name })).not.toBeInTheDocument();
+    });
+  });
+
+  it('opens customer product details from the product catalog', async () => {
+    window.sessionStorage.setItem('test_customer_session', 'active');
+
+    render(
+      <MemoryRouter initialEntries={['/customer/products']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('link', { name: 'Ordinary Portland Cement' }));
+
+    expect(
+      await screen.findByRole('heading', { name: /ordinary portland cement/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('CEM-OPC-50KG')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /back to products/i })).toBeInTheDocument();
+    const sidebar = screen.getByRole('navigation');
+    const productsLink = within(sidebar).getByRole('link', { name: /products/i });
+    expect(productsLink).toHaveClass('bg-[#f6f2fa]');
+  });
+
+  it('keeps Products active and the customer sidebar visible on product details', async () => {
+    window.sessionStorage.setItem('test_customer_session', 'active');
+
+    render(
+      <MemoryRouter initialEntries={['/customer/products/product-1']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: /ordinary portland cement/i }),
+    ).toBeInTheDocument();
+
+    const sidebar = screen.getByRole('navigation');
+    expect(within(sidebar).getByRole('link', { name: /dashboard/i })).toBeInTheDocument();
+    expect(within(sidebar).getByRole('link', { name: /profile/i })).toBeInTheDocument();
+    expect(within(sidebar).getByRole('link', { name: /products/i })).toHaveClass('bg-[#f6f2fa]');
   });
 
   it('does not create a draft until the user explicitly saves company information', async () => {
@@ -310,6 +527,20 @@ describe('authentication routes', () => {
     expect(screen.getByText('APP-2026-123456')).toBeInTheDocument();
   });
 });
+
+async function findCaptchaChallengeText() {
+  const challenge = await screen.findByText(/^\d+ \+ \d+ = \?$/);
+  return challenge.textContent ?? '';
+}
+
+function fillCaptchaAnswer() {
+  const challengeText = screen.getByText(/^\d+ \+ \d+ = \?$/).textContent ?? '';
+  const [left, right] = challengeText.match(/\d+/g)?.map(Number) ?? [];
+
+  fireEvent.change(screen.getByLabelText(/security verification/i), {
+    target: { value: String((left ?? 0) + (right ?? 0)) },
+  });
+}
 
 function SeedCompleteRegistration() {
   const {

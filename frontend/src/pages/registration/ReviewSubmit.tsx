@@ -11,7 +11,7 @@ import { RegistrationServiceError } from '../../services/registrationService';
 
 export default function ReviewSubmit() {
   const navigate = useNavigate();
-  const { data, setCurrentStep, submitApplication } = useRegistration();
+  const { data, isResubmission, setCurrentStep, submitApplication } = useRegistration();
   const [submitError, setSubmitError] = useState('');
   const [submitErrors, setSubmitErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -53,7 +53,8 @@ export default function ReviewSubmit() {
         <div className="px-8 pb-7 pt-8">
           <h1 className="text-[28px] font-bold tracking-[-0.02em]">Review & Submit</h1>
           <p className="mt-2 text-[16px] leading-6 text-gray-600">
-            Review the registration information before submitting the application.
+            Review the registration information before{' '}
+            {isResubmission ? 'resubmitting the application.' : 'submitting the application.'}
           </p>
         </div>
 
@@ -138,7 +139,13 @@ export default function ReviewSubmit() {
             disabled={isSubmitting}
             className="inline-flex items-center gap-2 rounded-md bg-[#5b2a7a] px-7 py-3 text-sm font-semibold text-white transition hover:bg-[#492060] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSubmitting ? 'Submitting...' : 'Submit Application'}
+            {isSubmitting
+              ? isResubmission
+                ? 'Resubmitting...'
+                : 'Submitting...'
+              : isResubmission
+                ? 'Resubmit Application'
+                : 'Submit Application'}
             <Send size={18} />
           </button>
         </div>

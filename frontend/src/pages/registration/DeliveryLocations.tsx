@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
-  Building2,
   MapPin,
   Map,
   UserRound,
@@ -10,20 +9,51 @@ import {
   Trash2,
   Edit3,
   Save,
+  CheckCircle2,
+  Eye,
+  Star,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { BrandHeader } from '../../components/registration/BrandHeader';
+import { LocationPickerMap } from '../../components/registration/LocationPickerMap';
 import { SaveDraftButton } from '../../components/registration/SaveDraftButton';
 import { SaveStatus } from '../../components/registration/SaveStatus';
+import { formatCoordinates, isValidCoordinates } from '../../config/map';
 import {
   formatSaudiPhoneNumber,
   getSaudiPhoneDigitsRemaining,
   getSaudiPhoneLocalDigits,
+  isDeliveryLocationValid,
   isSaudiPhoneNumber,
   useRegistration,
   type DeliveryLocation,
 } from '../../context/RegistrationContext';
 
-const emptyForm = {
+type DeliveryLocationForm = {
+  name: string;
+  streetAddress: string;
+  city: string;
+  region: string;
+  country: string;
+  postalCode: string;
+  contactPerson: string;
+  contactPhone: string;
+  latitude?: number | undefined;
+  longitude?: number | undefined;
+  isPrimary?: boolean | undefined;
+};
+
+type MapTarget =
+  | { type: 'form' }
+  | { type: 'location'; locationId: string; locationName: string; coordinates: Coordinates }
+  | null;
+
+type Coordinates = {
+  latitude: number;
+  longitude: number;
+};
+
+const emptyForm: DeliveryLocationForm = {
   name: '',
   streetAddress: '',
   city: '',
@@ -34,18 +64,37 @@ const emptyForm = {
   contactPhone: '',
 };
 
+const SAUDI_REGIONS = [
+  'Riyadh',
+  'Makkah',
+  'Madinah',
+  'Eastern Province',
+  'Asir',
+  'Tabuk',
+  'Qassim',
+  'Hail',
+  'Jazan',
+  'Najran',
+  'Al Bahah',
+  'Al Jawf',
+  'Northern Borders',
+];
+
 export default function DeliveryLocations() {
   const navigate = useNavigate();
   const { continueRegistration, data, setCurrentStep, setDeliveryLocations } = useRegistration();
   const locations = data.deliveryLocations;
+  const hasValidLocations = locations.length > 0 && locations.every(isDeliveryLocationValid);
 
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [mapTarget, setMapTarget] = useState<MapTarget>(null);
+  const [locationToDelete, setLocationToDelete] = useState<DeliveryLocation | null>(null);
 
   useEffect(() => setCurrentStep(4), [setCurrentStep]);
 
-  const updateField = (field: keyof typeof emptyForm, value: string) => {
+  const updateField = (field: keyof DeliveryLocationForm, value: string) => {
     setForm((prev) => ({
       ...prev,
       [field]: value,
@@ -71,6 +120,9 @@ export default function DeliveryLocations() {
     else if (!isSaudiPhoneNumber(form.contactPhone)) {
       newErrors.contactPhone = 'Enter a valid Saudi mobile number.';
     }
+    if (!areOptionalCoordinatesValid(form)) {
+      newErrors.coordinates = 'Selected map coordinates are invalid.';
+    }
 
     setErrors(newErrors);
 
@@ -88,20 +140,26 @@ export default function DeliveryLocations() {
 
     if (editingId) {
       setDeliveryLocations(
-        locations.map((location) =>
-          location.id === editingId
-            ? {
-                ...location,
-                name: form.name,
-                streetAddress: form.streetAddress,
-                city: form.city,
-                region: form.region,
-                country: form.country,
-                postalCode: form.postalCode,
-                contactPerson: form.contactPerson,
-                contactPhone: form.contactPhone,
-              }
-            : location,
+        normalizePrimaryLocations(
+          locations.map((location) =>
+            location.id === editingId
+              ? {
+                  ...location,
+                  name: form.name,
+                  streetAddress: form.streetAddress,
+                  city: form.city,
+                  region: form.region,
+                  country: form.country,
+                  postalCode: form.postalCode,
+                  contactPerson: form.contactPerson,
+                  contactPhone: form.contactPhone,
+                  latitude: form.latitude,
+                  longitude: form.longitude,
+                  isPrimary: form.isPrimary,
+                }
+              : location,
+          ),
+          form.isPrimary ? editingId : undefined,
         ),
       );
     } else {
@@ -118,9 +176,12 @@ export default function DeliveryLocations() {
         postalCode: form.postalCode,
         contactPerson: form.contactPerson,
         contactPhone: form.contactPhone,
+        latitude: form.latitude,
+        longitude: form.longitude,
+        isPrimary: locations.length === 0 || form.isPrimary,
       };
 
-      setDeliveryLocations([...locations, newLocation]);
+      setDeliveryLocations(normalizePrimaryLocations([...locations, newLocation], newLocation.id));
     }
 
     resetForm();
@@ -138,6 +199,9 @@ export default function DeliveryLocations() {
       postalCode: location.postalCode,
       contactPerson: location.contactPerson,
       contactPhone: location.contactPhone,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      isPrimary: location.isPrimary,
     });
 
     window.scrollTo({
@@ -146,19 +210,29 @@ export default function DeliveryLocations() {
     });
   };
 
-  const deleteLocation = (id: string) => {
-    if (!window.confirm('Remove this delivery location?')) return;
+  const confirmDeleteLocation = () => {
+    if (!locationToDelete) return;
 
-    setDeliveryLocations(locations.filter((location) => location.id !== id));
+    setDeliveryLocations(
+      normalizePrimaryLocations(
+        locations.filter((location) => location.id !== locationToDelete.id),
+      ),
+    );
 
-    if (editingId === id) {
+    if (editingId === locationToDelete.id) {
       resetForm();
     }
+
+    setLocationToDelete(null);
+  };
+
+  const setPrimaryLocation = (id: string) => {
+    setDeliveryLocations(normalizePrimaryLocations(locations, id));
   };
 
   const handleContinue = () => {
-    if (locations.length === 0) {
-      alert('Please add at least one delivery location.');
+    if (!hasValidLocations) {
+      alert('Please add at least one complete and valid delivery location.');
       return;
     }
 
@@ -168,23 +242,7 @@ export default function DeliveryLocations() {
   return (
     <div className="min-h-screen bg-[#fafafa] text-[#292929]">
       {/* Header */}
-      <header className="h-[68px] border-b border-[#e5e0e5] bg-white px-6 lg:px-10 flex items-center">
-        <div className="flex items-center gap-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-sm bg-[#54247a] flex items-center justify-center">
-              <Building2 className="w-6 h-6 text-white" />
-            </div>
-
-            <span className="text-[25px] font-bold tracking-tight text-[#54247a]">
-              AlSafwa Cement
-            </span>
-          </div>
-
-          <div className="h-8 w-px bg-[#ddd6df]" />
-
-          <span className="text-[16px] text-[#625c62]">Vendor Registration Portal</span>
-        </div>
-      </header>
+      <BrandHeader />
 
       {/* Progress */}
       <RegistrationProgress />
@@ -229,6 +287,7 @@ export default function DeliveryLocations() {
                   placeholder="Plot number, Street name"
                   value={form.streetAddress}
                   error={errors.streetAddress}
+                  autoComplete="shipping street-address"
                   onChange={(value) => updateField('streetAddress', value)}
                 />
 
@@ -239,6 +298,7 @@ export default function DeliveryLocations() {
                     placeholder="e.g. Jeddah"
                     value={form.city}
                     error={errors.city}
+                    autoComplete="shipping address-level2"
                     onChange={(value) => updateField('city', value)}
                   />
 
@@ -247,29 +307,85 @@ export default function DeliveryLocations() {
                     required
                     value={form.region}
                     error={errors.region}
+                    autoComplete="shipping address-level1"
                     onChange={(value) => updateField('region', value)}
-                    options={[
-                      'Riyadh Province',
-                      'Makkah Province',
-                      'Madinah Province',
-                      'Eastern Province',
-                      'Asir Province',
-                      'Tabuk Province',
-                      'Other',
-                    ]}
+                    options={SAUDI_REGIONS}
                   />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormInput label="Country" value={form.country} disabled onChange={() => {}} />
+                  <FormInput
+                    label="Country"
+                    value={form.country}
+                    disabled
+                    autoComplete="shipping country-name"
+                    onChange={() => {}}
+                  />
 
                   <FormInput
                     label="Postal Code"
                     placeholder="e.g. 21442"
                     value={form.postalCode}
+                    autoComplete="shipping postal-code"
                     onChange={(value) => updateField('postalCode', value)}
                   />
                 </div>
+
+                <div className="rounded-md border border-[#e5dfe5] bg-[#fbfafb] p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-[14px] font-semibold text-[#3f3940]">Map Location</h2>
+                        <span className="rounded-full bg-[#eee9ee] px-2 py-0.5 text-xs font-semibold text-[#6c666c]">
+                          Optional
+                        </span>
+                      </div>
+                      {getFormCoordinates(form) ? (
+                        <div className="mt-2 space-y-1">
+                          <p className="flex items-center gap-1.5 text-sm font-semibold text-[#087443]">
+                            <CheckCircle2 size={16} />
+                            Map location selected
+                          </p>
+                          <details className="text-xs text-[#777177]">
+                            <summary className="cursor-pointer">Coordinates</summary>
+                            <span>{formatCoordinates(getFormCoordinates(form)!)}</span>
+                          </details>
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-sm text-[#777177]">No map location selected</p>
+                      )}
+                      {errors.coordinates && (
+                        <p className="mt-1 text-xs text-red-600">{errors.coordinates}</p>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setMapTarget({ type: 'form' })}
+                      className="inline-flex w-fit items-center gap-2 rounded-md border border-[#5b2a7a] bg-[#faf7fb] px-5 py-2.5 text-sm font-semibold text-[#5b2a7a] transition-colors hover:bg-[#f3eaf7]"
+                    >
+                      <MapPin size={17} />
+                      {getFormCoordinates(form) ? 'View / Update Map Location' : 'Open Map'}
+                    </button>
+                  </div>
+                </div>
+
+                <label className="flex cursor-pointer items-start gap-3 rounded-md border border-[#e5dfe5] bg-white px-4 py-3 text-sm text-[#625c62]">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.isPrimary)}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, isPrimary: event.target.checked }))
+                    }
+                    className="mt-1 h-4 w-4 rounded border-[#d6cbd7] accent-[#54247a]"
+                  />
+                  <span>
+                    <span className="font-semibold text-[#3f3940]">Primary Delivery Location</span>
+                    <span className="mt-0.5 block text-xs text-[#777177]">
+                      Optional. Only one saved location can be marked as primary.
+                    </span>
+                  </span>
+                </label>
 
                 {/* Site Contact */}
                 <div className="pt-5 border-t border-[#e5dfe5]">
@@ -311,7 +427,7 @@ export default function DeliveryLocations() {
                       onClick={resetForm}
                       className="mr-3 px-5 py-3 rounded-md border border-[#cfc6d0] text-[#625c62] font-semibold hover:bg-[#faf7fb]"
                     >
-                      Cancel
+                      Cancel Edit
                     </button>
                   )}
 
@@ -322,7 +438,7 @@ export default function DeliveryLocations() {
                   >
                     {editingId ? <Save size={18} /> : <Plus size={18} />}
 
-                    {editingId ? 'Save Location' : 'Add Location to List'}
+                    {editingId ? 'Update Location' : 'Add Location to List'}
                   </button>
                 </div>
               </div>
@@ -359,8 +475,19 @@ export default function DeliveryLocations() {
                   <LocationCard
                     key={location.id}
                     location={location}
+                    onViewMap={() => {
+                      const coordinates = getFormCoordinates(location);
+                      if (!coordinates) return;
+                      setMapTarget({
+                        type: 'location',
+                        locationId: location.id,
+                        locationName: location.name,
+                        coordinates,
+                      });
+                    }}
                     onEdit={() => editLocation(location)}
-                    onDelete={() => deleteLocation(location.id)}
+                    onDelete={() => setLocationToDelete(location)}
+                    onMakePrimary={() => setPrimaryLocation(location.id)}
                   />
                 ))}
               </div>
@@ -388,7 +515,7 @@ export default function DeliveryLocations() {
             <button
               type="button"
               onClick={handleContinue}
-              disabled={locations.length === 0}
+              disabled={!hasValidLocations}
               className="px-7 py-3 rounded-md bg-[#54247a] text-white font-semibold flex items-center gap-3 hover:bg-[#472066] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Continue to Customer Administrator
@@ -397,8 +524,98 @@ export default function DeliveryLocations() {
           </div>
         </div>
       </main>
+
+      {mapTarget && (
+        <LocationPickerMap
+          initialCoordinates={getMapTargetCoordinates(mapTarget, form) ?? undefined}
+          locationLabel={getMapTargetLabel(mapTarget, form)}
+          onCancel={() => setMapTarget(null)}
+          onConfirm={(coordinates) => {
+            if (mapTarget.type === 'form') {
+              setForm((current) => ({
+                ...current,
+                latitude: coordinates.latitude,
+                longitude: coordinates.longitude,
+              }));
+              setErrors((current) => ({ ...current, coordinates: '' }));
+            } else {
+              setDeliveryLocations(
+                locations.map((location) =>
+                  location.id === mapTarget.locationId
+                    ? {
+                        ...location,
+                        latitude: coordinates.latitude,
+                        longitude: coordinates.longitude,
+                      }
+                    : location,
+                ),
+              );
+            }
+            setMapTarget(null);
+          }}
+        />
+      )}
+
+      {locationToDelete && (
+        <DeleteLocationDialog
+          location={locationToDelete}
+          onCancel={() => setLocationToDelete(null)}
+          onDelete={confirmDeleteLocation}
+        />
+      )}
     </div>
   );
+}
+
+function getFormCoordinates(location: Pick<DeliveryLocation, 'latitude' | 'longitude'>) {
+  if (typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
+    return null;
+  }
+
+  return {
+    latitude: location.latitude,
+    longitude: location.longitude,
+  };
+}
+
+function areOptionalCoordinatesValid(location: Pick<DeliveryLocation, 'latitude' | 'longitude'>) {
+  const hasLatitude = location.latitude !== undefined;
+  const hasLongitude = location.longitude !== undefined;
+
+  if (hasLatitude !== hasLongitude) return false;
+
+  const coordinates = getFormCoordinates(location);
+
+  return coordinates === null || isValidCoordinates(coordinates);
+}
+
+function getMapTargetCoordinates(mapTarget: MapTarget, form: DeliveryLocationForm) {
+  if (!mapTarget) return null;
+  if (mapTarget.type === 'location') return mapTarget.coordinates;
+
+  return getFormCoordinates(form);
+}
+
+function getMapTargetLabel(mapTarget: MapTarget, form: DeliveryLocationForm) {
+  if (!mapTarget) return undefined;
+  if (mapTarget.type === 'location') return mapTarget.locationName;
+
+  return form.name || form.city || undefined;
+}
+
+function normalizePrimaryLocations(locations: DeliveryLocation[], primaryId?: string) {
+  if (locations.length === 0) return locations;
+
+  const selectedPrimaryId =
+    primaryId ??
+    locations.find((location) => location.isPrimary)?.id ??
+    locations.find((location) => isDeliveryLocationValid(location))?.id ??
+    locations[0]?.id;
+
+  return locations.map((location) => ({
+    ...location,
+    isPrimary: location.id === selectedPrimaryId,
+  }));
 }
 
 /* -------------------------------------------------------
@@ -472,13 +689,19 @@ function RegistrationProgress() {
 
 function LocationCard({
   location,
+  onViewMap,
   onEdit,
   onDelete,
+  onMakePrimary,
 }: {
   location: DeliveryLocation;
+  onViewMap: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onMakePrimary: () => void;
 }) {
+  const coordinates = getFormCoordinates(location);
+
   return (
     <div className="bg-white border border-[#e1dce1] rounded-md shadow-sm p-5 hover:shadow-md transition-shadow">
       <div className="flex justify-between gap-4">
@@ -488,29 +711,63 @@ function LocationCard({
           </div>
 
           <div>
-            <h3 className="font-bold text-[17px]">{location.name}</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-bold text-[17px]">{location.name}</h3>
+              {location.isPrimary && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#f4edf7] px-2 py-0.5 text-xs font-bold text-[#54247a]">
+                  <Star size={12} fill="currentColor" />
+                  Primary
+                </span>
+              )}
+            </div>
 
             <p className="text-sm text-[#777177] mt-0.5">ID: {location.siteId}</p>
           </div>
         </div>
 
-        <div className="flex items-start gap-1">
+        <div className="flex flex-wrap items-start justify-end gap-1">
+          {coordinates && (
+            <button
+              type="button"
+              onClick={onViewMap}
+              title="View map"
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-sm font-semibold text-[#625c62] hover:bg-[#f3edf5] hover:text-[#54247a]"
+            >
+              <Eye size={16} />
+              View Map
+            </button>
+          )}
+
+          {!location.isPrimary && (
+            <button
+              type="button"
+              onClick={onMakePrimary}
+              title="Make primary"
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-sm font-semibold text-[#625c62] hover:bg-[#f3edf5] hover:text-[#54247a]"
+            >
+              <Star size={16} />
+              Primary
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onEdit}
             title="Edit location"
-            className="p-2 rounded-md text-[#6b626c] hover:bg-[#f3edf5] hover:text-[#54247a]"
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-sm font-semibold text-[#625c62] hover:bg-[#f3edf5] hover:text-[#54247a]"
           >
             <Edit3 size={17} />
+            Edit
           </button>
 
           <button
             type="button"
             onClick={onDelete}
             title="Delete location"
-            className="p-2 rounded-md text-[#6b626c] hover:bg-red-50 hover:text-red-600"
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-sm font-semibold text-[#625c62] hover:bg-red-50 hover:text-red-600"
           >
             <Trash2 size={17} />
+            Delete
           </button>
         </div>
       </div>
@@ -529,6 +786,64 @@ function LocationCard({
             {location.contactPerson} • {location.contactPhone}
           </span>
         </div>
+
+        {coordinates && (
+          <div className="flex gap-2 text-[#087443]">
+            <CheckCircle2 size={17} className="mt-0.5 shrink-0" />
+            <span>Map location selected</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DeleteLocationDialog({
+  location,
+  onCancel,
+  onDelete,
+}: {
+  location: DeliveryLocation;
+  onCancel: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Delete delivery location"
+    >
+      <div className="w-full max-w-md rounded-xl border border-[#e1d8e2] bg-white p-6 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+            <Trash2 size={20} />
+          </div>
+
+          <div>
+            <h2 className="text-lg font-bold text-[#292929]">Delete Delivery Location?</h2>
+            <p className="mt-2 text-sm leading-6 text-[#625c62]">
+              Are you sure you want to remove "{location.name}"?
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-md border border-[#cfc6d0] px-5 py-2.5 text-sm font-semibold text-[#625c62] hover:bg-[#faf7fb]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="rounded-md bg-red-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-700"
+          >
+            Delete
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -546,6 +861,7 @@ function FormInput({
   error,
   disabled,
   isPhone,
+  autoComplete,
   onChange,
 }: {
   label: string;
@@ -555,6 +871,7 @@ function FormInput({
   error?: string | undefined;
   disabled?: boolean | undefined;
   isPhone?: boolean | undefined;
+  autoComplete?: string | undefined;
   onChange: (value: string) => void;
 }) {
   const digitsRemaining = isPhone ? getSaudiPhoneDigitsRemaining(value) : 0;
@@ -589,6 +906,7 @@ function FormInput({
           value={isPhone ? formatSaudiPhoneNumber(value) : value}
           disabled={disabled}
           placeholder={placeholder}
+          autoComplete={autoComplete}
           onChange={(e) =>
             onChange(isPhone ? getSaudiPhoneLocalDigits(e.target.value) : e.target.value)
           }
@@ -632,6 +950,7 @@ function FormSelect({
   value,
   error,
   options,
+  autoComplete,
   onChange,
 }: {
   label: string;
@@ -639,6 +958,7 @@ function FormSelect({
   value: string;
   error?: string | undefined;
   options: string[];
+  autoComplete?: string | undefined;
   onChange: (value: string) => void;
 }) {
   return (
@@ -650,6 +970,7 @@ function FormSelect({
 
       <select
         value={value}
+        autoComplete={autoComplete}
         onChange={(e) => onChange(e.target.value)}
         className={`
           w-full h-[43px] px-3 rounded-sm border bg-white

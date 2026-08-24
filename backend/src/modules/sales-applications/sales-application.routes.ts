@@ -14,6 +14,11 @@ salesApplicationRouter.get(
 );
 
 salesApplicationRouter.get(
+  '/filter-options',
+  asyncHandler((request, response) => salesApplicationController.filterOptions(request, response)),
+);
+
+salesApplicationRouter.get(
   '/:id',
   asyncHandler((request, response) => salesApplicationController.get(request, response)),
 );
@@ -23,6 +28,11 @@ salesApplicationRouter.get(
   asyncHandler((request, response) =>
     registrationDocumentController.streamForSales(request, response),
   ),
+);
+
+salesApplicationRouter.post(
+  '/:id/activate',
+  asyncHandler((request, response) => salesApplicationController.activate(request, response)),
 );
 
 salesApplicationRouter.patch(

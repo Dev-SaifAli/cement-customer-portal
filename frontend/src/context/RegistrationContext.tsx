@@ -62,6 +62,9 @@ export type DeliveryLocation = {
   postalCode: string;
   contactPerson: string;
   contactPhone: string;
+  latitude?: number | undefined;
+  longitude?: number | undefined;
+  isPrimary?: boolean | undefined;
 };
 
 export type AdministratorData = {
@@ -94,6 +97,8 @@ type RegistrationContextValue = {
   data: RegistrationData;
   currentStep: number;
   hasUnsavedChanges: boolean;
+  hasSavedAdministratorPassword: boolean;
+  isResubmission: boolean;
   isLoadingDraft: boolean;
   saveError: string;
   saveStatus: SaveStatus;
@@ -107,6 +112,7 @@ type RegistrationContextValue = {
   saveDraft: (options?: { createIfMissing?: boolean }) => Promise<boolean>;
   retrySave: () => void;
   continueRegistration: (onSuccess: () => void) => Promise<void>;
+  loadApplicationForUpdate: (draftId: string) => Promise<void>;
   submitApplication: () => Promise<SubmittedApplication>;
   resetRegistration: () => void;
 };
@@ -166,6 +172,8 @@ export function RegistrationProvider({ children }: { children: ReactNode }) {
   const [submittedApplication, setSubmittedApplication] = useState<SubmittedApplication | null>(
     () => getStoredSubmittedApplication(),
   );
+  const [hasSavedAdministratorPassword, setHasSavedAdministratorPassword] = useState(false);
+  const [isResubmission, setIsResubmission] = useState(false);
 
   const registrationIdRef = useRef<string | null>(null);
   const dataRef = useRef(data);
@@ -202,6 +210,8 @@ export function RegistrationProvider({ children }: { children: ReactNode }) {
 
     registrationIdRef.current = draft.id;
     localStorage.setItem(REGISTRATION_DRAFT_STORAGE_KEY, draft.id);
+    setHasSavedAdministratorPassword(Boolean(draft.hasAdminPassword));
+    setIsResubmission(draft.status === 'CHANGES_REQUESTED');
     lastSavedSnapshotRef.current = getRegistrationSnapshot(nextData);
     setCurrentStepState(nextStep);
     setData(nextData);
@@ -251,6 +261,8 @@ export function RegistrationProvider({ children }: { children: ReactNode }) {
           registrationIdRef.current = null;
           setData(emptyRegistrationData);
           setCurrentStepState(1);
+          setHasSavedAdministratorPassword(false);
+          setIsResubmission(false);
           setSaveStatus('idle');
           setSaveError('');
           return;
@@ -265,6 +277,8 @@ export function RegistrationProvider({ children }: { children: ReactNode }) {
         ) {
           localStorage.removeItem(REGISTRATION_DRAFT_STORAGE_KEY);
           registrationIdRef.current = null;
+          setHasSavedAdministratorPassword(false);
+          setIsResubmission(false);
           setSaveStatus('idle');
           setSaveError('');
         } else {
@@ -373,12 +387,16 @@ export function RegistrationProvider({ children }: { children: ReactNode }) {
             : await createDraft();
           registrationIdRef.current = savedDraft.id;
           localStorage.setItem(REGISTRATION_DRAFT_STORAGE_KEY, savedDraft.id);
+          setHasSavedAdministratorPassword(Boolean(savedDraft.hasAdminPassword));
+          setIsResubmission(savedDraft.status === 'CHANGES_REQUESTED');
 
           const draft = await uploadPendingDocuments(savedDraft.id, savedDraft, dataRef.current);
           const nextData = mergeDraftData(draft, dataRef.current);
 
           registrationIdRef.current = draft.id;
           localStorage.setItem(REGISTRATION_DRAFT_STORAGE_KEY, draft.id);
+          setHasSavedAdministratorPassword(Boolean(draft.hasAdminPassword));
+          setIsResubmission(draft.status === 'CHANGES_REQUESTED');
           lastSavedSnapshotRef.current = getRegistrationSnapshot(nextData);
           setData(nextData);
           setSaveStatus('saved');
@@ -424,6 +442,33 @@ export function RegistrationProvider({ children }: { children: ReactNode }) {
     return continuePromiseRef.current;
   }, []);
 
+  const loadApplicationForUpdate = useCallback(
+    async (draftId: string) => {
+      setIsLoadingDraft(true);
+      setSaveError('');
+      setSaveStatus('idle');
+
+      try {
+        const draft = await getRegistrationDraft(draftId);
+
+        if (draft.status !== 'CHANGES_REQUESTED') {
+          throw new Error('This application is not currently open for customer updates.');
+        }
+
+        applyDraft({ ...draft, currentStep: draft.currentStep || 2 });
+        setSubmittedApplication(null);
+        sessionStorage.removeItem(SUBMITTED_APPLICATION_STORAGE_KEY);
+      } catch (error) {
+        setSaveStatus('error');
+        setSaveError(getRegistrationErrorMessage(error, 'Application could not be loaded.'));
+        throw error;
+      } finally {
+        setIsLoadingDraft(false);
+      }
+    },
+    [applyDraft],
+  );
+
   const submitApplication = useCallback(async () => {
     const saved = await saveDraft({ createIfMissing: true });
     if (!saved || !registrationIdRef.current) {
@@ -435,6 +480,8 @@ export function RegistrationProvider({ children }: { children: ReactNode }) {
     storeSubmittedApplication(submitted);
     registrationIdRef.current = null;
     localStorage.removeItem(REGISTRATION_DRAFT_STORAGE_KEY);
+    setHasSavedAdministratorPassword(false);
+    setIsResubmission(false);
     setSaveStatus('idle');
     setSaveError('');
     return submitted;
@@ -445,6 +492,8 @@ export function RegistrationProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(REGISTRATION_DRAFT_STORAGE_KEY);
     setData(emptyRegistrationData);
     setCurrentStepState(1);
+    setHasSavedAdministratorPassword(false);
+    setIsResubmission(false);
     setSaveStatus('idle');
     setSaveError('');
     setSubmittedApplication(null);
@@ -456,6 +505,8 @@ export function RegistrationProvider({ children }: { children: ReactNode }) {
       data,
       currentStep,
       hasUnsavedChanges,
+      hasSavedAdministratorPassword,
+      isResubmission,
       isLoadingDraft,
       saveError,
       saveStatus,
@@ -469,6 +520,7 @@ export function RegistrationProvider({ children }: { children: ReactNode }) {
       saveDraft,
       retrySave,
       continueRegistration,
+      loadApplicationForUpdate,
       submitApplication,
       resetRegistration,
     }),
@@ -477,7 +529,10 @@ export function RegistrationProvider({ children }: { children: ReactNode }) {
       currentStep,
       data,
       hasUnsavedChanges,
+      hasSavedAdministratorPassword,
+      isResubmission,
       isLoadingDraft,
+      loadApplicationForUpdate,
       resetRegistration,
       retrySave,
       saveDraft,
@@ -638,6 +693,15 @@ export function areDocumentsValid(documents: DocumentsData) {
 }
 
 export function isDeliveryLocationValid(location: DeliveryLocation) {
+  const hasValidOptionalCoordinates =
+    (location.latitude === undefined && location.longitude === undefined) ||
+    (typeof location.latitude === 'number' &&
+      location.latitude >= -90 &&
+      location.latitude <= 90 &&
+      typeof location.longitude === 'number' &&
+      location.longitude >= -180 &&
+      location.longitude <= 180);
+
   return Boolean(
     location.name.trim() &&
     location.streetAddress.trim() &&
@@ -645,7 +709,8 @@ export function isDeliveryLocationValid(location: DeliveryLocation) {
     location.region.trim() &&
     location.country.trim() &&
     location.contactPerson.trim() &&
-    isSaudiPhoneNumber(location.contactPhone.trim()),
+    isSaudiPhoneNumber(location.contactPhone.trim()) &&
+    hasValidOptionalCoordinates,
   );
 }
 
@@ -653,27 +718,39 @@ export function areDeliveryLocationsValid(locations: DeliveryLocation[]) {
   return locations.length > 0 && locations.every(isDeliveryLocationValid);
 }
 
-export function isAdministratorValid(administrator: AdministratorData) {
-  return Boolean(
-    administrator.fullName.trim() &&
-    administrator.jobTitle.trim() &&
-    emailPattern.test(administrator.email.trim()) &&
-    isSaudiPhoneNumber(administrator.phone.trim()) &&
+export function isAdministratorValid(
+  administrator: AdministratorData,
+  options: { hasSavedPassword?: boolean } = {},
+) {
+  const hasValidNewPassword = Boolean(
     administrator.password.length >= 8 &&
     /[A-Z]/.test(administrator.password) &&
     /[a-z]/.test(administrator.password) &&
     /\d/.test(administrator.password) &&
     administrator.password === administrator.confirmPassword,
   );
+
+  return Boolean(
+    administrator.fullName.trim() &&
+    administrator.jobTitle.trim() &&
+    emailPattern.test(administrator.email.trim()) &&
+    isSaudiPhoneNumber(administrator.phone.trim()) &&
+    (hasValidNewPassword || options.hasSavedPassword),
+  );
 }
 
-export function isRegistrationComplete(data: RegistrationData) {
+export function isRegistrationComplete(
+  data: RegistrationData,
+  options: { hasSavedAdministratorPassword?: boolean } = {},
+) {
   return (
     isCompanyValid(data.company) &&
     isContactValid(data.contact) &&
     areDocumentsValid(data.documents) &&
     areDeliveryLocationsValid(data.deliveryLocations) &&
-    isAdministratorValid(data.administrator)
+    isAdministratorValid(data.administrator, {
+      hasSavedPassword: Boolean(options.hasSavedAdministratorPassword),
+    })
   );
 }
 

@@ -10,15 +10,15 @@ import type {
 const statusLabels: Record<ApplicationStatus, string> = {
   SUBMITTED: 'Submitted',
   UNDER_REVIEW: 'Pending Sales Review',
-  CHANGES_REQUIRED: 'Changes Required',
+  CHANGES_REQUIRED: 'Changes Requested',
   APPROVED: 'Approved',
   REJECTED: 'Rejected',
-  ACTIVE: 'Account Active',
+  ACTIVATED: 'Activated',
 };
 
 const createTimeline = (status: ApplicationStatus): ApplicationTimelineItem[] => {
-  const reviewCompleted = ['APPROVED', 'REJECTED', 'ACTIVE'].includes(status);
-  const activationCompleted = status === 'ACTIVE';
+  const reviewCompleted = ['APPROVED', 'REJECTED', 'ACTIVATED'].includes(status);
+  const activationCompleted = status === 'ACTIVATED';
 
   return [
     {
@@ -52,16 +52,39 @@ export class ApplicationService {
     }
 
     const result = await pool.query(
-      `select reference, status, submitted_at
-       from registration_drafts
-       where reference = $1
-         and lower(coalesce(administrator->>'email', contact->>'email')) = lower($2)
+      `select
+         drafts.id,
+         drafts.reference,
+         drafts.status,
+         drafts.submitted_at,
+         latest_change.reason as change_reason
+       from registration_drafts drafts
+       left join lateral (
+         select reason
+         from application_status_events
+         where registration_id = drafts.id
+           and new_status = 'CHANGES_REQUESTED'
+         order by created_at desc
+         limit 1
+       ) latest_change on true
+       where drafts.reference = $1
+         and (
+           lower(coalesce(drafts.administrator->>'email', '')) = lower($2)
+           or lower(coalesce(drafts.contact->>'email', '')) = lower($2)
+         )
        limit 1`,
       [payload.reference, payload.email],
     );
 
     const row = result.rows[0] as
-      { reference: string; status: string; submitted_at: Date | string | null } | undefined;
+      | {
+          id: string;
+          reference: string;
+          status: string;
+          submitted_at: Date | string | null;
+          change_reason: string | null;
+        }
+      | undefined;
 
     if (!row) {
       throw new AppError(
@@ -72,14 +95,18 @@ export class ApplicationService {
     }
 
     const status = normalizeStatus(row.status);
+    const canUpdateApplication = row.status === 'CHANGES_REQUESTED';
 
     return {
+      ...(canUpdateApplication ? { id: row.id } : {}),
       reference: row.reference,
       status,
       statusLabel: statusLabels[status],
       submittedAt: row.submitted_at
         ? new Date(String(row.submitted_at)).toISOString()
         : new Date().toISOString(),
+      changeReason: canUpdateApplication ? row.change_reason : null,
+      canUpdateApplication,
       timeline: createTimeline(status),
     };
   }
@@ -90,6 +117,5 @@ export const applicationService = new ApplicationService();
 function normalizeStatus(status: string): ApplicationStatus {
   if (status === 'PENDING_SALES_REVIEW') return 'UNDER_REVIEW';
   if (status === 'CHANGES_REQUESTED') return 'CHANGES_REQUIRED';
-  if (status === 'ACTIVATED') return 'ACTIVE';
   return status as ApplicationStatus;
 }

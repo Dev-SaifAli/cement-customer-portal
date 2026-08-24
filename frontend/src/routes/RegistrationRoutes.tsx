@@ -31,7 +31,8 @@ function GuardedRegistrationRoute({
   children: React.ReactNode;
   step: RegistrationStep;
 }) {
-  const { data, isLoadingDraft, submittedApplication } = useRegistration();
+  const { data, hasSavedAdministratorPassword, isLoadingDraft, submittedApplication } =
+    useRegistration();
   const location = useLocation();
   const submittedApplicationFromLocation = isSubmittedApplicationLocationState(location.state)
     ? location.state.submittedApplication
@@ -72,13 +73,11 @@ function GuardedRegistrationRoute({
   }
 
   if (step === 'review') {
-    const blockerPath = getFirstIncompleteRegistrationPath(data, [
-      'company',
-      'contact',
-      'documents',
-      'deliveryLocations',
-      'administrator',
-    ]);
+    const blockerPath = getFirstIncompleteRegistrationPath(
+      data,
+      ['company', 'contact', 'documents', 'deliveryLocations', 'administrator'],
+      hasSavedAdministratorPassword,
+    );
 
     if (blockerPath) return <Navigate to={blockerPath} replace />;
   }
@@ -88,7 +87,7 @@ function GuardedRegistrationRoute({
     !submittedApplication?.reference &&
     !submittedApplicationFromLocation?.reference &&
     !storedSubmittedApplication?.reference &&
-    !isRegistrationComplete(data)
+    !isRegistrationComplete(data, { hasSavedAdministratorPassword })
   ) {
     return <Navigate to="/register/review" replace />;
   }
@@ -102,6 +101,7 @@ type RegistrationSection =
 function getFirstIncompleteRegistrationPath(
   data: ReturnType<typeof useRegistration>['data'],
   sections: RegistrationSection[],
+  hasSavedAdministratorPassword = false,
 ) {
   for (const section of sections) {
     if (section === 'company' && !isCompanyValid(data.company)) return '/register/company';
@@ -112,7 +112,10 @@ function getFirstIncompleteRegistrationPath(
     if (section === 'deliveryLocations' && !areDeliveryLocationsValid(data.deliveryLocations)) {
       return '/register/locations';
     }
-    if (section === 'administrator' && !isAdministratorValid(data.administrator)) {
+    if (
+      section === 'administrator' &&
+      !isAdministratorValid(data.administrator, { hasSavedPassword: hasSavedAdministratorPassword })
+    ) {
       return '/register/admin';
     }
   }

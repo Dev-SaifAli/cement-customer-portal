@@ -8,6 +8,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import alsafwaPlantImage from '../../assets/registration/alsafwa-plant.jpg';
 import { SaveStatus } from '../../components/registration/SaveStatus';
 import { useRegistration } from '../../context/RegistrationContext';
 import './RegistrationStart.css';
@@ -60,7 +61,11 @@ export default function RegistrationStart({ onStart }: RegistrationStartProps) {
   return (
     <div className="registration-start">
       {/* Left visual panel */}
-      <section className="registration-hero" aria-label="AlSafwa Cement">
+      <section
+        className="registration-hero"
+        style={{ backgroundImage: `url(${alsafwaPlantImage})` }}
+        aria-label="AlSafwa Cement"
+      >
         <div className="hero-overlay" />
 
         <div className="hero-content">

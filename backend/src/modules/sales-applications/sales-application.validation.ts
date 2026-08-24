@@ -28,9 +28,46 @@ export const listSalesApplicationsSchema = z.object({
     .max(100, 'Search must be 100 characters or fewer.')
     .optional()
     .transform((value) => (value ? value : undefined)),
+  reference: z
+    .string()
+    .trim()
+    .max(100, 'Reference filter must be 100 characters or fewer.')
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+  company: z
+    .string()
+    .trim()
+    .max(100, 'Company filter must be 100 characters or fewer.')
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+  contact: z
+    .string()
+    .trim()
+    .max(100, 'Contact filter must be 100 characters or fewer.')
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+  submittedFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Submitted from date must use YYYY-MM-DD format.')
+    .optional(),
+  submittedTo: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Submitted to date must use YYYY-MM-DD format.')
+    .optional(),
   status: z.enum(salesApplicationStatuses).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const salesApplicationFilterOptionsSchema = z.object({
+  field: z.enum(['reference', 'company', 'contact', 'contactEmail', 'contactPhone', 'status']),
+  search: z
+    .string()
+    .trim()
+    .max(100, 'Filter option search must be 100 characters or fewer.')
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 
 export const updateSalesApplicationStatusSchema = z

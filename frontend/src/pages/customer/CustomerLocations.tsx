@@ -1,0 +1,692 @@
+import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import {
+  CheckCircle2,
+  Edit3,
+  Eye,
+  MapPin,
+  Plus,
+  Save,
+  Star,
+  Trash2,
+  X,
+} from 'lucide-react';
+import { LocationPickerMap } from '../../components/registration/LocationPickerMap';
+import type { Coordinates } from '../../config/map';
+import {
+  formatSaudiPhoneNumber,
+  getSaudiPhoneLocalDigits,
+  isSaudiPhoneNumber,
+} from '../../context/RegistrationContext';
+import {
+  createCustomerLocation,
+  deleteCustomerLocation,
+  getCustomerLocations,
+  setPrimaryCustomerLocation,
+  updateCustomerLocation,
+  type CustomerLocation,
+  type CustomerLocationPayload,
+} from '../../services/customerLocationsService';
+
+type LocationForm = {
+  name: string;
+  siteId: string;
+  streetAddress: string;
+  city: string;
+  region: string;
+  country: string;
+  postalCode: string;
+  contactPerson: string;
+  contactPhone: string;
+  latitude?: number | undefined;
+  longitude?: number | undefined;
+  isPrimary: boolean;
+};
+
+type MapTarget = { type: 'form' } | { type: 'view'; location: CustomerLocation } | null;
+
+const emptyForm: LocationForm = {
+  name: '',
+  siteId: '',
+  streetAddress: '',
+  city: '',
+  region: '',
+  country: 'Saudi Arabia',
+  postalCode: '',
+  contactPerson: '',
+  contactPhone: '',
+  isPrimary: false,
+};
+
+const regions = [
+  'Riyadh',
+  'Makkah',
+  'Madinah',
+  'Eastern Province',
+  'Asir',
+  'Tabuk',
+  'Qassim',
+  'Hail',
+  'Jazan',
+  'Najran',
+  'Al Bahah',
+  'Al Jawf',
+  'Northern Borders',
+];
+
+export function CustomerLocations() {
+  const [locations, setLocations] = useState<CustomerLocation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<LocationForm>(emptyForm);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [mapTarget, setMapTarget] = useState<MapTarget>(null);
+
+  const editingLocation = useMemo(
+    () => locations.find((location) => location.id === editingId) ?? null,
+    [editingId, locations],
+  );
+
+  const loadLocations = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      setLocations(await getCustomerLocations());
+    } catch {
+      setError('Unable to load delivery locations. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadLocations();
+  }, []);
+
+  const updateField = (field: keyof LocationForm, value: string | boolean | number | undefined) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    setFormErrors((current) => ({ ...current, [field]: '' }));
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setFormErrors({});
+  };
+
+  const startEdit = (location: CustomerLocation) => {
+    setEditingId(location.id);
+    setForm({
+      name: location.name,
+      siteId: location.siteId,
+      streetAddress: location.streetAddress,
+      city: location.city,
+      region: location.region,
+      country: location.country,
+      postalCode: location.postalCode,
+      contactPerson: location.contactPerson,
+      contactPhone: location.contactPhone,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      isPrimary: location.isPrimary,
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const validate = () => {
+    const next: Record<string, string> = {};
+    if (!form.name.trim()) next.name = 'Location name is required.';
+    if (!form.streetAddress.trim()) next.streetAddress = 'Street address is required.';
+    if (!form.city.trim()) next.city = 'City is required.';
+    if (!form.region.trim()) next.region = 'Region is required.';
+    if (!form.country.trim()) next.country = 'Country is required.';
+    if (!form.contactPerson.trim()) next.contactPerson = 'Contact person is required.';
+    if (!isSaudiPhoneNumber(form.contactPhone)) {
+      next.contactPhone = 'Enter a valid Saudi mobile number.';
+    }
+    if (
+      (form.latitude === undefined) !== (form.longitude === undefined) ||
+      (form.latitude !== undefined && (form.latitude < -90 || form.latitude > 90)) ||
+      (form.longitude !== undefined && (form.longitude < -180 || form.longitude > 180))
+    ) {
+      next.coordinates = 'Selected map coordinates are invalid.';
+    }
+
+    setFormErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const saveLocation = async () => {
+    if (!validate()) return;
+
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const payload = toPayload(form);
+      const nextLocations = editingId
+        ? await updateCustomerLocation(editingId, payload)
+        : await createCustomerLocation(payload);
+      setLocations(nextLocations);
+      resetForm();
+      setSuccess(editingId ? 'Delivery location updated.' : 'Delivery location added.');
+    } catch {
+      setError('Unable to save delivery location. Please review the form and try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeLocation = async (location: CustomerLocation) => {
+    if (!window.confirm(`Delete "${location.name}"?`)) return;
+
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      setLocations(await deleteCustomerLocation(location.id));
+      if (editingId === location.id) resetForm();
+      setSuccess('Delivery location deleted.');
+    } catch {
+      setError('Unable to delete this location. At least one delivery location is required.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const makePrimary = async (location: CustomerLocation) => {
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      setLocations(await setPrimaryCustomerLocation(location.id));
+      setSuccess('Primary delivery location updated.');
+    } catch {
+      setError('Unable to update the primary delivery location.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const formCoordinates = getCoordinates(form);
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-6">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-950">Delivery Locations</h1>
+        <p className="mt-1 text-sm font-medium text-slate-500">
+          Manage delivery destinations linked to your activated customer account.
+        </p>
+      </section>
+
+      {error && <StateMessage tone="error" message={error} />}
+      {success && <StateMessage tone="success" message={success} />}
+
+      <section className="rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-6">
+        <div className="flex items-center gap-2 border-b border-slate-100 pb-4">
+          <MapPin className="h-5 w-5 text-[#54247a]" />
+          <h2 className="text-base font-bold text-slate-950">
+            {editingLocation ? 'Edit Location' : 'Add Location'}
+          </h2>
+        </div>
+
+        <div className="grid gap-5 pt-5 md:grid-cols-2">
+          <TextInput
+            label="Location Name / Site ID"
+            required
+            value={form.name}
+            error={formErrors.name}
+            onChange={(value) => updateField('name', value)}
+          />
+          <TextInput
+            label="Site ID"
+            value={form.siteId}
+            onChange={(value) => updateField('siteId', value)}
+          />
+          <TextInput
+            label="Street Address"
+            required
+            value={form.streetAddress}
+            error={formErrors.streetAddress}
+            onChange={(value) => updateField('streetAddress', value)}
+          />
+          <TextInput
+            label="City"
+            required
+            value={form.city}
+            error={formErrors.city}
+            onChange={(value) => updateField('city', value)}
+          />
+          <SelectInput
+            label="Region / Province"
+            required
+            value={form.region}
+            error={formErrors.region}
+            options={regions}
+            onChange={(value) => updateField('region', value)}
+          />
+          <TextInput
+            label="Country"
+            required
+            value={form.country}
+            error={formErrors.country}
+            onChange={(value) => updateField('country', value)}
+          />
+          <TextInput
+            label="Postal Code"
+            value={form.postalCode}
+            onChange={(value) => updateField('postalCode', value)}
+          />
+          <TextInput
+            label="Contact Person"
+            required
+            value={form.contactPerson}
+            error={formErrors.contactPerson}
+            onChange={(value) => updateField('contactPerson', value)}
+          />
+          <PhoneInput
+            label="Contact Phone"
+            required
+            value={form.contactPhone}
+            error={formErrors.contactPhone}
+            onChange={(value) => updateField('contactPhone', value)}
+          />
+        </div>
+
+        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Map Location</h3>
+              <p className="mt-1 text-xs font-semibold text-slate-500">
+                {formCoordinates ? 'Map location selected' : 'No map location selected'}
+              </p>
+              {formErrors.coordinates && (
+                <p className="mt-1 text-xs font-semibold text-red-600">{formErrors.coordinates}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setMapTarget({ type: 'form' })}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#54247a] bg-white px-4 py-2.5 text-sm font-bold text-[#54247a] hover:bg-[#f6f2fa]"
+            >
+              <MapPin size={16} />
+              {formCoordinates ? 'View / Update Map' : 'Open Map'}
+            </button>
+          </div>
+        </div>
+
+        <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={form.isPrimary}
+            onChange={(event) => updateField('isPrimary', event.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-slate-300 accent-[#54247a]"
+          />
+          <span>
+            <span className="font-bold text-slate-900">Primary Delivery Location</span>
+            <span className="mt-0.5 block text-xs font-medium text-slate-500">
+              Only one delivery location can be primary.
+            </span>
+          </span>
+        </label>
+
+        <div className="mt-5 flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+          {editingId && (
+            <button
+              type="button"
+              onClick={resetForm}
+              disabled={saving}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              <X size={16} />
+              Cancel
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void saveLocation()}
+            disabled={saving}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#54247a] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#472066] disabled:opacity-60"
+          >
+            {editingId ? <Save size={16} /> : <Plus size={16} />}
+            {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Location'}
+          </button>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-6">
+        <div className="flex flex-col gap-1 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-base font-bold text-slate-950">Saved Locations</h2>
+            <p className="mt-1 text-xs font-medium text-slate-500">
+              {locations.length} {locations.length === 1 ? 'Saved Location' : 'Saved Locations'}
+            </p>
+          </div>
+        </div>
+
+        {loading ? (
+          <LocationSkeleton />
+        ) : locations.length === 0 ? (
+          <p className="py-5 text-sm font-medium text-slate-500">
+            No delivery locations available.
+          </p>
+        ) : (
+          <div className="space-y-3 pt-5">
+            {locations.map((location) => (
+              <LocationCard
+                key={location.id}
+                location={location}
+                saving={saving}
+                onViewMap={() => setMapTarget({ type: 'view', location })}
+                onEdit={() => startEdit(location)}
+                onDelete={() => void removeLocation(location)}
+                onMakePrimary={() => void makePrimary(location)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {mapTarget?.type === 'form' && (
+        <LocationPickerMap
+          initialCoordinates={formCoordinates ?? undefined}
+          locationLabel={form.name || undefined}
+          onCancel={() => setMapTarget(null)}
+          onConfirm={(coordinates) => {
+            updateField('latitude', coordinates.latitude);
+            updateField('longitude', coordinates.longitude);
+            setFormErrors((current) => ({ ...current, coordinates: '' }));
+            setMapTarget(null);
+          }}
+        />
+      )}
+
+      {mapTarget?.type === 'view' && (
+        <LocationPickerMap
+          initialCoordinates={getCoordinates(mapTarget.location) ?? undefined}
+          locationLabel={mapTarget.location.name}
+          onCancel={() => setMapTarget(null)}
+          onConfirm={() => setMapTarget(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function LocationCard({
+  location,
+  saving,
+  onViewMap,
+  onEdit,
+  onDelete,
+  onMakePrimary,
+}: {
+  location: CustomerLocation;
+  saving: boolean;
+  onViewMap: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onMakePrimary: () => void;
+}) {
+  const coordinates = getCoordinates(location);
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-bold text-slate-950">{location.name}</h3>
+            {location.isPrimary && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#f4eaf5] px-2 py-0.5 text-xs font-bold text-[#7f1d73]">
+                <Star size={12} fill="currentColor" />
+                Primary
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-xs font-semibold text-slate-500">ID: {location.siteId}</p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {coordinates && (
+            <ActionButton onClick={onViewMap} icon={<Eye size={15} />} label="View Map" />
+          )}
+          {!location.isPrimary && (
+            <ActionButton
+              onClick={onMakePrimary}
+              icon={<Star size={15} />}
+              label="Set Primary"
+              disabled={saving}
+            />
+          )}
+          <ActionButton onClick={onEdit} icon={<Edit3 size={15} />} label="Edit" />
+          <ActionButton
+            onClick={onDelete}
+            icon={<Trash2 size={15} />}
+            label="Delete"
+            tone="danger"
+            disabled={saving}
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 text-sm font-medium text-slate-600 md:grid-cols-2">
+        <p>
+          <span className="font-bold text-slate-800">Address:</span> {location.streetAddress},{' '}
+          {location.city}, {location.region}, {location.country}
+        </p>
+        <p>
+          <span className="font-bold text-slate-800">Postal Code:</span>{' '}
+          {location.postalCode || 'Not provided'}
+        </p>
+        <p>
+          <span className="font-bold text-slate-800">Contact:</span> {location.contactPerson}
+        </p>
+        <p>
+          <span className="font-bold text-slate-800">Phone:</span> {location.contactPhone}
+        </p>
+        {coordinates && (
+          <p className="inline-flex items-center gap-1.5 text-emerald-700">
+            <CheckCircle2 size={16} />
+            Map location selected
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ActionButton({
+  icon,
+  label,
+  tone = 'default',
+  disabled,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  tone?: 'default' | 'danger';
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition disabled:opacity-60 ${
+        tone === 'danger'
+          ? 'text-red-600 hover:bg-red-50'
+          : 'text-slate-700 hover:bg-white hover:text-[#54247a]'
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function TextInput(props: {
+  label: string;
+  value: string;
+  required?: boolean;
+  error?: string | undefined;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-sm font-bold text-slate-900">
+        {props.label}
+        {props.required && <span className="ml-1 text-red-600">*</span>}
+      </span>
+      <input
+        value={props.value}
+        onChange={(event) => props.onChange(event.target.value)}
+        className={`mt-2 h-11 w-full rounded-xl border px-3 text-sm font-medium outline-none focus:ring-2 ${
+          props.error
+            ? 'border-red-400 focus:ring-red-100'
+            : 'border-slate-200 focus:border-[#54247a] focus:ring-[#54247a]/10'
+        }`}
+      />
+      {props.error && (
+        <span className="mt-1 block text-xs font-semibold text-red-600">{props.error}</span>
+      )}
+    </label>
+  );
+}
+
+function SelectInput(props: {
+  label: string;
+  value: string;
+  options: string[];
+  required?: boolean;
+  error?: string | undefined;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-sm font-bold text-slate-900">
+        {props.label}
+        {props.required && <span className="ml-1 text-red-600">*</span>}
+      </span>
+      <select
+        value={props.value}
+        onChange={(event) => props.onChange(event.target.value)}
+        className={`mt-2 h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium outline-none focus:ring-2 ${
+          props.error
+            ? 'border-red-400 focus:ring-red-100'
+            : 'border-slate-200 focus:border-[#54247a] focus:ring-[#54247a]/10'
+        }`}
+      >
+        <option value="">Select Region</option>
+        {props.options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+      {props.error && (
+        <span className="mt-1 block text-xs font-semibold text-red-600">{props.error}</span>
+      )}
+    </label>
+  );
+}
+
+function PhoneInput(props: {
+  label: string;
+  value: string;
+  required?: boolean;
+  error?: string | undefined;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-sm font-bold text-slate-900">
+        {props.label}
+        {props.required && <span className="ml-1 text-red-600">*</span>}
+      </span>
+      <div
+        className={`mt-2 flex h-11 overflow-hidden rounded-xl border bg-white focus-within:ring-2 ${
+          props.error
+            ? 'border-red-400 focus-within:ring-red-100'
+            : 'border-slate-200 focus-within:border-[#54247a] focus-within:ring-[#54247a]/10'
+        }`}
+      >
+        <span className="flex items-center border-r border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-600">
+          +966
+        </span>
+        <input
+          type="tel"
+          inputMode="numeric"
+          maxLength={11}
+          value={formatSaudiPhoneNumber(props.value)}
+          onChange={(event) => props.onChange(getSaudiPhoneLocalDigits(event.target.value))}
+          className="min-w-0 flex-1 px-3 text-sm font-medium outline-none"
+          placeholder="5XX XXX XXX"
+        />
+      </div>
+      {props.error && (
+        <span className="mt-1 block text-xs font-semibold text-red-600">{props.error}</span>
+      )}
+    </label>
+  );
+}
+
+function LocationSkeleton() {
+  return (
+    <div className="space-y-3 pt-5">
+      {Array.from({ length: 2 }, (_, index) => (
+        <div key={index} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <div className="h-4 w-40 animate-pulse rounded bg-slate-200" />
+          <div className="mt-3 h-3 w-64 animate-pulse rounded bg-slate-100" />
+          <div className="mt-3 h-3 w-52 animate-pulse rounded bg-slate-100" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StateMessage({ tone, message }: { tone: 'error' | 'success'; message: string }) {
+  const classes =
+    tone === 'error'
+      ? 'border-red-100 bg-red-50 text-red-700'
+      : 'border-emerald-100 bg-emerald-50 text-emerald-700';
+
+  return (
+    <div className={`rounded-xl border px-4 py-3 text-sm font-semibold ${classes}`}>{message}</div>
+  );
+}
+
+function toPayload(form: LocationForm): CustomerLocationPayload {
+  return {
+    name: form.name.trim(),
+    siteId: form.siteId.trim() || undefined,
+    streetAddress: form.streetAddress.trim(),
+    city: form.city.trim(),
+    region: form.region.trim(),
+    country: form.country.trim(),
+    postalCode: form.postalCode.trim(),
+    contactPerson: form.contactPerson.trim(),
+    contactPhone: `+966${getSaudiPhoneLocalDigits(form.contactPhone)}`,
+    latitude: form.latitude,
+    longitude: form.longitude,
+    isPrimary: form.isPrimary,
+  };
+}
+
+function getCoordinates(location: {
+  latitude?: number | undefined;
+  longitude?: number | undefined;
+}): Coordinates | null {
+  if (typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
+    return null;
+  }
+
+  return {
+    latitude: location.latitude,
+    longitude: location.longitude,
+  };
+}

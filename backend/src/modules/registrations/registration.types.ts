@@ -17,6 +17,7 @@ export interface RegistrationDraft {
   documents: Record<string, unknown>;
   deliveryLocations: unknown[];
   administrator: Record<string, unknown>;
+  hasAdminPassword: boolean;
   submittedAt: string | null;
   createdAt: string;
   updatedAt: string;

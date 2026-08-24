@@ -1,6 +1,7 @@
-import { AlertCircle, Lock, Mail, ShieldCheck } from 'lucide-react';
+import { AlertCircle, Lock, Mail } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import Logo from '../../components/Logo/Logo';
 import { useSalesAuth } from '../../context/SalesAuthContext';
 import { SalesApiError } from '../../services/salesService';
 
@@ -56,15 +57,7 @@ export function SalesLogin() {
       <section className="flex min-h-screen items-center justify-center px-5 py-10">
         <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/70">
           <div className="mb-8 flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#4b2c71] text-white">
-              <ShieldCheck size={24} />
-            </div>
-            <div>
-              <p className="text-lg font-extrabold text-[#4b2c71]">AlSafwa Cement</p>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Sales Portal
-              </p>
-            </div>
+            <Logo />
           </div>
 
           <div className="mb-6">
