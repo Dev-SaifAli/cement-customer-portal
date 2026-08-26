@@ -5,6 +5,10 @@ import { authRouter } from '../modules/auth/auth.routes.js';
 import { customerAuthRouter } from '../modules/customer-auth/customer-auth.routes.js';
 import { customerContractsRouter } from '../modules/customer-contracts/customer-contracts.routes.js';
 import { customerDashboardRouter } from '../modules/customer-dashboard/customer-dashboard.routes.js';
+import {
+  customerDriversRouter,
+  customerTrucksRouter,
+} from '../modules/customer-fleet/customer-fleet.routes.js';
 import { customerLocationsRouter } from '../modules/customer-locations/customer-locations.routes.js';
 import { customerContractOrdersRouter } from '../modules/customer-orders/customer-orders.routes.js';
 import { customerOrdersRouter } from '../modules/customer-orders/customer-orders.collection.routes.js';
@@ -28,6 +32,8 @@ v1Router.use('/customer/auth', customerAuthRouter);
 v1Router.use('/customer/contracts/:contractId/orders', customerContractOrdersRouter);
 v1Router.use('/customer/contracts', customerContractsRouter);
 v1Router.use('/customer/dashboard', customerDashboardRouter);
+v1Router.use('/customer/trucks', customerTrucksRouter);
+v1Router.use('/customer/drivers', customerDriversRouter);
 v1Router.use('/customer/locations', customerLocationsRouter);
 v1Router.use('/customer/orders', customerOrdersRouter);
 v1Router.use('/customer/products', customerProductsRouter);

@@ -16,6 +16,7 @@ import {
   UserCircle,
   Users,
   Sun,
+  Truck,
   X,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -82,6 +83,12 @@ const customerNavigation: Array<{
     label: 'Orders',
     icon: <ShoppingBag size={18} />,
     roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
+  },
+  {
+    to: '/customer/fleet',
+    label: 'My Trucks & Drivers',
+    icon: <Truck size={18} />,
+    roles: ['CUSTOMER_ADMIN', 'PURCHASER'],
   },
 ];
 
@@ -438,6 +445,7 @@ function getPageContext(pathname: string) {
     '/customer/dashboard': 'Dashboard',
     '/customer/profile': 'Profile',
     '/customer/locations': 'Delivery Locations',
+    '/customer/fleet': 'My Trucks & Drivers',
     '/customer/users': 'Users',
     '/customer/products': 'Products',
   };
