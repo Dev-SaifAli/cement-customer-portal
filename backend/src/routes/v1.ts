@@ -17,6 +17,11 @@ import { customerProfileRouter } from '../modules/customer-profile/customer-prof
 import { customerQuotationsRouter } from '../modules/customer-quotations/customer-quotations.routes.js';
 import { customerUsersRouter } from '../modules/customer-users/customer-users.routes.js';
 import { healthRouter } from '../modules/health/health.routes.js';
+import {
+  haderDeliveryRequestsRouter,
+  haderShipmentsRouter,
+  salesShipmentsRouter,
+} from '../modules/hader-delivery/hader-delivery.routes.js';
 import { registrationRouter } from '../modules/registrations/registration.routes.js';
 import { salesApplicationRouter } from '../modules/sales-applications/sales-application.routes.js';
 import { salesAuthRouter } from '../modules/sales-auth/sales-auth.routes.js';
@@ -41,9 +46,12 @@ v1Router.use('/customer/profile', customerProfileRouter);
 v1Router.use('/customer/quotations', customerQuotationsRouter);
 v1Router.use('/customer/users', customerUsersRouter);
 v1Router.use('/health', healthRouter);
+v1Router.use('/hader/delivery-requests', haderDeliveryRequestsRouter);
+v1Router.use('/hader/shipments', haderShipmentsRouter);
 v1Router.use('/registrations', registrationRouter);
 v1Router.use('/sales/applications', salesApplicationRouter);
 v1Router.use('/sales/auth', salesAuthRouter);
 v1Router.use('/sales/contracts', salesContractsRouter);
 v1Router.use('/sales/orders', salesOrdersRouter);
+v1Router.use('/sales/shipments', salesShipmentsRouter);
 v1Router.use('/sales/quotations', salesQuotationsRouter);

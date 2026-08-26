@@ -9,6 +9,7 @@ import { CustomerRoutes } from './CustomerRoutes';
 import { AdminPricingRoutes } from './AdminPricingRoutes';
 import { RegistrationRoutes } from './RegistrationRoutes';
 import { SalesRoutes } from './SalesRoutes';
+import { HaderRoutes } from './HaderRoutes';
 
 export function AppRoutes() {
   return (
@@ -29,6 +30,7 @@ export function AppRoutes() {
       <Route path="/register/*" element={<RegistrationRoutes />} />
       <Route path="/customer/*" element={<CustomerRoutes />} />
       <Route path="/sales/*" element={<SalesRoutes />} />
+      <Route path="/hader/*" element={<HaderRoutes />} />
       <Route path="/admin/*" element={<AdminPricingRoutes />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>

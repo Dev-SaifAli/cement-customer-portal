@@ -14,7 +14,13 @@ export interface SalesUser {
   name: string;
   email: string;
   isActive: boolean;
-  role: 'SALES_REP' | 'HADER_MANAGER' | 'PRICE_MANAGER' | 'PRICING_ADMIN';
+  role:
+    | 'SALES_REP'
+    | 'HADER_MANAGER'
+    | 'HADER_OPERATIONS'
+    | 'DISPATCH_USER'
+    | 'PRICE_MANAGER'
+    | 'PRICING_ADMIN';
 }
 
 export type SalesQuotationStatus =
@@ -542,7 +548,16 @@ export const listSalesContracts = async (params: {
   page?: number;
   pageSize?: number;
   search?: string;
-  status?: '' | 'DRAFT' | 'ACTIVE' | 'PENDING_SALES_REVIEW' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'CANCELLED';
+  status?:
+    | ''
+    | 'DRAFT'
+    | 'ACTIVE'
+    | 'PENDING_SALES_REVIEW'
+    | 'UNDER_REVIEW'
+    | 'APPROVED'
+    | 'REJECTED'
+    | 'CHANGES_REQUESTED'
+    | 'CANCELLED';
   customer?: string;
   product?: string;
   dateFrom?: string;

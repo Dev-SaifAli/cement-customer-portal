@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import type { CustomerUser } from '../customer-auth/customer-auth.types.js';
+import { createDeliveryRequestForOrder } from '../hader-delivery/hader-delivery.service.js';
 import { ordersRepository } from './orders.repository.js';
 import type {
   CreateCustomerOrderPayload,
@@ -282,6 +283,18 @@ export class CustomerOrdersService {
           remainingAfter,
         ],
       );
+
+      if (contract.fulfilment === 'DELIVERY' && payload.preferredDeliveryDate) {
+        await createDeliveryRequestForOrder(client, {
+          orderId: order.id,
+          customerAccountId: customerUser.customerAccountId,
+          haderCityId: contract.pricing_city_id,
+          shipToLocationId: contract.delivery_location_id,
+          quantityTon: requestedQuantityTons,
+          requestedDate: payload.preferredDeliveryDate,
+          customerUserId: customerUser.id,
+        });
+      }
 
       await client.query('commit');
       return mapOrder(order, contract, shipToSnapshot, payload);
