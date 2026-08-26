@@ -7,6 +7,7 @@ import { SalesContractDetailsPage } from '../pages/sales/SalesContractDetails';
 import { SalesContractsPage } from '../pages/sales/SalesContracts';
 import { SalesDashboard } from '../pages/sales/SalesDashboard';
 import { SalesLogin } from '../pages/sales/SalesLogin';
+import { SalesOrdersPage } from '../pages/sales/SalesOrders';
 import { SalesQuotationDetailsPage } from '../pages/sales/SalesQuotationDetails';
 import { SalesQuotationsPage } from '../pages/sales/SalesQuotations';
 import { getSalesLandingPath } from '../utils/salesRouting';
@@ -25,6 +26,7 @@ export function SalesRoutes() {
               <Route path="applications/:id" element={<SalesApplicationDetailsPage />} />
               <Route path="contracts" element={<SalesContractsPage />} />
               <Route path="contracts/:id" element={<SalesContractDetailsPage />} />
+              <Route path="orders" element={<SalesOrdersPage />} />
             </Route>
             <Route
               element={

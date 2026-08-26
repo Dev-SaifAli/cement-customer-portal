@@ -49,53 +49,106 @@ html[data-customer-theme='dark'] .customer-portal {
   --customer-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
 }
 
-.customer-page-bg { background: var(--customer-bg); }
-.customer-surface { background: var(--customer-surface); }
-.customer-card { background: var(--customer-card); border-color: var(--customer-border); box-shadow: var(--customer-shadow); }
-.customer-border { border-color: var(--customer-border); }
-.customer-border-soft { border-color: var(--customer-border-soft); }
-.customer-text { color: var(--customer-text); }
-.customer-secondary { color: var(--customer-text-secondary); }
-.customer-muted { color: var(--customer-text-muted); }
-.customer-primary { color: var(--customer-primary); }
-.customer-primary-soft { background: var(--customer-primary-soft); }
-.customer-portal .customer-always-light { background: #ffffff !important; color: #54247a !important; }
+.customer-page-bg {
+  background: var(--customer-bg);
+}
+.customer-surface {
+  background: var(--customer-surface);
+}
+.customer-card {
+  background: var(--customer-card);
+  border-color: var(--customer-border);
+  box-shadow: var(--customer-shadow);
+}
+.customer-border {
+  border-color: var(--customer-border);
+}
+.customer-border-soft {
+  border-color: var(--customer-border-soft);
+}
+.customer-text {
+  color: var(--customer-text);
+}
+.customer-secondary {
+  color: var(--customer-text-secondary);
+}
+.customer-muted {
+  color: var(--customer-text-muted);
+}
+.customer-primary {
+  color: var(--customer-primary);
+}
+.customer-primary-soft {
+  background: var(--customer-primary-soft);
+}
+.customer-primary-bg {
+  background: var(--customer-primary);
+}
+.customer-primary-bg:hover {
+  background: var(--customer-primary-hover);
+}
+.customer-input {
+  background: var(--customer-input);
+}
+.customer-row-hover:hover {
+  background: var(--customer-surface-secondary);
+}
+.customer-portal .customer-always-light {
+  background: #ffffff !important;
+  color: #54247a !important;
+}
 
 /* Bridge existing Customer pages to semantic tokens without duplicating their components. */
 .customer-portal .bg-white,
-.customer-portal [class~='bg-white/95'] { background-color: var(--customer-surface) !important; }
+.customer-portal [class~='bg-white/95'] {
+  background-color: var(--customer-surface) !important;
+}
 .customer-portal .bg-slate-50,
 .customer-portal [class~='bg-slate-50/60'],
 .customer-portal [class~='bg-slate-50/70'],
 .customer-portal [class~='bg-[#f8fafc]'],
 .customer-portal [class~='bg-[#faf9fb]'],
 .customer-portal [class~='bg-[#fdfafd]'],
-.customer-portal [class~='bg-[#fdfbfd]'] { background-color: var(--customer-bg) !important; }
+.customer-portal [class~='bg-[#fdfbfd]'] {
+  background-color: var(--customer-bg) !important;
+}
 .customer-portal .bg-slate-100,
 .customer-portal [class~='bg-[#f6f2fa]'],
 .customer-portal [class~='bg-[#f4edf7]'],
-.customer-portal [class~='bg-[#f4eaf5]'] { background-color: var(--customer-surface-secondary) !important; }
-.customer-portal .bg-slate-200 { background-color: var(--customer-border) !important; }
+.customer-portal [class~='bg-[#f4eaf5]'] {
+  background-color: var(--customer-surface-secondary) !important;
+}
+.customer-portal .bg-slate-200 {
+  background-color: var(--customer-border) !important;
+}
 
 .customer-portal .text-slate-950,
 .customer-portal .text-slate-900,
 .customer-portal .text-slate-800,
 .customer-portal [class~='text-[#1a1b23]'],
-.customer-portal [class~='text-[#17151c]'] { color: var(--customer-text) !important; }
+.customer-portal [class~='text-[#17151c]'] {
+  color: var(--customer-text) !important;
+}
 .customer-portal .text-slate-700,
 .customer-portal .text-slate-600,
-.customer-portal [class~='text-[#4b4d5c]'] { color: var(--customer-text-secondary) !important; }
+.customer-portal [class~='text-[#4b4d5c]'] {
+  color: var(--customer-text-secondary) !important;
+}
 .customer-portal .text-slate-500,
 .customer-portal .text-slate-400,
 .customer-portal .text-slate-300,
 .customer-portal [class~='text-[#64748b]'],
 .customer-portal [class~='text-[#94a3b8]'],
-.customer-portal [class~='text-[#c5c1ca]'] { color: var(--customer-text-muted) !important; }
+.customer-portal [class~='text-[#c5c1ca]'] {
+  color: var(--customer-text-muted) !important;
+}
 .customer-portal [class~='text-[#54247a]'],
 .customer-portal [class~='text-[#4b2c71]'],
 .customer-portal [class~='text-[#472066]'],
 .customer-portal [class~='text-[#7c3b7e]'],
-.customer-portal [class~='text-[#7f1d73]'] { color: var(--customer-primary) !important; }
+.customer-portal [class~='text-[#7f1d73]'] {
+  color: var(--customer-primary) !important;
+}
 
 .customer-portal .border-slate-100,
 .customer-portal .border-slate-200,
@@ -103,11 +156,15 @@ html[data-customer-theme='dark'] .customer-portal {
 .customer-portal [class~='border-[#e3e1e8]'],
 .customer-portal [class~='border-[#eceaf0]'],
 .customer-portal [class~='border-[#d9d5de]'],
-.customer-portal [class~='border-[#d8d4de]'] { border-color: var(--customer-border) !important; }
+.customer-portal [class~='border-[#d8d4de]'] {
+  border-color: var(--customer-border) !important;
+}
 .customer-portal [class~='divide-[#eceaf0]'] > :not([hidden]) ~ :not([hidden]),
 .customer-portal [class~='divide-[#e3e1e8]'] > :not([hidden]) ~ :not([hidden]),
 .customer-portal .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
-.customer-portal .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-color: var(--customer-border-soft) !important; }
+.customer-portal .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--customer-border-soft) !important;
+}
 
 .customer-portal input:not([type='checkbox']):not([type='radio']),
 .customer-portal select,
@@ -117,14 +174,29 @@ html[data-customer-theme='dark'] .customer-portal {
   color: var(--customer-text);
 }
 .customer-portal input::placeholder,
-.customer-portal textarea::placeholder { color: var(--customer-text-muted); }
+.customer-portal textarea::placeholder {
+  color: var(--customer-text-muted);
+}
 .customer-portal input[type='checkbox'],
-.customer-portal input[type='radio'] { accent-color: #7f1d73; }
-html[data-customer-theme='dark'] .customer-portal input[type='date']::-webkit-calendar-picker-indicator { filter: invert(0.85); }
+.customer-portal input[type='radio'] {
+  accent-color: #7f1d73;
+}
+html[data-customer-theme='dark']
+  .customer-portal
+  input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+}
 
-.customer-portal table { color: var(--customer-text); }
-.customer-portal thead { background: var(--customer-surface-secondary); }
-.customer-portal :focus-visible { outline: 2px solid var(--customer-primary); outline-offset: 2px; }
+.customer-portal table {
+  color: var(--customer-text);
+}
+.customer-portal thead {
+  background: var(--customer-surface-secondary);
+}
+.customer-portal :focus-visible {
+  outline: 2px solid var(--customer-primary);
+  outline-offset: 2px;
+}
 
 .customer-portal .customer-quotation-row {
   background: var(--customer-surface);
@@ -183,14 +255,23 @@ html[data-customer-theme='dark'] .customer-portal .quotation-document,
 html[data-customer-theme='dark'] .customer-portal .quotation-document * {
   color-scheme: light;
 }
-html[data-customer-theme='dark'] .customer-portal .quotation-document { background: #fff !important; color: #17151c !important; }
-html[data-customer-theme='dark'] .customer-portal .quotation-document .bg-white { background: #fff !important; }
+html[data-customer-theme='dark'] .customer-portal .quotation-document {
+  background: #fff !important;
+  color: #17151c !important;
+}
+html[data-customer-theme='dark'] .customer-portal .quotation-document .bg-white {
+  background: #fff !important;
+}
 html[data-customer-theme='dark'] .customer-portal .quotation-document .text-slate-500,
 html[data-customer-theme='dark'] .customer-portal .quotation-document .text-slate-600,
-html[data-customer-theme='dark'] .customer-portal .quotation-document .text-slate-700 { color: #475569 !important; }
+html[data-customer-theme='dark'] .customer-portal .quotation-document .text-slate-700 {
+  color: #475569 !important;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .customer-portal *, .customer-portal *::before, .customer-portal *::after {
+  .customer-portal *,
+  .customer-portal *::before,
+  .customer-portal *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }

@@ -18,6 +18,8 @@ interface ProductCatalogRow {
   image: string | null;
   packaging_type: string;
   uom: string;
+  unit_weight_kg: string;
+  commercial_uom: string;
   category: string;
   display_order: number;
   is_active: boolean;
@@ -37,6 +39,8 @@ export class CustomerProductsService {
          image,
          packaging_type,
          uom,
+         unit_weight_kg,
+         commercial_uom,
          category,
          display_order,
          is_active,
@@ -105,6 +109,8 @@ export class CustomerProductsService {
          image,
          packaging_type,
          uom,
+         unit_weight_kg,
+         commercial_uom,
          category,
          display_order,
          is_active,
@@ -144,6 +150,8 @@ function mapProduct(row: ProductCatalogRow) {
     image: row.image,
     packagingType: row.packaging_type,
     uom: row.uom,
+    unitWeightKg: Number(row.unit_weight_kg),
+    commercialUom: row.commercial_uom,
     category: row.category,
     displayOrder: row.display_order,
     isActive: row.is_active,

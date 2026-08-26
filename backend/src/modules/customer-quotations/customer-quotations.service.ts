@@ -2,6 +2,10 @@ import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import type { CustomerUser } from '../customer-auth/customer-auth.types.js';
 import { customerLocationsService } from '../customer-locations/customer-locations.service.js';
+import {
+  COMMERCIAL_UOM,
+  packagingQuantityFromTons,
+} from '../products/commercial-quantity.js';
 import type {
   CustomerQuotationPayload,
   ListCustomerQuotationsQuery,
@@ -53,6 +57,8 @@ interface ProductRow {
   image: string | null;
   packaging_type: string;
   uom: string;
+  unit_weight_kg: string;
+  commercial_uom: string;
   category: string;
 }
 
@@ -63,6 +69,8 @@ interface QuotationItemRow {
   packaging_type: string;
   uom: string;
   quantity: string;
+  quantity_tons: string;
+  packaging_quantity: string | null;
   pallet_required: boolean;
   pallet_type: string | null;
   pallet_quantity: number | null;
@@ -426,7 +434,7 @@ export class CustomerQuotationsService {
     const productIds = Array.from(new Set(payload.items.map((item) => item.productId)));
     const result = await pool.query<ProductRow>(
       `select id, product_code, product_name, description, short_description, image,
-              packaging_type, uom, category
+              packaging_type, uom, unit_weight_kg, commercial_uom, category
        from product_catalog
        where id = any($1::uuid[])
          and is_active = true`,
@@ -526,6 +534,14 @@ export class CustomerQuotationsService {
         throw new AppError('One or more products are unavailable.', 400, 'PRODUCT_UNAVAILABLE');
       }
 
+      const quantityTons = item.quantityTon;
+      const packagingQuantity = packagingQuantityFromTons(
+        quantityTons,
+        Number(product.unit_weight_kg),
+        product.uom,
+      );
+      const legacyQuantity = packagingQuantity ?? quantityTons;
+
       await client.query(
         `insert into customer_quotation_items (
            quotation_id,
@@ -533,18 +549,22 @@ export class CustomerQuotationsService {
            packaging_type,
            uom,
            quantity,
+           quantity_tons,
+           packaging_quantity,
            pallet_required,
            pallet_type,
            pallet_quantity,
            display_order
          )
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           quotationId,
           item.productId,
           product.packaging_type,
           product.uom,
-          item.quantity,
+          legacyQuantity,
+          quantityTons,
+          packagingQuantity,
           item.palletRequired,
           item.palletRequired ? (item.palletType ?? null) : null,
           item.palletRequired ? (item.palletQuantity ?? null) : null,
@@ -587,8 +607,7 @@ export class CustomerQuotationsService {
          product_catalog.image,
          product_catalog.category,
          product_catalog.unit_weight_kg,
-         round((customer_quotation_items.quantity * product_catalog.unit_weight_kg) / 1000, 6)
-           as equivalent_tons
+         customer_quotation_items.quantity_tons as equivalent_tons
        from customer_quotation_items
        inner join product_catalog
          on product_catalog.id = customer_quotation_items.product_id
@@ -687,11 +706,17 @@ function mapQuotation(
         image: item.image,
         packagingType: item.packaging_type,
         uom: item.uom,
+        unitWeightKg: Number(item.unit_weight_kg),
+        commercialUom: COMMERCIAL_UOM,
         category: item.category,
       },
       packagingType: item.packaging_type,
       uom: item.uom,
-      quantity: Number(item.quantity),
+      quantity: Number(item.quantity_tons),
+      quantityTon: Number(item.quantity_tons),
+      packagingQuantity:
+        item.packaging_quantity === null ? null : Number(item.packaging_quantity),
+      commercialUom: COMMERCIAL_UOM,
       unitWeightKg: Number(item.unit_weight_kg),
       equivalentTons: Number(item.equivalent_tons),
       palletRequired: item.pallet_required,

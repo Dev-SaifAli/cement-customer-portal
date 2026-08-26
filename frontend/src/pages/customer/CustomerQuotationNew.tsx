@@ -43,6 +43,7 @@ import {
   type QuotationFulfilmentType,
 } from '../../services/customerQuotationsService';
 import { createClientId } from '../../utils/createClientId';
+import { packagingQuantityForTons } from '../../utils/commercialQuantity';
 import { useNavigate, useParams } from 'react-router-dom';
 
 type FormItem = {
@@ -648,7 +649,7 @@ function ItemsTable(props: ItemsTableProps) {
             )}
             <span>Item Code</span>
             <span>Item Name</span>
-            <span>Quantity</span>
+            <span>Quantity (TON)</span>
             <span>UOM</span>
             <span>Packaging</span>
             <span />
@@ -740,6 +741,9 @@ type QuotationItemRowProps = {
 function QuotationItemRow(props: QuotationItemRowProps) {
   const { item, errors } = props;
   const bagProduct = item.product?.packagingType.toLowerCase().includes('bag') ?? false;
+  const packagingQuantity = item.product
+    ? packagingQuantityForTons(Number(item.quantity), item.product.unitWeightKg, item.product.uom)
+    : null;
 
   return (
     <div className="border-b border-[#eceaf0] last:border-b-0">
@@ -845,8 +849,13 @@ function QuotationItemRow(props: QuotationItemRowProps) {
             className={`${fieldClass} h-9 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
           />
           {errors.quantity && <RowError message={errors.quantity} />}
+          {packagingQuantity !== null && (
+            <p className="mt-1 text-[11px] text-[#64748b]">
+              Equivalent: {formatQuantity(packagingQuantity)} bags
+            </p>
+          )}
         </div>
-        <CompactValue value={item.product?.uom ?? '—'} />
+        <CompactValue value={item.product ? 'TON' : '—'} />
         <CompactValue value={item.product?.packagingType ?? '—'} />
         <button
           type="button"
@@ -1125,7 +1134,7 @@ function getItemErrors(item: FormItem, index: number) {
     {};
   if (!item.product) errors.product = `Item ${index + 1} is required.`;
   if (!item.quantity || Number(item.quantity) <= 0)
-    errors.quantity = 'Quantity must be greater than zero.';
+    errors.quantity = 'Quantity (TON) must be greater than zero.';
   if (item.palletRequired && !item.palletType.trim())
     errors.palletType = 'Pallet type is required.';
   if (item.palletRequired && (!item.palletQuantity || Number(item.palletQuantity) <= 0))
@@ -1161,7 +1170,7 @@ function toPayload(form: FormState): CustomerQuotationPayload {
     items: form.items.map((item) => {
       const line: CustomerQuotationPayload['items'][number] = {
         productId: item.product?.id ?? '',
-        quantity: Number(item.quantity),
+        quantityTon: Number(item.quantity),
         palletRequired: item.palletRequired,
       };
       return item.palletRequired
@@ -1195,7 +1204,7 @@ function fromQuotation(quotation: CustomerQuotation): FormState {
         createdAt: quotation.createdAt,
         updatedAt: quotation.updatedAt,
       },
-      quantity: String(item.quantity),
+      quantity: String(item.quantityTon),
       palletRequired: item.palletRequired,
       palletType: item.palletType ?? '',
       palletQuantity: item.palletQuantity ? String(item.palletQuantity) : '',
@@ -1233,4 +1242,8 @@ function formatQuotationStatus(status: CustomerQuotation['status'] | undefined) 
     CLARIFICATION_REQUESTED: 'Clarification Requested',
   };
   return status ? labels[status] : 'Draft';
+}
+
+function formatQuantity(value: number) {
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 }).format(value);
 }

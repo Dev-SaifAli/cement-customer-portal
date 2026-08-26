@@ -10,6 +10,7 @@ import {
   Monitor,
   Moon,
   PackageSearch,
+  ShoppingBag,
   FileText,
   BriefcaseBusiness,
   UserCircle,
@@ -21,10 +22,7 @@ import { useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Logo from '../../components/Logo/Logo';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
-import {
-  useCustomerTheme,
-  type CustomerThemePreference,
-} from '../../context/CustomerThemeContext';
+import { useCustomerTheme, type CustomerThemePreference } from '../../context/CustomerThemeContext';
 import type { CustomerRole } from '../../services/customerAuthService';
 
 const customerNavigation: Array<{
@@ -76,6 +74,13 @@ const customerNavigation: Array<{
     activePrefix: '/customer/contracts',
     label: 'Contracts',
     icon: <BriefcaseBusiness size={18} />,
+    roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
+  },
+  {
+    to: '/customer/orders',
+    activePrefix: '/customer/orders',
+    label: 'Orders',
+    icon: <ShoppingBag size={18} />,
     roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
   },
 ];
@@ -248,7 +253,9 @@ export function CustomerLayout() {
                   <span className="customer-primary-soft customer-primary mx-auto flex h-9 w-9 items-center justify-center rounded-full">
                     <Bell size={17} />
                   </span>
-                  <p className="customer-text mt-3 text-sm font-semibold">You&apos;re all caught up</p>
+                  <p className="customer-text mt-3 text-sm font-semibold">
+                    You&apos;re all caught up
+                  </p>
                   <p className="customer-muted mt-1 text-xs">No new notifications.</p>
                 </div>
               </div>
@@ -287,9 +294,27 @@ export function CustomerLayout() {
                     Appearance
                   </p>
                   <div className="grid grid-cols-3 gap-1" role="group" aria-label="Appearance">
-                    <ThemeOption icon={<Sun size={15} />} label="Light" value="light" selected={themePreference === 'light'} onSelect={setThemePreference} />
-                    <ThemeOption icon={<Moon size={15} />} label="Dark" value="dark" selected={themePreference === 'dark'} onSelect={setThemePreference} />
-                    <ThemeOption icon={<Monitor size={15} />} label="System" value="system" selected={themePreference === 'system'} onSelect={setThemePreference} />
+                    <ThemeOption
+                      icon={<Sun size={15} />}
+                      label="Light"
+                      value="light"
+                      selected={themePreference === 'light'}
+                      onSelect={setThemePreference}
+                    />
+                    <ThemeOption
+                      icon={<Moon size={15} />}
+                      label="Dark"
+                      value="dark"
+                      selected={themePreference === 'dark'}
+                      onSelect={setThemePreference}
+                    />
+                    <ThemeOption
+                      icon={<Monitor size={15} />}
+                      label="System"
+                      value="system"
+                      selected={themePreference === 'system'}
+                      onSelect={setThemePreference}
+                    />
                   </div>
                 </div>
                 <button
@@ -395,9 +420,16 @@ function getPageContext(pathname: string) {
   }
   if (pathname === '/customer/quotations') return { title: 'Quotations' };
   if (pathname.startsWith('/customer/contracts/')) {
+    if (pathname.endsWith('/order')) {
+      return { parent: 'Contracts / Contract Details', title: 'Create Order' };
+    }
     return { parent: 'Contracts', title: 'Contract Details' };
   }
   if (pathname === '/customer/contracts') return { title: 'Contracts' };
+  if (pathname.startsWith('/customer/orders/')) {
+    return { parent: 'Orders', title: 'Order Details' };
+  }
+  if (pathname === '/customer/orders') return { title: 'Orders' };
   if (pathname.startsWith('/customer/products/')) {
     return { parent: 'Products', title: 'Product Details' };
   }

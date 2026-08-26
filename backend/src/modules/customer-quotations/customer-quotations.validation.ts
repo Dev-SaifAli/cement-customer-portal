@@ -12,7 +12,7 @@ const quotationItemSchema = z
   .object({
     id: z.string().uuid().optional(),
     productId: z.string().uuid(),
-    quantity: z.coerce.number().positive('Quantity must be greater than zero.'),
+    quantityTon: z.coerce.number().positive('Quantity (TON) must be greater than zero.'),
     palletRequired: z.boolean().optional().default(false),
     palletType: optionalText(80),
     palletQuantity: z.coerce.number().int().positive().optional(),

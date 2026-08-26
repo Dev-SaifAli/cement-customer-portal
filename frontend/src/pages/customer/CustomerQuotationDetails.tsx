@@ -211,10 +211,10 @@ export function CustomerQuotationDetails({
                   '#',
                   'Item Code',
                   'Item Name',
-                  'Qty',
+                  'Quantity',
                   'UOM',
                   'Packaging',
-                  'Equivalent',
+                  'Packaging Quantity',
                   'Unit Rate (SAR / TON)',
                   'Amount (SAR)',
                 ].map((heading) => (
@@ -243,16 +243,15 @@ export function CustomerQuotationDetails({
                     </div>
                   </td>
                   <td className={`${cell} text-right`}>
-                    <div>{formatQuantity(item.quantity)}</div>
-                    {item.unitWeightKg < 1000 && (
-                      <div className="text-xs text-[#64748b]">
-                        {formatQuantity(item.unitWeightKg)} KG each
-                      </div>
-                    )}
+                    <div>{formatQuantity(item.quantityTon)} TON</div>
                   </td>
-                  <td className={cell}>{item.uom}</td>
+                  <td className={cell}>{item.commercialUom}</td>
                   <td className={cell}>{item.packagingType}</td>
-                  <td className={`${cell} text-right`}>{formatQuantity(item.equivalentTons)} TON</td>
+                  <td className={`${cell} text-right`}>
+                    {item.packagingQuantity === null
+                      ? 'Bulk'
+                      : `${formatQuantity(item.packagingQuantity)} Bags`}
+                  </td>
                   <td className={`${cell} text-right`}>{formatMoney(item.customerRate)}</td>
                   <td className={`${cell} text-right font-bold`}>{formatMoney(item.amount)}</td>
                 </tr>
