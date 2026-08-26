@@ -188,8 +188,31 @@ describe('customer order from contract API', () => {
       contractId,
       70,
     ]);
+    expect(clientQuery).toHaveBeenCalledWith(
+      expect.stringContaining('insert into delivery_requests'),
+      expect.arrayContaining([orderId, customerAccountId, cityId, 'SHIP-TO-01', 10]),
+    );
     expect(clientQuery).toHaveBeenCalledWith('commit');
     expect(release).toHaveBeenCalledOnce();
+  });
+
+  it('does not create a Hader delivery request for a pick-up order', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
+    configureTransaction({
+      ...activeContractRow,
+      fulfilment: 'PICKUP',
+      pickup_location_id: 'ALSAFWA_PLANT_MAIN',
+      delivery_location_id: null,
+      pricing_city_id: null,
+    } as unknown as typeof activeContractRow);
+
+    const response = await createOrderRequest(10);
+
+    expect(response.status).toBe(201);
+    expect(clientQuery).not.toHaveBeenCalledWith(
+      expect.stringContaining('insert into delivery_requests'),
+      expect.anything(),
+    );
   });
 
   it('does not expose a contract owned by another customer', async () => {

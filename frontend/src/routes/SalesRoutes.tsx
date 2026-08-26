@@ -10,6 +10,8 @@ import { SalesLogin } from '../pages/sales/SalesLogin';
 import { SalesOrdersPage } from '../pages/sales/SalesOrders';
 import { SalesQuotationDetailsPage } from '../pages/sales/SalesQuotationDetails';
 import { SalesQuotationsPage } from '../pages/sales/SalesQuotations';
+import { HaderShipments } from '../pages/hader/HaderShipments';
+import { HaderShipmentDetails } from '../pages/hader/HaderShipmentDetails';
 import { getSalesLandingPath } from '../utils/salesRouting';
 
 export function SalesRoutes() {
@@ -27,6 +29,8 @@ export function SalesRoutes() {
               <Route path="contracts" element={<SalesContractsPage />} />
               <Route path="contracts/:id" element={<SalesContractDetailsPage />} />
               <Route path="orders" element={<SalesOrdersPage />} />
+              <Route path="shipments" element={<HaderShipments audience="sales" />} />
+              <Route path="shipments/:id" element={<HaderShipmentDetails audience="sales" />} />
             </Route>
             <Route
               element={
@@ -47,7 +51,14 @@ export function SalesRoutes() {
 function RequireSalesRoles({
   roles,
 }: {
-  roles: Array<'SALES_REP' | 'HADER_MANAGER' | 'PRICE_MANAGER' | 'PRICING_ADMIN'>;
+  roles: Array<
+    | 'SALES_REP'
+    | 'HADER_MANAGER'
+    | 'HADER_OPERATIONS'
+    | 'DISPATCH_USER'
+    | 'PRICE_MANAGER'
+    | 'PRICING_ADMIN'
+  >;
 }) {
   const { user, loading } = useSalesAuth();
 
