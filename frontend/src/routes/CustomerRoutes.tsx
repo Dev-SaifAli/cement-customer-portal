@@ -16,6 +16,7 @@ import { CustomerQuotationNew } from '../pages/customer/CustomerQuotationNew';
 import { CustomerQuotationRoute } from '../pages/customer/CustomerQuotationRoute';
 import { CustomerQuotations } from '../pages/customer/CustomerQuotations';
 import { CustomerUsers } from '../pages/customer/CustomerUsers';
+import { CustomerFleet } from '../pages/customer/CustomerFleet';
 
 export function CustomerRoutes() {
   return (
@@ -38,6 +39,7 @@ export function CustomerRoutes() {
               <Route path="contracts/:id/order" element={<CustomerCreateOrder />} />
               <Route path="orders" element={<CustomerOrders />} />
               <Route path="orders/:id" element={<CustomerOrderDetails />} />
+              <Route path="fleet" element={<CustomerFleet />} />
               <Route path="users" element={<CustomerUsers />} />
             </Route>
           </Route>
