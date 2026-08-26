@@ -7,6 +7,7 @@ import {
   LogOut,
   Menu,
   BriefcaseBusiness,
+  ShoppingBag,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -33,9 +34,11 @@ export function SalesLayout() {
           }
     : location.pathname.startsWith('/sales/contracts')
       ? { title: 'Sales Contracts', subtitle: 'Manage accepted quotation contracts' }
-      : location.pathname.startsWith('/sales/applications')
-      ? { title: 'Sales Applications', subtitle: 'Review submitted customer applications' }
-      : { title: 'Sales Portal', subtitle: 'Internal customer review workspace' };
+      : location.pathname.startsWith('/sales/orders')
+        ? { title: 'Customer Orders', subtitle: 'Read-only submitted order visibility' }
+        : location.pathname.startsWith('/sales/applications')
+          ? { title: 'Sales Applications', subtitle: 'Review submitted customer applications' }
+          : { title: 'Sales Portal', subtitle: 'Internal customer review workspace' };
 
   const handleLogout = async () => {
     await logout();
@@ -98,6 +101,13 @@ export function SalesLayout() {
                 collapsed={sidebarCollapsed}
               >
                 Contracts
+              </SalesNavLink>
+              <SalesNavLink
+                to="/sales/orders"
+                icon={<ShoppingBag size={18} />}
+                collapsed={sidebarCollapsed}
+              >
+                Orders
               </SalesNavLink>
             </>
           )}

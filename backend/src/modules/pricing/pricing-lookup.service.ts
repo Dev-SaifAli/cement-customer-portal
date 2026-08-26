@@ -11,6 +11,8 @@ export interface QuotationPricingItemRow {
   is_white_cement: boolean;
   equivalent_tons: string;
   quantity: string;
+  quantity_tons: string;
+  packaging_quantity: string | null;
   uom: string;
   packaging_type: string;
   product_list_price: string | null;
@@ -87,7 +89,7 @@ export const pricingLookupService = new PricingLookupService();
 const quotationItemPricingSelect = `
   select items.*, products.product_code, products.product_name, products.image as product_image,
          products.unit_weight_kg, products.is_white_cement,
-         round((items.quantity * products.unit_weight_kg) / 1000, 6) as equivalent_tons,
+         items.quantity_tons as equivalent_tons,
          product_prices.list_price as catalog_list_price,
          case
            when products.is_white_cement then delivery_prices.white_cement_delivery_price

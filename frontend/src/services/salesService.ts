@@ -88,6 +88,9 @@ export interface SalesQuotationDetails {
     unitWeightKg: number;
     equivalentTons: number;
     quantity: number;
+    quantityTon: number;
+    packagingQuantity: number | null;
+    commercialUom: 'TON';
     uom: string;
     packagingType: string;
     productListPrice: number | null;
@@ -177,6 +180,9 @@ export interface SalesContractDetails {
     packagingType?: string | null;
     uom?: string | null;
     quantity?: number | null;
+    quantityTon?: number | null;
+    commercialUom?: 'TON';
+    packagingQuantity?: number | null;
     equivalentTons?: number | null;
     productListPrice?: number | null;
     productPrice?: number | null;

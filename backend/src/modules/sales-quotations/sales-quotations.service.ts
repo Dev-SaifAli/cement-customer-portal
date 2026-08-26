@@ -689,7 +689,11 @@ export class SalesQuotationsService {
         image: item.product_image,
         unitWeightKg: Number(item.unit_weight_kg),
         equivalentTons: Number(item.equivalent_tons),
-        quantity: Number(item.quantity),
+        quantity: Number(item.quantity_tons),
+        quantityTon: Number(item.quantity_tons),
+        packagingQuantity:
+          item.packaging_quantity === null ? null : Number(item.packaging_quantity),
+        commercialUom: 'TON',
         uom: item.uom,
         packagingType: item.packaging_type,
         productListPrice: nullableNumber(item.product_list_price ?? item.catalog_list_price),

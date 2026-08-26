@@ -57,7 +57,7 @@ export interface PickupLocation {
 
 export interface CustomerQuotationItemPayload {
   productId: string;
-  quantity: number;
+  quantityTon: number;
   palletRequired?: boolean;
   palletType?: string;
   palletQuantity?: number;
@@ -106,11 +106,16 @@ export interface CustomerQuotation {
       | 'image'
       | 'packagingType'
       | 'uom'
+      | 'unitWeightKg'
+      | 'commercialUom'
       | 'category'
     >;
     packagingType: string;
     uom: string;
     quantity: number;
+    quantityTon: number;
+    packagingQuantity: number | null;
+    commercialUom: 'TON';
     unitWeightKg: number;
     equivalentTons: number;
     palletRequired: boolean;

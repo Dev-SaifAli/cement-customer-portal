@@ -111,11 +111,9 @@ export const QuotationDocument = forwardRef<HTMLDivElement, QuotationDocumentPro
                   <th className="w-20 border border-[#d9d5de] px-2 py-2 text-right">Quantity</th>
                   <th className="w-16 border border-[#d9d5de] px-2 py-2 text-center">UOM</th>
                   <th className="w-20 border border-[#d9d5de] px-2 py-2 text-center">Packaging</th>
-                  {showsCommercialTerms && (
-                    <th className="w-20 border border-[#d9d5de] px-2 py-2 text-right">
-                      Equivalent
-                    </th>
-                  )}
+                  <th className="w-20 border border-[#d9d5de] px-2 py-2 text-right">
+                    Packaging Qty
+                  </th>
                   {showsCommercialTerms && (
                     <th className="w-20 border border-[#d9d5de] px-2 py-2 text-right">
                       Unit Rate / TON
@@ -137,17 +135,19 @@ export const QuotationDocument = forwardRef<HTMLDivElement, QuotationDocumentPro
                       {item.product.productName}
                     </td>
                     <td className="border border-[#d9d5de] px-2 py-2 text-right font-semibold">
-                      {formatQuantity(item.quantity)}
+                      {formatQuantity(item.quantityTon)}
                     </td>
-                    <td className="border border-[#d9d5de] px-2 py-2 text-center">{item.uom}</td>
+                    <td className="border border-[#d9d5de] px-2 py-2 text-center">
+                      {item.commercialUom}
+                    </td>
                     <td className="border border-[#d9d5de] px-2 py-2 text-center">
                       {item.packagingType}
                     </td>
-                    {showsCommercialTerms && (
-                      <td className="border border-[#d9d5de] px-2 py-2 text-right">
-                        {formatQuantity(item.equivalentTons)} TON
-                      </td>
-                    )}
+                    <td className="border border-[#d9d5de] px-2 py-2 text-right">
+                      {item.packagingQuantity === null
+                        ? 'Bulk'
+                        : `${formatQuantity(item.packagingQuantity)} Bags`}
+                    </td>
                     {showsCommercialTerms && (
                       <td className="border border-[#d9d5de] px-2 py-2 text-right">
                         {formatMoney(item.customerRate)}

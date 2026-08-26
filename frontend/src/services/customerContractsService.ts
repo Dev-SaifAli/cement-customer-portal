@@ -37,6 +37,10 @@ export interface CustomerContractDetails extends CustomerContractSummary {
     packagingType: string | null;
     uom: string | null;
     quantity: number | null;
+    quantityTon: number | null;
+    commercialUom: 'TON';
+    packagingQuantity: number | null;
+    packagingUom: string | null;
     equivalentTons: number | null;
     customerRate: number | null;
     amount: number | null;

@@ -9,6 +9,8 @@ export interface CustomerProduct {
   image: string | null;
   packagingType: string;
   uom: string;
+  unitWeightKg: number;
+  commercialUom: 'TON';
   category: string;
   displayOrder: number;
   isActive: boolean;

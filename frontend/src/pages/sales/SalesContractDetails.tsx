@@ -254,8 +254,8 @@ export function SalesContractDetailsPage() {
               <tr>
                 <th className="px-4 py-3">Product</th>
                 <th className="px-4 py-3">Packaging</th>
-                <th className="px-4 py-3">Original Qty/UOM</th>
-                <th className="px-4 py-3">Equivalent TON</th>
+                <th className="px-4 py-3">Commercial Quantity</th>
+                <th className="px-4 py-3">Packaging Quantity</th>
                 <th className="px-4 py-3">Customer Rate / TON</th>
                 <th className="px-4 py-3 text-right">Amount</th>
               </tr>
@@ -269,10 +269,12 @@ export function SalesContractDetailsPage() {
                   </td>
                   <td className="px-4 py-3 text-[#1a1b23]">{item.packagingType ?? 'Not provided'}</td>
                   <td className="px-4 py-3 text-[#1a1b23]">
-                    {formatNumber(item.quantity)} {item.uom ?? ''}
+                    {formatNumber(item.quantityTon ?? item.equivalentTons)} TON
                   </td>
                   <td className="px-4 py-3 font-semibold text-[#1a1b23]">
-                    {formatNumber(item.equivalentTons)}
+                    {item.packagingQuantity == null
+                      ? 'Bulk'
+                      : `${formatNumber(item.packagingQuantity)} Bags`}
                   </td>
                   <td className="px-4 py-3 text-[#1a1b23]">{formatMoney(item.customerRate)}</td>
                   <td className="px-4 py-3 text-right font-bold text-[#1a1b23]">{formatMoney(item.amount)}</td>

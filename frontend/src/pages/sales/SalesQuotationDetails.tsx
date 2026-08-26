@@ -458,7 +458,7 @@ export function SalesQuotationDetailsPage() {
                 <th className="w-10 p-3">#</th>
                 <th className="w-24 p-3 text-left">Item Code</th>
                 <th className="w-56 p-3 text-left">Item Name</th>
-                <th className="w-28 p-3">Qty</th>
+                <th className="w-28 p-3">Quantity</th>
                 <th className="w-20 p-3">UOM</th>
                 <th className="w-24 p-3">Packaging</th>
                 <th className="w-32 p-3">Product List / TON</th>
@@ -483,12 +483,14 @@ export function SalesQuotationDetailsPage() {
                       </div>
                     </td>
                     <td className="p-3 text-center">
-                      <div className="font-semibold">{formatQuantity(item.quantity)}</div>
+                      <div className="font-semibold">{formatQuantity(item.quantityTon)} TON</div>
                       <div className="mt-1 text-[11px] text-[#64748b]">
-                        Equivalent: {formatQuantity(item.equivalentTons)} TON
+                        {item.packagingQuantity === null
+                          ? 'Bulk'
+                          : `Equivalent: ${formatQuantity(item.packagingQuantity)} Bags`}
                       </div>
                     </td>
-                    <td className="p-3 text-center">{item.uom}</td>
+                    <td className="p-3 text-center">{item.commercialUom}</td>
                     <td className="p-3 text-center">{item.packagingType}</td>
                     <td className="p-3 text-center font-bold">
                       {money(item.productListPrice)}

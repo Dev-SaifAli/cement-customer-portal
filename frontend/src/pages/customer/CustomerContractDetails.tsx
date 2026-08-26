@@ -1,4 +1,4 @@
-import { ArrowLeft, Lock } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Lock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -6,8 +6,10 @@ import {
   getCustomerContract,
   type CustomerContractDetails,
 } from '../../services/customerContractsService';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
 
 export function CustomerContractDetailsPage() {
+  const { user } = useCustomerAuth();
   const { id } = useParams();
   const [contract, setContract] = useState<CustomerContractDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,9 +53,9 @@ export function CustomerContractDetailsPage() {
 
   if (!contract) return null;
 
-  const usedTons = Math.max(0, contract.shippedQuantityTons ?? 0);
   const totalTons = contract.totalQuantityTons ?? 0;
   const remainingTons = contract.remainingQuantityTons ?? 0;
+  const usedTons = Math.max(0, totalTons - remainingTons);
   const usagePercent = totalTons > 0 ? Math.min(100, Math.max(0, (usedTons / totalTons) * 100)) : 0;
 
   return (
@@ -93,7 +95,11 @@ export function CustomerContractDetailsPage() {
           <div className="mb-3 inline-flex items-center gap-2 rounded-lg bg-[#f6f2fa] px-3 py-2 text-xs font-bold text-[#54247a]">
             <Lock size={14} /> Final customer terms
           </div>
-          <Field label="Final Customer Rate / TON" value={formatMoney(contract.customerRate)} strong />
+          <Field
+            label="Final Customer Rate / TON"
+            value={formatMoney(contract.customerRate)}
+            strong
+          />
           <Field label="Payment Terms" value={contract.paymentTerms} />
           <Field label="Grand Total" value={formatMoney(contract.grandTotal)} strong />
           <Field label="Commercial Notes" value={contract.commercialNotes} />
@@ -108,7 +114,9 @@ export function CustomerContractDetailsPage() {
               Contract balance is shown in equivalent tons for order planning.
             </p>
           </div>
-          <p className="text-sm font-bold text-[#1a1b23]">{formatNumber(remainingTons)} TON remaining</p>
+          <p className="text-sm font-bold text-[#1a1b23]">
+            {formatNumber(remainingTons)} TON remaining
+          </p>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-[#f4edf7]">
           <div className="h-full rounded-full bg-[#54247a]" style={{ width: `${usagePercent}%` }} />
@@ -132,7 +140,7 @@ export function CustomerContractDetailsPage() {
                 <th className="px-4 py-3">Packaging</th>
                 <th className="px-4 py-3">Quantity</th>
                 <th className="px-4 py-3">UOM</th>
-                <th className="px-4 py-3">Equivalent TON</th>
+                <th className="px-4 py-3">Packaging Quantity</th>
                 <th className="px-4 py-3">Final Rate / TON</th>
                 <th className="px-4 py-3">Amount</th>
               </tr>
@@ -145,9 +153,13 @@ export function CustomerContractDetailsPage() {
                     <p className="text-xs text-[#64748b]">{item.productCode}</p>
                   </td>
                   <td className="px-4 py-3">{item.packagingType}</td>
-                  <td className="px-4 py-3">{formatNumber(item.quantity)}</td>
-                  <td className="px-4 py-3">{item.uom}</td>
-                  <td className="px-4 py-3">{formatNumber(item.equivalentTons)}</td>
+                  <td className="px-4 py-3">{formatNumber(item.quantityTon)} TON</td>
+                  <td className="px-4 py-3">{item.commercialUom}</td>
+                  <td className="px-4 py-3">
+                    {item.packagingQuantity === null
+                      ? 'Bulk'
+                      : `${formatNumber(item.packagingQuantity)} Bags`}
+                  </td>
                   <td className="px-4 py-3">{formatMoney(item.customerRate)}</td>
                   <td className="px-4 py-3 font-semibold">{formatMoney(item.amount)}</td>
                 </tr>
@@ -157,16 +169,26 @@ export function CustomerContractDetailsPage() {
         </div>
       </section>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-[#e3e1e8] bg-white p-5 text-sm text-[#64748b] sm:flex-row sm:items-center sm:justify-between">
-        <span>Order from Contract will be available in a later module.</span>
-        <button
-          type="button"
-          disabled
-          className="inline-flex h-10 items-center justify-center rounded-lg border border-[#e3e1e8] px-4 text-sm font-semibold text-[#94a3b8]"
-        >
-          Order from Contract
-        </button>
-      </div>
+      {(user?.role === 'CUSTOMER_ADMIN' || user?.role === 'PURCHASER') && (
+        <div className="customer-card flex flex-col gap-3 rounded-2xl border p-5 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="customer-text font-bold">Create an order from this contract</p>
+            <p className="customer-secondary mt-1 text-xs">
+              {remainingTons > 0
+                ? `${formatNumber(remainingTons)} TON is available to order.`
+                : 'The contract quantity has been fully used.'}
+            </p>
+          </div>
+          {remainingTons > 0 && (
+            <Link
+              to={`/customer/contracts/${contract.id}/order`}
+              className="customer-primary-bg inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-bold text-white"
+            >
+              Create Order <ArrowRight size={16} />
+            </Link>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -180,11 +202,21 @@ function InfoCard({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Field({ label, value, strong = false }: { label: string; value: ReactNode; strong?: boolean }) {
+function Field({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: ReactNode;
+  strong?: boolean;
+}) {
   return (
     <div>
       <p className="text-xs font-medium text-[#64748b]">{label}</p>
-      <p className={`mt-1 text-sm ${strong ? 'font-bold text-[#54247a]' : 'font-semibold text-[#1a1b23]'}`}>
+      <p
+        className={`mt-1 text-sm ${strong ? 'font-bold text-[#54247a]' : 'font-semibold text-[#1a1b23]'}`}
+      >
         {value || 'Not provided'}
       </p>
     </div>
@@ -201,7 +233,9 @@ function formatLocation(
   location?: { name: string | null; city: string | null; region: string | null } | null,
 ) {
   if (!location) return 'Not provided';
-  return [location.name, location.city, location.region].filter(Boolean).join(', ') || 'Not provided';
+  return (
+    [location.name, location.city, location.region].filter(Boolean).join(', ') || 'Not provided'
+  );
 }
 
 function formatPickupLocation(location?: { name: string; city: string | null } | null) {
@@ -210,15 +244,23 @@ function formatPickupLocation(location?: { name: string; city: string | null } |
 }
 
 function formatMoney(value?: number | null) {
-  return value == null ? 'Not provided' : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} SAR`;
+  return value == null
+    ? 'Not provided'
+    : `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} SAR`;
 }
 
 function formatNumber(value?: number | null) {
-  return value == null ? 'Not provided' : value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+  return value == null
+    ? 'Not provided'
+    : value.toLocaleString(undefined, { maximumFractionDigits: 3 });
 }
 
 function formatDate(value?: string | null) {
   return value
-    ? new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    ? new Date(value).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      })
     : 'Not provided';
 }

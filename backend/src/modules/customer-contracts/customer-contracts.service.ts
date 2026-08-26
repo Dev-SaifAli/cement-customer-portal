@@ -202,13 +202,20 @@ function mapCustomerContractDetails(row: CustomerContractRow) {
 }
 
 function toCustomerSafeItem(item: Record<string, unknown>) {
+  const packagingUom = stringValue(item.uom);
+  const legacyPackagingQuantity =
+    packagingUom?.toUpperCase() === 'TON' ? null : numberValue(item.quantity);
   return {
     productCode: stringValue(item.productCode),
     productName: stringValue(item.productName),
     packagingType: stringValue(item.packagingType),
     uom: stringValue(item.uom),
-    quantity: numberValue(item.quantity),
-    equivalentTons: numberValue(item.equivalentTons),
+    quantity: numberValue(item.quantityTon ?? item.equivalentTons ?? item.quantity),
+    quantityTon: numberValue(item.quantityTon ?? item.equivalentTons ?? item.quantity),
+    commercialUom: 'TON',
+    packagingQuantity: numberValue(item.packagingQuantity) ?? legacyPackagingQuantity,
+    packagingUom,
+    equivalentTons: numberValue(item.quantityTon ?? item.equivalentTons ?? item.quantity),
     customerRate: numberValue(item.customerRate),
     amount: numberValue(item.amount),
   };

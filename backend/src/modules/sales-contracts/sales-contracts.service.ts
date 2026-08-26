@@ -146,6 +146,7 @@ interface AcceptedQuotationItemRow {
   is_white_cement: boolean;
   equivalent_tons: string;
   quantity: string;
+  packaging_quantity: string | null;
   uom: string;
   packaging_type: string;
   pallet_required: boolean;
@@ -947,8 +948,9 @@ async function getAcceptedQuotationItems(client: PoolClient, quotationId: string
        products.image as product_image,
        products.unit_weight_kg,
        products.is_white_cement,
-       round((items.quantity * products.unit_weight_kg) / 1000, 6) as equivalent_tons,
-       items.quantity,
+       items.quantity_tons as equivalent_tons,
+       items.quantity_tons as quantity,
+       items.packaging_quantity,
        items.uom,
        items.packaging_type,
        items.pallet_required,
@@ -1134,6 +1136,8 @@ async function insertContractItems(
          original_uom,
          original_quantity,
          equivalent_tons,
+         commercial_quantity_tons,
+         packaging_quantity,
          approved_product_price_per_ton,
          discount_mode,
          discount_value,
@@ -1145,7 +1149,7 @@ async function insertContractItems(
        )
        values (
          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-         $11, $12, $13, $14, $15, $16, $17
+         $11, $12, $13, $14, $15, $16, $17, $18, $19
        )
        on conflict (contract_id, display_order) do nothing`,
       [
@@ -1155,9 +1159,11 @@ async function insertContractItems(
         item.productCode,
         item.productName,
         item.packagingType,
-        item.uom,
+        item.commercialUom,
         item.quantity,
         item.equivalentTons,
+        item.quantityTon,
+        item.packagingQuantity,
         item.productPrice,
         item.discountMode,
         item.discountValue,
@@ -1284,6 +1290,11 @@ function contractItemSnapshot(item: AcceptedQuotationItemRow) {
     unitWeightKg: Number(item.unit_weight_kg),
     isWhiteCement: item.is_white_cement,
     quantity: Number(item.quantity),
+    quantityTon: Number(item.quantity),
+    commercialUom: 'TON',
+    packagingQuantity:
+      item.packaging_quantity === null ? null : Number(item.packaging_quantity),
+    packagingUom: item.uom,
     uom: item.uom,
     packagingType: item.packaging_type,
     equivalentTons: Number(item.equivalent_tons),
@@ -1401,16 +1412,32 @@ function mapContractDetails(row: ContractRow, events: ContractStatusEventRow[]) 
 }
 
 function parseItemsSnapshot(value: unknown) {
-  if (Array.isArray(value)) return value;
+  if (Array.isArray(value)) return value.map(normalizeContractItemSnapshot);
   if (typeof value === 'string') {
     try {
       const parsed = JSON.parse(value) as unknown;
-      return Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed) ? parsed.map(normalizeContractItemSnapshot) : [];
     } catch {
       return [];
     }
   }
   return [];
+}
+
+function normalizeContractItemSnapshot(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object') return {};
+  const item = value as Record<string, unknown>;
+  const quantityTon = item.quantityTon ?? item.equivalentTons ?? item.quantity;
+  const productUom = typeof item.uom === 'string' ? item.uom : null;
+  const packagingQuantity =
+    item.packagingQuantity ?? (productUom?.toUpperCase() === 'TON' ? null : item.quantity ?? null);
+  return {
+    ...item,
+    quantity: quantityTon,
+    quantityTon,
+    commercialUom: 'TON',
+    packagingQuantity,
+  };
 }
 
 function nullableNumber(value: string | number | null | undefined) {
