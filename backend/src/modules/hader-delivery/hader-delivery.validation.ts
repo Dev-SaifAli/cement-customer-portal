@@ -24,6 +24,7 @@ export const haderListQuerySchema = z.object({
 export const haderIdSchema = z.uuid();
 export const rejectDeliveryRequestSchema = z.object({ reason: z.string().trim().min(1).max(1000) });
 export const createShipmentSchema = z.object({
+  clientRequestId: z.uuid().optional(),
   quantityTon: z.coerce.number().positive('Shipment quantity must be greater than zero.'),
   scheduledDate: z.iso.date().optional(),
 });

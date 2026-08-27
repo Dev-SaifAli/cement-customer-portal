@@ -129,6 +129,14 @@ export function HaderDeliveryRequestDetails() {
           <Info label="Packaging / UOM" value={`${item.product.packaging} · ${item.product.uom}`} />
           <Info label="Quantity" value={`${item.quantityTon.toFixed(3)} TON`} />
           <Info label="Equivalent Bags" value={item.equivalentBags?.toLocaleString() ?? 'N/A'} />
+          <Info
+            label="Customer Rate"
+            value={`${item.customerRatePerTon.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR / TON`}
+          />
+          <Info
+            label="Total Amount"
+            value={`${item.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR`}
+          />
           <Info label="Fulfilment" value="Delivery" />
           <Info label="Hader City" value={item.haderCity.name} />
         </Card>

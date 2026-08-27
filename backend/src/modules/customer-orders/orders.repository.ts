@@ -38,6 +38,8 @@ interface OrderReadRow {
   product_name: string;
   packaging: string;
   contract_uom: string;
+  shipment_count?: string;
+  latest_shipment_status?: string | null;
 }
 
 const pageSize = 10;
@@ -57,7 +59,11 @@ export class OrdersRepository {
     return result.rows[0] ? mapOrderReadRow(result.rows[0]) : null;
   }
 
-  async list(scope: OrderScope, filters: OrderListFilters) {
+  async list(
+    scope: OrderScope,
+    filters: OrderListFilters,
+    options: { includeShipmentSummary?: boolean } = {},
+  ) {
     const values: unknown[] = [];
     const clauses: string[] = [];
     if (scope.customerAccountId) {
@@ -86,7 +92,7 @@ export class OrdersRepository {
     const offset = (filters.page - 1) * pageSize;
     const listValues = [...values, pageSize, offset];
     const result = await pool.query<OrderReadRow>(
-      `${orderSelectSql}
+      `${options.includeShipmentSummary ? orderSelectWithShipmentSql : orderSelectSql}
        ${where}
        order by orders.created_at desc
        limit $${listValues.length - 1} offset $${listValues.length}`,
@@ -139,8 +145,25 @@ const orderSelectSql = `select orders.*,
   order_items.product_code,
   order_items.product_name,
   order_items.packaging,
-  order_items.contract_uom
+ order_items.contract_uom
  ${orderJoinSql}`;
+
+const orderSelectWithShipmentSql = `select orders.*,
+  contracts.reference as contract_reference,
+  customer_accounts.company_name,
+  order_items.product_id,
+  order_items.product_code,
+  order_items.product_name,
+  order_items.packaging,
+  order_items.contract_uom,
+  shipment_summary.shipment_count,
+  shipment_summary.latest_shipment_status
+ ${orderJoinSql}
+ left join lateral (
+   select count(*)::text as shipment_count,
+     (array_agg(shipments.status order by shipments.created_at desc))[1] as latest_shipment_status
+   from shipments where shipments.order_id=orders.id
+ ) shipment_summary on true`;
 
 function mapOrderReadRow(row: OrderReadRow) {
   return {
@@ -174,6 +197,14 @@ function mapOrderReadRow(row: OrderReadRow) {
     submittedAt: dateTime(row.submitted_at),
     createdAt: dateTime(row.created_at),
     updatedAt: dateTime(row.updated_at),
+    ...(row.shipment_count !== undefined
+      ? {
+          shipmentSummary: {
+            count: Number(row.shipment_count),
+            latestStatus: row.latest_shipment_status,
+          },
+        }
+      : {}),
   };
 }
 

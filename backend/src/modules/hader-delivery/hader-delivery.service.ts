@@ -31,6 +31,7 @@ interface DeliveryRequestRow {
   requested_date: Date | string;
   delivery_notes: string | null;
   customer_rate_per_ton: string;
+  total_amount: string;
   status: string;
   rejection_reason: string | null;
   created_at: Date | string;
@@ -102,6 +103,17 @@ export class HaderDeliveryService {
           'DELIVERY_REQUEST_NOT_APPROVED',
         );
       }
+      if (input.clientRequestId) {
+        const existing = await client.query<{ id: string }>(
+          `select id from shipments where delivery_request_id=$1 and client_request_id=$2`,
+          [id, input.clientRequestId],
+        );
+        const existingId = existing.rows[0]?.id;
+        if (existingId) {
+          await client.query('commit');
+          return this.getShipment(existingId);
+        }
+      }
       const shipped = await client.query<{ total: string }>(
         `select coalesce(sum(quantity_ton),0)::text as total from shipments where delivery_request_id=$1`,
         [id],
@@ -119,8 +131,8 @@ export class HaderDeliveryService {
       const number = await nextReference(client, 'shipment_number_seq', 'SHP');
       const result = await client.query<{ id: string }>(
         `insert into shipments (shipment_number,delivery_request_id,order_id,customer_account_id,
-          quantity_ton,status,scheduled_date,created_by_sales_user_id)
-         values ($1,$2,$3,$4,$5,'CREATED',$6,$7) returning id`,
+          quantity_ton,status,scheduled_date,created_by_sales_user_id,client_request_id)
+         values ($1,$2,$3,$4,$5,'CREATED',$6,$7,$8) returning id`,
         [
           number,
           id,
@@ -129,6 +141,7 @@ export class HaderDeliveryService {
           quantityTon,
           input.scheduledDate ?? null,
           user.id,
+          input.clientRequestId ?? null,
         ],
       );
       const shipmentId = result.rows[0]?.id;
@@ -139,6 +152,19 @@ export class HaderDeliveryService {
         changed_by_sales_user_id,notes) values ($1,'SHIPMENT_CREATED',null,'CREATED',$2,null)`,
         [shipmentId, user.id],
       );
+      const orderStatus = await client.query<{ status: string }>(
+        `update orders set status='PROCESSING',updated_at=now()
+         where id=$1 and status='SUBMITTED' returning status`,
+        [request.order_id],
+      );
+      if (orderStatus.rows[0]) {
+        await client.query(
+          `insert into order_events (order_id,event_type,previous_status,new_status,
+           changed_by_sales_user_id,event_data)
+           values ($1,'SHIPMENT_CREATED','SUBMITTED','PROCESSING',$2,$3::jsonb)`,
+          [request.order_id, user.id, JSON.stringify({ shipmentId, shipmentNumber: number })],
+        );
+      }
       if (request.status !== 'CONVERTED_TO_SHIPMENT') {
         await client.query(
           `update delivery_requests set status='CONVERTED_TO_SHIPMENT',updated_at=now() where id=$1`,
@@ -346,6 +372,7 @@ function mapRequest(row: DeliveryRequestRow) {
     requestedDate: dateOnly(row.requested_date),
     notes: row.delivery_notes,
     customerRatePerTon: Number(row.customer_rate_per_ton),
+    totalAmount: Number(row.total_amount),
     shippedTon: Number(row.shipped_ton ?? 0),
     remainingTon: round(quantityTon - Number(row.shipped_ton ?? 0), 3),
     rejectionReason: row.rejection_reason,
@@ -396,7 +423,7 @@ const commonJoin = `from delivery_requests dr
 const deliveryRequestColumns = `dr.*,o.order_number,o.contract_id,c.reference as contract_reference,ca.company_name,
  contact.name as contact_name,contact.phone as contact_phone,oi.product_id,oi.product_code,oi.product_name,
  oi.packaging,oi.contract_uom,p.unit_weight_kg,o.hader_city_name,o.ship_to_snapshot,o.delivery_notes,
- o.approved_customer_rate_per_ton as customer_rate_per_ton,
+ o.approved_customer_rate_per_ton as customer_rate_per_ton,o.amount as total_amount,
  (select coalesce(sum(sx.quantity_ton),0)::text from shipments sx where sx.delivery_request_id=dr.id) as shipped_ton`;
 const deliveryRequestSelect = `select ${deliveryRequestColumns} ${commonJoin}`;
 const shipmentSelect = `select ${deliveryRequestColumns},s.id as shipment_id,s.shipment_number,

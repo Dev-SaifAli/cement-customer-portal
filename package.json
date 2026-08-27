@@ -15,7 +15,8 @@
     "format:check": "prettier --check .",
     "test": "npm run test -w backend && npm run test -w frontend",
     "migrate:up": "npm run migrate:up -w database",
-    "migrate:down": "npm run migrate:down -w database"
+    "migrate:down": "npm run migrate:down -w database",
+    "seed:logistics": "npm run seed:logistics -w database"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",

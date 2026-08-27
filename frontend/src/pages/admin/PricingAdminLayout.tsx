@@ -1,4 +1,15 @@
-import { BadgeDollarSign, ChevronLeft, ChevronRight, LogOut, Menu, X } from 'lucide-react';
+import {
+  BadgeDollarSign,
+  ChevronLeft,
+  ChevronRight,
+  LogOut,
+  Menu,
+  Truck,
+  UserRound,
+  Warehouse,
+  WalletCards,
+  X,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import Logo from '../../components/Logo/Logo';
@@ -27,7 +38,10 @@ export function PricingAdminLayout() {
             sidebarCollapsed ? 'justify-center px-3' : 'justify-between px-4'
           }`}
         >
-          <Link to="/admin/product-prices" className={sidebarCollapsed ? 'lg:hidden' : ''}>
+          <Link
+            to={user?.role === 'PRICING_ADMIN' ? '/admin/product-prices' : '/admin/delivery-fleet'}
+            className={sidebarCollapsed ? 'lg:hidden' : ''}
+          >
             <Logo size="sm" />
           </Link>
           <button
@@ -48,30 +62,50 @@ export function PricingAdminLayout() {
           </button>
         </div>
 
-        <nav className={sidebarCollapsed ? 'p-3' : 'p-4'}>
-          <NavLink
-            to="/admin/product-prices"
-            title={sidebarCollapsed ? 'Pricing' : undefined}
-            className={({ isActive }) =>
-              `flex items-center rounded-xl py-3 text-sm font-semibold transition ${
-                sidebarCollapsed ? 'justify-center px-3' : 'gap-3 px-4'
-              } ${
-                isActive
-                  ? 'bg-[#f6f2fa] text-[#54247a]'
-                  : 'text-[#64748b] hover:bg-[#f8fafc] hover:text-[#1a1b23]'
-              }`
-            }
-          >
-            <BadgeDollarSign size={18} />
-            <span className={sidebarCollapsed ? 'lg:hidden' : ''}>Pricing</span>
-          </NavLink>
+        <nav className={`space-y-1 ${sidebarCollapsed ? 'p-3' : 'p-4'}`}>
+          {user?.role === 'PRICING_ADMIN' && (
+            <AdminNav
+              to="/admin/product-prices"
+              label="Pricing"
+              icon={<BadgeDollarSign size={18} />}
+              collapsed={sidebarCollapsed}
+            />
+          )}
+          {(user?.role === 'PRICING_ADMIN' || user?.role === 'HADER_MANAGER') && (
+            <>
+              <AdminNav
+                to="/admin/transporters"
+                label="Transporters"
+                icon={<Warehouse size={18} />}
+                collapsed={sidebarCollapsed}
+              />
+              <AdminNav
+                to="/admin/transporters/costs"
+                label="Transporter Costs"
+                icon={<WalletCards size={18} />}
+                collapsed={sidebarCollapsed}
+              />
+            </>
+          )}
+          <AdminNav
+            to="/admin/delivery-fleet"
+            label="Delivery Fleet"
+            icon={<Truck size={18} />}
+            collapsed={sidebarCollapsed}
+          />
+          <AdminNav
+            to="/admin/delivery-drivers"
+            label="Drivers"
+            icon={<UserRound size={18} />}
+            collapsed={sidebarCollapsed}
+          />
         </nav>
 
         <div className="absolute inset-x-0 bottom-0 border-t border-[#e3e1e8] p-3">
           {!sidebarCollapsed && (
             <div className="mb-2 min-w-0 px-2 py-2">
               <p className="truncate text-sm font-semibold">{user?.name}</p>
-              <p className="truncate text-xs text-[#64748b]">Pricing Administrator</p>
+              <p className="truncate text-xs text-[#64748b]">Internal Logistics</p>
             </div>
           )}
           <button
@@ -111,8 +145,8 @@ export function PricingAdminLayout() {
               <Menu size={20} />
             </button>
             <div>
-              <p className="text-sm font-semibold">Pricing Administration</p>
-              <p className="text-xs text-[#64748b]">Portal-owned quotation baseline prices</p>
+              <p className="text-sm font-semibold">Internal Administration</p>
+              <p className="text-xs text-[#64748b]">Pricing and logistics master data</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -135,5 +169,30 @@ export function PricingAdminLayout() {
         </main>
       </div>
     </div>
+  );
+}
+
+function AdminNav({
+  to,
+  label,
+  icon,
+  collapsed,
+}: {
+  to: string;
+  label: string;
+  icon: React.ReactNode;
+  collapsed: boolean;
+}) {
+  return (
+    <NavLink
+      to={to}
+      title={collapsed ? label : undefined}
+      className={({ isActive }) =>
+        `flex items-center rounded-xl py-3 text-sm font-semibold transition ${collapsed ? 'justify-center px-3' : 'gap-3 px-4'} ${isActive ? 'bg-[#f6f2fa] text-[#54247a]' : 'text-[#64748b] hover:bg-[#f8fafc] hover:text-[#1a1b23]'}`
+      }
+    >
+      {icon}
+      <span className={collapsed ? 'lg:hidden' : ''}>{label}</span>
+    </NavLink>
   );
 }
