@@ -5,6 +5,10 @@ import {
   LogOut,
   Menu,
   PackageCheck,
+  Truck,
+  UserRound,
+  WalletCards,
+  Warehouse,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -52,6 +56,34 @@ export function HaderLayout() {
             to="/hader/shipments"
             icon={<PackageCheck size={18} />}
             label="Shipments"
+            collapsed={collapsed}
+          />
+          {user?.role === 'HADER_MANAGER' && (
+            <>
+              <Nav
+                to="/admin/transporters"
+                icon={<Warehouse size={18} />}
+                label="Transporters"
+                collapsed={collapsed}
+              />
+              <Nav
+                to="/admin/transporters/costs"
+                icon={<WalletCards size={18} />}
+                label="Transporter Costs"
+                collapsed={collapsed}
+              />
+            </>
+          )}
+          <Nav
+            to="/admin/delivery-fleet"
+            icon={<Truck size={18} />}
+            label="Delivery Fleet"
+            collapsed={collapsed}
+          />
+          <Nav
+            to="/admin/delivery-drivers"
+            icon={<UserRound size={18} />}
+            label="Drivers"
             collapsed={collapsed}
           />
         </nav>

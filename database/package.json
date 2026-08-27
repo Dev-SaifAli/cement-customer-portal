@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "migrate:up": "node scripts/run-migration.cjs up -m migrations",
-    "migrate:down": "node scripts/run-migration.cjs down -m migrations"
+    "migrate:down": "node scripts/run-migration.cjs down -m migrations",
+    "seed:logistics": "node scripts/seed-internal-logistics.cjs"
   },
   "dependencies": {
     "dotenv": "^17.2.1",

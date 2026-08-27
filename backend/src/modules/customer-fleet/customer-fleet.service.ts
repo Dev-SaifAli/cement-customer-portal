@@ -96,7 +96,10 @@ export class CustomerFleetService {
         ],
       );
       const row = requireRow(result.rows[0], 'Truck could not be created.');
-      await insertEvent(client, user, 'TRUCK', row.id, 'TRUCK_CREATED', { status: row.status });
+      await insertEvent(client, user, 'TRUCK', row.id, 'TRUCK_CREATED', {
+        oldValue: null,
+        newValue: auditSnapshot(row),
+      });
       await client.query('commit');
       return mapTruck(row);
     } catch (error) {
@@ -132,7 +135,7 @@ export class CustomerFleetService {
             input.status ?? row.status,
           ],
         );
-        return requireRow(result.rows[0], 'Truck could not be updated.');
+        return { before: row, after: requireRow(result.rows[0], 'Truck could not be updated.') };
       },
       input.status === 'INACTIVE' ? 'TRUCK_DEACTIVATED' : 'TRUCK_UPDATED',
       mapTruck,
@@ -184,7 +187,10 @@ export class CustomerFleetService {
         ],
       );
       const row = requireRow(result.rows[0], 'Driver could not be created.');
-      await insertEvent(client, user, 'DRIVER', row.id, 'DRIVER_CREATED', { status: row.status });
+      await insertEvent(client, user, 'DRIVER', row.id, 'DRIVER_CREATED', {
+        oldValue: null,
+        newValue: auditSnapshot(row),
+      });
       await client.query('commit');
       return mapDriver(row);
     } catch (error) {
@@ -220,7 +226,7 @@ export class CustomerFleetService {
             input.status ?? row.status,
           ],
         );
-        return requireRow(result.rows[0], 'Driver could not be updated.');
+        return { before: row, after: requireRow(result.rows[0], 'Driver could not be updated.') };
       },
       input.status === 'INACTIVE' ? 'DRIVER_DEACTIVATED' : 'DRIVER_UPDATED',
       mapDriver,
@@ -291,11 +297,11 @@ export class CustomerFleetService {
     return { ...mapAttachment(row), stream: stored.stream, streamSize: stored.size };
   }
 
-  private async updateEntity<TRow>(
+  private async updateEntity<TRow extends TruckRow | DriverRow>(
     user: CustomerUser,
     entityType: EntityType,
     id: string,
-    update: (client: PoolClient) => Promise<TRow>,
+    update: (client: PoolClient) => Promise<{ before: TRow; after: TRow }>,
     eventType: string,
     mapper: (row: TRow) => unknown,
     uniqueMessage: string,
@@ -303,10 +309,13 @@ export class CustomerFleetService {
     const client = await pool.connect();
     try {
       await client.query('begin');
-      const row = await update(client);
-      await insertEvent(client, user, entityType, id, eventType, {});
+      const { before, after } = await update(client);
+      await insertEvent(client, user, entityType, id, eventType, {
+        oldValue: auditSnapshot(before),
+        newValue: auditSnapshot(after),
+      });
       await client.query('commit');
-      return mapper(row);
+      return mapper(after);
     } catch (error) {
       await client.query('rollback');
       throw translateUnique(error, uniqueMessage);
@@ -403,4 +412,27 @@ async function insertEvent(
     event_type, changed_by_customer_user_id, event_data) values ($1,$2,$3,$4,$5,$6)`,
     [user.account.id, entityType, entityId, eventType, user.id, eventData],
   );
+}
+
+function auditSnapshot(row: TruckRow | DriverRow) {
+  if ('truck_number' in row) {
+    return {
+      id: row.id,
+      truckNumber: row.truck_number,
+      plateNumber: row.plate_number,
+      vehicleType: row.vehicle_type,
+      capacityTon: Number(row.capacity_ton),
+      carrierName: row.carrier_name,
+      status: row.status,
+    };
+  }
+  return {
+    id: row.id,
+    driverNumber: row.driver_number,
+    name: row.name,
+    mobile: row.mobile,
+    licenseNumber: row.license_number,
+    licenseExpiry: row.license_expiry,
+    status: row.status,
+  };
 }

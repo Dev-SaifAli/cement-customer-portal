@@ -18,6 +18,7 @@ export interface DeliveryRequest {
   requestedDate: string | null;
   notes: string | null;
   customerRatePerTon: number;
+  totalAmount: number;
   shippedTon: number;
   remainingTon: number;
   rejectionReason: string | null;
@@ -65,7 +66,7 @@ export async function rejectDeliveryRequest(id: string, reason: string) {
 }
 export async function createShipment(
   requestId: string,
-  payload: { quantityTon: number; scheduledDate?: string },
+  payload: { clientRequestId: string; quantityTon: number; scheduledDate?: string },
 ) {
   const r = await request<{ success: true; data: { shipment: Shipment } }>(
     `/hader/delivery-requests/${requestId}/create-shipment`,

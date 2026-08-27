@@ -17,6 +17,7 @@ import { customerProfileRouter } from '../modules/customer-profile/customer-prof
 import { customerQuotationsRouter } from '../modules/customer-quotations/customer-quotations.routes.js';
 import { customerUsersRouter } from '../modules/customer-users/customer-users.routes.js';
 import { healthRouter } from '../modules/health/health.routes.js';
+import { internalLogisticsRouter } from '../modules/internal-logistics/internal-logistics.routes.js';
 import {
   haderDeliveryRequestsRouter,
   haderShipmentsRouter,
@@ -31,6 +32,7 @@ import { salesQuotationsRouter } from '../modules/sales-quotations/sales-quotati
 
 export const v1Router = Router();
 v1Router.use('/admin/product-prices', adminPricingRouter);
+v1Router.use('/admin', internalLogisticsRouter);
 v1Router.use('/applications', applicationRouter);
 v1Router.use('/auth', authRouter);
 v1Router.use('/customer/auth', customerAuthRouter);

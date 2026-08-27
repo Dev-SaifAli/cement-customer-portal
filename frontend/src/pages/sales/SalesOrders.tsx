@@ -95,6 +95,7 @@ export function SalesOrdersPage() {
                     <th className="px-4 py-3">Product</th>
                     <th className="px-4 py-3">Quantity TON</th>
                     <th className="px-4 py-3">Fulfilment</th>
+                    <th className="px-4 py-3">Shipment Status</th>
                     <th className="px-4 py-3">Status</th>
                   </tr>
                 </thead>
@@ -117,6 +118,13 @@ export function SalesOrdersPage() {
                       </td>
                       <td className="px-4 py-3">
                         {order.fulfilmentType === 'DELIVERY' ? 'Hader Delivery' : 'Pick-Up'}
+                      </td>
+                      <td className="px-4 py-3">
+                        {order.fulfilmentType === 'PICKUP'
+                          ? 'Not applicable'
+                          : order.shipmentSummary.count
+                            ? `${label(order.shipmentSummary.latestStatus ?? 'CREATED')} (${order.shipmentSummary.count})`
+                            : 'Not created'}
                       </td>
                       <td className="px-4 py-3">
                         <span className="inline-flex items-center gap-2 text-xs font-semibold">

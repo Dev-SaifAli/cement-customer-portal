@@ -122,7 +122,7 @@ export function CustomerFleet() {
         <div>
           <h1 className="text-2xl font-bold customer-text">My Trucks &amp; Drivers</h1>
           <p className="mt-1 text-sm customer-text-muted">
-            Manage customer-owned fleet records for future pick-up orders.
+            Manage your vehicles and drivers for pickup orders.
           </p>
         </div>
         <button

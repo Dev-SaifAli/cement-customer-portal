@@ -1,15 +1,17 @@
 import { ArrowLeft, PackageCheck } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   createShipment,
   getDeliveryRequest,
   type DeliveryRequest,
 } from '../../services/haderDeliveryService';
+import { createClientId } from '../../utils/createClientId';
 
 export function HaderShipmentCreate() {
   const [params] = useSearchParams();
   const requestId = params.get('requestId');
+  const clientRequestId = useRef(createClientId());
   const navigate = useNavigate();
   const [item, setItem] = useState<DeliveryRequest | null>(null);
   const [quantity, setQuantity] = useState('');
@@ -33,6 +35,7 @@ export function HaderShipmentCreate() {
     setError('');
     try {
       const shipment = await createShipment(requestId, {
+        clientRequestId: clientRequestId.current,
         quantityTon: amount,
         ...(scheduledDate ? { scheduledDate } : {}),
       });

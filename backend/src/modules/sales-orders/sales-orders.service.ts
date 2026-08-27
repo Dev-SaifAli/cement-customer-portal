@@ -4,7 +4,7 @@ import type { ListSalesOrdersQuery } from './sales-orders.validation.js';
 
 export class SalesOrdersService {
   async list(query: ListSalesOrdersQuery) {
-    return ordersRepository.list({}, query);
+    return ordersRepository.list({}, query, { includeShipmentSummary: true });
   }
 
   async getById(id: string) {
