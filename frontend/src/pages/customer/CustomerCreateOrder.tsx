@@ -19,6 +19,12 @@ import {
   type CustomerContractDetails,
 } from '../../services/customerContractsService';
 import { createCustomerOrder, type CustomerOrder } from '../../services/customerOrdersService';
+import {
+  getActiveCustomerDrivers,
+  getActiveCustomerTrucks,
+  type CustomerDriver,
+  type CustomerTruck,
+} from '../../services/customerFleetService';
 import { createClientId } from '../../utils/createClientId';
 
 const steps = [
@@ -39,6 +45,12 @@ export function CustomerCreateOrder() {
   const [quantity, setQuantity] = useState('');
   const [preferredDate, setPreferredDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [trucks, setTrucks] = useState<CustomerTruck[]>([]);
+  const [drivers, setDrivers] = useState<CustomerDriver[]>([]);
+  const [truckId, setTruckId] = useState('');
+  const [driverId, setDriverId] = useState('');
+  const [fleetLoading, setFleetLoading] = useState(false);
+  const [fleetError, setFleetError] = useState('');
   const [createdOrder, setCreatedOrder] = useState<CustomerOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -62,6 +74,29 @@ export function CustomerCreateOrder() {
     };
   }, [id]);
 
+  useEffect(() => {
+    if (contract?.fulfilment !== 'PICKUP') return;
+    let cancelled = false;
+    setFleetLoading(true);
+    setFleetError('');
+    Promise.all([getActiveCustomerTrucks(), getActiveCustomerDrivers()])
+      .then(([activeTrucks, activeDrivers]) => {
+        if (!cancelled) {
+          setTrucks(activeTrucks);
+          setDrivers(activeDrivers);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFleetError('Unable to load your active trucks and drivers.');
+      })
+      .finally(() => {
+        if (!cancelled) setFleetLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [contract?.fulfilment]);
+
   const requestedTons = Number(quantity) || 0;
   const remaining = contract?.remainingQuantityTons ?? 0;
   const remainingAfter = Math.max(0, remaining - requestedTons);
@@ -70,6 +105,8 @@ export function CustomerCreateOrder() {
   const vat = round(subtotal * 0.15);
   const grandTotal = round(subtotal + vat);
   const item = contract?.items[0];
+  const selectedTruck = trucks.find((truck) => truck.id === truckId);
+  const selectedDriver = drivers.find((driver) => driver.id === driverId);
   const mayCreate = user?.role === 'CUSTOMER_ADMIN' || user?.role === 'PURCHASER';
 
   const quantityError = useMemo(() => {
@@ -93,6 +130,15 @@ export function CustomerCreateOrder() {
     if (step === 2 && contract.fulfilment === 'DELIVERY' && !preferredDate) {
       return setError('Preferred delivery date is required.');
     }
+    if (step === 2 && contract.fulfilment === 'PICKUP') {
+      if (fleetLoading) return setError('Please wait while your fleet is loading.');
+      if (fleetError) return setError(fleetError);
+      if (!truckId) return setError('Select a truck for this pickup order.');
+      if (!driverId) return setError('Select a driver for this pickup order.');
+      if (selectedTruck && requestedTons > selectedTruck.capacityTon) {
+        return setError('Selected truck capacity is lower than order quantity.');
+      }
+    }
     setStep((current) => Math.min(4, current + 1));
   };
 
@@ -106,6 +152,8 @@ export function CustomerCreateOrder() {
         requestedQuantityTons: requestedTons,
         preferredDeliveryDate: contract.fulfilment === 'DELIVERY' ? preferredDate : null,
         deliveryNotes: notes.trim() || null,
+        truckId: contract.fulfilment === 'PICKUP' ? truckId : null,
+        driverId: contract.fulfilment === 'PICKUP' ? driverId : null,
       });
       setCreatedOrder(order);
       setStep(5);
@@ -285,7 +333,7 @@ export function CustomerCreateOrder() {
                   </div>
                 </div>
               ) : (
-                <div className="mt-5">
+                <div className="mt-5 space-y-4">
                   <ReadOnly
                     label="Pickup Location"
                     value={
@@ -296,9 +344,72 @@ export function CustomerCreateOrder() {
                         : null
                     }
                   />
-                  <div className="customer-primary-soft customer-primary mt-4 flex gap-2 rounded-lg px-3 py-3 text-xs">
-                    <Info size={16} /> Customer Trucks & Drivers will be supported in a future
-                    logistics module.
+                  <div className="customer-border rounded-xl border p-4">
+                    <h3 className="customer-text text-sm font-bold">Pickup Vehicle Details</h3>
+                    {fleetLoading ? (
+                      <p className="customer-secondary mt-3 text-sm">Loading active fleet...</p>
+                    ) : fleetError ? (
+                      <p className="mt-3 text-sm font-semibold text-red-600">{fleetError}</p>
+                    ) : (
+                      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                        <label className="customer-text text-sm font-semibold">
+                          Truck <span className="text-red-600">*</span>
+                          <select
+                            value={truckId}
+                            onChange={(event) => {
+                              setTruckId(event.target.value);
+                              setError('');
+                            }}
+                            disabled={!trucks.length}
+                            className="customer-input customer-border customer-text mt-2 block h-11 w-full rounded-lg border px-3 disabled:opacity-60"
+                          >
+                            <option value="">Select truck</option>
+                            {trucks.map((truck) => (
+                              <option key={truck.id} value={truck.id}>
+                                {truck.plateNumber} — {truck.vehicleType} —{' '}
+                                {formatNumber(truck.capacityTon)} TON
+                              </option>
+                            ))}
+                          </select>
+                          {!trucks.length && (
+                            <span className="mt-2 block text-xs font-medium text-amber-700">
+                              No active trucks available. Add a truck before creating pickup orders.{' '}
+                              <Link to="/customer/fleet" className="customer-primary font-bold">
+                                Manage fleet
+                              </Link>
+                            </span>
+                          )}
+                        </label>
+                        <label className="customer-text text-sm font-semibold">
+                          Driver <span className="text-red-600">*</span>
+                          <select
+                            value={driverId}
+                            onChange={(event) => {
+                              setDriverId(event.target.value);
+                              setError('');
+                            }}
+                            disabled={!drivers.length}
+                            className="customer-input customer-border customer-text mt-2 block h-11 w-full rounded-lg border px-3 disabled:opacity-60"
+                          >
+                            <option value="">Select driver</option>
+                            {drivers.map((driver) => (
+                              <option key={driver.id} value={driver.id}>
+                                {driver.name} — {driver.mobile} — {driver.licenseNumber}
+                              </option>
+                            ))}
+                          </select>
+                          {!drivers.length && (
+                            <span className="mt-2 block text-xs font-medium text-amber-700">
+                              No active drivers available. Add a driver before creating pickup
+                              orders.{' '}
+                              <Link to="/customer/fleet" className="customer-primary font-bold">
+                                Manage fleet
+                              </Link>
+                            </span>
+                          )}
+                        </label>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -331,6 +442,26 @@ export function CustomerCreateOrder() {
                 />
                 {contract.fulfilment === 'DELIVERY' && (
                   <ReadOnly label="Preferred Delivery Date" value={formatDate(preferredDate)} />
+                )}
+                {contract.fulfilment === 'PICKUP' && (
+                  <>
+                    <ReadOnly
+                      label="Pickup Truck"
+                      value={
+                        selectedTruck
+                          ? `${selectedTruck.plateNumber} — ${selectedTruck.vehicleType} — ${formatNumber(selectedTruck.capacityTon)} TON`
+                          : null
+                      }
+                    />
+                    <ReadOnly
+                      label="Pickup Driver"
+                      value={
+                        selectedDriver
+                          ? `${selectedDriver.name} — ${selectedDriver.mobile} — ${selectedDriver.licenseNumber}`
+                          : null
+                      }
+                    />
+                  </>
                 )}
                 <ReadOnly label="Customer Rate / TON" value={formatMoney(rate)} />
               </div>

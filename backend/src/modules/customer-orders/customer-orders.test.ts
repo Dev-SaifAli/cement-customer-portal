@@ -29,6 +29,23 @@ const productId = '44444444-4444-4444-8444-444444444444';
 const orderId = '55555555-5555-4555-8555-555555555555';
 const cityId = '66666666-6666-4666-8666-666666666666';
 const clientRequestId = '99999999-9999-4999-8999-999999999999';
+const truckId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const driverId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+const activeTruckRow = {
+  id: truckId,
+  plate_number: 'ABC-1234',
+  vehicle_type: 'Trailer',
+  capacity_ton: '20.000',
+  status: 'ACTIVE',
+};
+const activeDriverRow = {
+  id: driverId,
+  name: 'Ahmed Ali',
+  mobile: '+966555000222',
+  license_number: 'LIC-1001',
+  status: 'ACTIVE',
+};
 
 const authenticatedCustomerUserRow = {
   id: customerUserId,
@@ -87,7 +104,7 @@ function createValidCustomerToken() {
   return `${header}.${payload}.${signature}`;
 }
 
-function createOrderRequest(quantity = 10) {
+function createOrderRequest(quantity = 10, overrides: Record<string, unknown> = {}) {
   return request(createApp())
     .post(`/api/v1/customer/contracts/${contractId}/orders`)
     .set({ Cookie: `customer_session=${createValidCustomerToken()}` })
@@ -96,14 +113,29 @@ function createOrderRequest(quantity = 10) {
       requestedQuantityTons: quantity,
       preferredDeliveryDate: '2026-09-01',
       deliveryNotes: 'Call before arrival',
+      ...overrides,
     });
 }
 
-function configureTransaction(contract = activeContractRow) {
+function configureTransaction(
+  contract = activeContractRow,
+  fleet: {
+    truck?: typeof activeTruckRow | null;
+    driver?: typeof activeDriverRow | null;
+  } = {},
+) {
   connect.mockResolvedValue({ query: clientQuery, release });
   clientQuery.mockImplementation((sql: string) => {
     if (sql.includes('from contracts') && sql.includes('for update of contracts')) {
       return Promise.resolve({ rows: contract ? [contract] : [] });
+    }
+    if (sql.includes('from customer_trucks')) {
+      return Promise.resolve({ rows: fleet.truck === null ? [] : [fleet.truck ?? activeTruckRow] });
+    }
+    if (sql.includes('from customer_drivers')) {
+      return Promise.resolve({
+        rows: fleet.driver === null ? [] : [fleet.driver ?? activeDriverRow],
+      });
     }
     if (sql.includes("nextval('order_reference_seq')")) {
       return Promise.resolve({ rows: [{ sequence: '7' }] });
@@ -206,13 +238,146 @@ describe('customer order from contract API', () => {
       pricing_city_id: null,
     } as unknown as typeof activeContractRow);
 
-    const response = await createOrderRequest(10);
+    const response = await createOrderRequest(10, { truckId, driverId });
 
     expect(response.status).toBe(201);
+    expect(response.body.data.order).toMatchObject({
+      pickupTruck: {
+        id: truckId,
+        plateNumber: 'ABC-1234',
+        vehicleType: 'Trailer',
+        capacityTon: 20,
+      },
+      pickupDriver: {
+        id: driverId,
+        name: 'Ahmed Ali',
+        licenseNumber: 'LIC-1001',
+      },
+    });
+    expect(clientQuery).toHaveBeenCalledWith(expect.stringContaining('from customer_trucks'), [
+      truckId,
+      customerAccountId,
+    ]);
+    expect(clientQuery).toHaveBeenCalledWith(expect.stringContaining('from customer_drivers'), [
+      driverId,
+      customerAccountId,
+    ]);
     expect(clientQuery).not.toHaveBeenCalledWith(
       expect.stringContaining('insert into delivery_requests'),
       expect.anything(),
     );
+  });
+
+  it('requires both a truck and driver for a pick-up order', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
+    configureTransaction({
+      ...activeContractRow,
+      fulfilment: 'PICKUP',
+      pickup_location_id: 'ALSAFWA_PLANT_MAIN',
+      delivery_location_id: null,
+      pricing_city_id: null,
+    } as unknown as typeof activeContractRow);
+
+    const response = await createOrderRequest(10, { preferredDeliveryDate: null });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('ORDER_PICKUP_FLEET_REQUIRED');
+    expect(clientQuery).toHaveBeenCalledWith('rollback');
+  });
+
+  it('rejects another customer truck', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
+    configureTransaction(
+      {
+        ...activeContractRow,
+        fulfilment: 'PICKUP',
+        pickup_location_id: 'ALSAFWA_PLANT_MAIN',
+        delivery_location_id: null,
+        pricing_city_id: null,
+      } as unknown as typeof activeContractRow,
+      { truck: null },
+    );
+
+    const response = await createOrderRequest(10, { truckId, driverId });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('ORDER_PICKUP_TRUCK_NOT_AVAILABLE');
+  });
+
+  it('rejects an inactive truck', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
+    configureTransaction(
+      {
+        ...activeContractRow,
+        fulfilment: 'PICKUP',
+        pickup_location_id: 'ALSAFWA_PLANT_MAIN',
+        delivery_location_id: null,
+        pricing_city_id: null,
+      } as unknown as typeof activeContractRow,
+      { truck: { ...activeTruckRow, status: 'INACTIVE' } },
+    );
+
+    const response = await createOrderRequest(10, { truckId, driverId });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe('ORDER_PICKUP_TRUCK_INACTIVE');
+  });
+
+  it('rejects an inactive driver', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
+    configureTransaction(
+      {
+        ...activeContractRow,
+        fulfilment: 'PICKUP',
+        pickup_location_id: 'ALSAFWA_PLANT_MAIN',
+        delivery_location_id: null,
+        pricing_city_id: null,
+      } as unknown as typeof activeContractRow,
+      { driver: { ...activeDriverRow, status: 'INACTIVE' } },
+    );
+
+    const response = await createOrderRequest(10, { truckId, driverId });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe('ORDER_PICKUP_DRIVER_INACTIVE');
+  });
+
+  it('rejects another customer driver', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
+    configureTransaction(
+      {
+        ...activeContractRow,
+        fulfilment: 'PICKUP',
+        pickup_location_id: 'ALSAFWA_PLANT_MAIN',
+        delivery_location_id: null,
+        pricing_city_id: null,
+      } as unknown as typeof activeContractRow,
+      { driver: null },
+    );
+
+    const response = await createOrderRequest(10, { truckId, driverId });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('ORDER_PICKUP_DRIVER_NOT_AVAILABLE');
+  });
+
+  it('rejects a truck below the requested TON capacity', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
+    configureTransaction(
+      {
+        ...activeContractRow,
+        fulfilment: 'PICKUP',
+        pickup_location_id: 'ALSAFWA_PLANT_MAIN',
+        delivery_location_id: null,
+        pricing_city_id: null,
+      } as unknown as typeof activeContractRow,
+      { truck: { ...activeTruckRow, capacity_ton: '5.000' } },
+    );
+
+    const response = await createOrderRequest(10, { truckId, driverId });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe('ORDER_PICKUP_TRUCK_CAPACITY_EXCEEDED');
   });
 
   it('does not expose a contract owned by another customer', async () => {

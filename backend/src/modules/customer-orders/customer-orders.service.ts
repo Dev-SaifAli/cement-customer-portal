@@ -45,6 +45,37 @@ interface DeliveryLocationSnapshot {
   country?: string;
 }
 
+interface PickupTruckRow {
+  id: string;
+  plate_number: string;
+  vehicle_type: string;
+  capacity_ton: string;
+  status: 'ACTIVE' | 'INACTIVE';
+}
+
+interface PickupDriverRow {
+  id: string;
+  name: string;
+  mobile: string;
+  license_number: string;
+  status: 'ACTIVE' | 'INACTIVE';
+}
+
+interface PickupFleetSnapshot {
+  truck: {
+    id: string;
+    plateNumber: string;
+    vehicleType: string;
+    capacityTon: number;
+  };
+  driver: {
+    id: string;
+    name: string;
+    mobile: string;
+    licenseNumber: string;
+  };
+}
+
 interface OrderRow {
   id: string;
   order_number: string;
@@ -67,6 +98,10 @@ interface OrderRow {
   vat_rate: string;
   vat_amount: string;
   grand_total: string;
+  customer_truck_id: string | null;
+  customer_driver_id: string | null;
+  pickup_truck_snapshot: unknown;
+  pickup_driver_snapshot: unknown;
 }
 
 export class CustomerOrdersService {
@@ -133,6 +168,14 @@ export class CustomerOrdersService {
         );
       }
 
+      const pickupFleet = await resolvePickupFleet(
+        client,
+        customerUser,
+        contract,
+        payload,
+        requestedQuantityTons,
+      );
+
       const remainingAfter = round(remainingBefore - requestedQuantityTons, 3);
       const customerRatePerTon = round(
         Number(contract.product_price) + Number(contract.delivery_price ?? 0),
@@ -169,11 +212,15 @@ export class CustomerOrdersService {
            vat_rate,
            vat_amount,
            grand_total,
+           customer_truck_id,
+           customer_driver_id,
+           pickup_truck_snapshot,
+           pickup_driver_snapshot,
            submitted_at
          )
          values (
            $1, $2, $3, $4, $5, $6, $7, $8, $9, 'SUBMITTED', $10, $11, $12, $13,
-           $14, $15, $16, $17, $18, $19, $20, $21, now()
+           $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, now()
          )
          returning *`,
         [
@@ -200,6 +247,10 @@ export class CustomerOrdersService {
           vatRate,
           vatAmount,
           grandTotal,
+          pickupFleet?.truck.id ?? null,
+          pickupFleet?.driver.id ?? null,
+          pickupFleet ? JSON.stringify(pickupFleet.truck) : null,
+          pickupFleet ? JSON.stringify(pickupFleet.driver) : null,
         ],
       );
       const order = orderResult.rows[0];
@@ -212,7 +263,15 @@ export class CustomerOrdersService {
            order_id, event_type, previous_status, new_status,
            changed_by_customer_user_id, event_data
          ) values ($1, 'ORDER_CREATED', null, 'DRAFT', $2, $3::jsonb)`,
-        [order.id, customerUser.id, JSON.stringify({ contractId: contract.id })],
+        [
+          order.id,
+          customerUser.id,
+          JSON.stringify({
+            contractId: contract.id,
+            customerTruckId: pickupFleet?.truck.id ?? null,
+            customerDriverId: pickupFleet?.driver.id ?? null,
+          }),
+        ],
       );
 
       await client.query(
@@ -297,7 +356,7 @@ export class CustomerOrdersService {
       }
 
       await client.query('commit');
-      return mapOrder(order, contract, shipToSnapshot, payload);
+      return mapOrder(order, contract, shipToSnapshot, payload, pickupFleet);
     } catch (error) {
       await client.query('rollback');
       throw error;
@@ -416,6 +475,83 @@ function requireOrderWriteAccess(customerUser: CustomerUser) {
   }
 }
 
+async function resolvePickupFleet(
+  client: PoolClient,
+  customerUser: CustomerUser,
+  contract: LockedContractRow,
+  payload: CreateCustomerOrderPayload,
+  requestedQuantityTons: number,
+): Promise<PickupFleetSnapshot | null> {
+  if (contract.fulfilment !== 'PICKUP') return null;
+  if (!payload.truckId || !payload.driverId) {
+    throw new AppError(
+      'Truck and driver are required for pickup orders.',
+      400,
+      'ORDER_PICKUP_FLEET_REQUIRED',
+    );
+  }
+
+  const truckResult = await client.query<PickupTruckRow>(
+    `select id, plate_number, vehicle_type, capacity_ton, status
+     from customer_trucks
+     where id = $1 and customer_account_id = $2
+     for share`,
+    [payload.truckId, customerUser.customerAccountId],
+  );
+  const truck = truckResult.rows[0];
+  if (!truck) {
+    throw new AppError(
+      'Selected truck is not available for this customer.',
+      400,
+      'ORDER_PICKUP_TRUCK_NOT_AVAILABLE',
+    );
+  }
+  if (truck.status !== 'ACTIVE') {
+    throw new AppError('Selected truck is inactive.', 409, 'ORDER_PICKUP_TRUCK_INACTIVE');
+  }
+  if (Number(truck.capacity_ton) < requestedQuantityTons) {
+    throw new AppError(
+      'Selected truck capacity is lower than order quantity.',
+      409,
+      'ORDER_PICKUP_TRUCK_CAPACITY_EXCEEDED',
+    );
+  }
+
+  const driverResult = await client.query<PickupDriverRow>(
+    `select id, name, mobile, license_number, status
+     from customer_drivers
+     where id = $1 and customer_account_id = $2
+     for share`,
+    [payload.driverId, customerUser.customerAccountId],
+  );
+  const driver = driverResult.rows[0];
+  if (!driver) {
+    throw new AppError(
+      'Selected driver is not available for this customer.',
+      400,
+      'ORDER_PICKUP_DRIVER_NOT_AVAILABLE',
+    );
+  }
+  if (driver.status !== 'ACTIVE') {
+    throw new AppError('Selected driver is inactive.', 409, 'ORDER_PICKUP_DRIVER_INACTIVE');
+  }
+
+  return {
+    truck: {
+      id: truck.id,
+      plateNumber: truck.plate_number,
+      vehicleType: truck.vehicle_type,
+      capacityTon: Number(truck.capacity_ton),
+    },
+    driver: {
+      id: driver.id,
+      name: driver.name,
+      mobile: driver.mobile,
+      licenseNumber: driver.license_number,
+    },
+  };
+}
+
 async function nextOrderNumber(client: PoolClient) {
   const result = await client.query<{ sequence: string }>(
     `select nextval('order_reference_seq')::text as sequence`,
@@ -429,6 +565,7 @@ function mapOrder(
   contract: LockedContractRow,
   shipTo: DeliveryLocationSnapshot | null,
   payload: CreateCustomerOrderPayload,
+  pickupFleet: PickupFleetSnapshot | null,
 ) {
   return {
     id: order.id,
@@ -453,6 +590,8 @@ function mapOrder(
               : order.pickup_location_id,
         }
       : null,
+    pickupTruck: pickupFleet?.truck ?? null,
+    pickupDriver: pickupFleet?.driver ?? null,
     product: {
       id: contract.product_id,
       code: contract.product_code,

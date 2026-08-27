@@ -117,7 +117,13 @@ export function SalesOrdersPage() {
                         })}
                       </td>
                       <td className="px-4 py-3">
-                        {order.fulfilmentType === 'DELIVERY' ? 'Hader Delivery' : 'Pick-Up'}
+                        <p>{order.fulfilmentType === 'DELIVERY' ? 'Hader Delivery' : 'Pick-Up'}</p>
+                        {order.fulfilmentType === 'PICKUP' && (
+                          <p className="mt-1 text-xs text-[#64748b]">
+                            {order.pickupTruck?.plateNumber ?? 'Truck unavailable'} ·{' '}
+                            {order.pickupDriver?.name ?? 'Driver unavailable'}
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         {order.fulfilmentType === 'PICKUP'

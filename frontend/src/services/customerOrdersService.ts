@@ -2,6 +2,20 @@ const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1
 
 export type OrderStatus = 'DRAFT' | 'SUBMITTED' | 'PROCESSING' | 'COMPLETED' | 'CANCELLED';
 
+export interface PickupTruckSnapshot {
+  id: string;
+  plateNumber: string;
+  vehicleType: string;
+  capacityTon: number;
+}
+
+export interface PickupDriverSnapshot {
+  id: string;
+  name: string;
+  mobile: string;
+  licenseNumber: string;
+}
+
 export interface CustomerOrder {
   id: string;
   orderNumber: string;
@@ -20,6 +34,8 @@ export interface CustomerOrder {
     streetAddress?: string;
   } | null;
   pickupLocation: { id: string; name: string | null } | null;
+  pickupTruck: PickupTruckSnapshot | null;
+  pickupDriver: PickupDriverSnapshot | null;
   haderCity: string | null;
   product: { id: string; code: string; name: string; packaging: string; uom: string };
   customerRatePerTon: number;
@@ -51,6 +67,8 @@ export async function createCustomerOrder(
     requestedQuantityTons: number;
     preferredDeliveryDate: string | null;
     deliveryNotes: string | null;
+    truckId: string | null;
+    driverId: string | null;
   },
 ) {
   const response = await request<{ success: boolean; data: { order: CustomerOrder } }>(

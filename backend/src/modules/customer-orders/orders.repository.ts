@@ -29,6 +29,10 @@ interface OrderReadRow {
   ship_to_snapshot: unknown;
   pickup_location_id: string | null;
   pickup_location_name: string | null;
+  customer_truck_id: string | null;
+  customer_driver_id: string | null;
+  pickup_truck_snapshot: unknown;
+  pickup_driver_snapshot: unknown;
   hader_city_name: string | null;
   submitted_at: Date | string | null;
   created_at: Date | string;
@@ -181,6 +185,8 @@ function mapOrderReadRow(row: OrderReadRow) {
     pickupLocation: row.pickup_location_id
       ? { id: row.pickup_location_id, name: row.pickup_location_name }
       : null,
+    pickupTruck: objectValue(row.pickup_truck_snapshot),
+    pickupDriver: objectValue(row.pickup_driver_snapshot),
     haderCity: row.hader_city_name,
     product: {
       id: row.product_id,

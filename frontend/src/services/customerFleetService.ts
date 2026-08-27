@@ -88,6 +88,30 @@ export async function getCustomerDrivers(page = 1, search = '', status = '') {
   }>(`/customer/drivers?${query}`);
   return response.data;
 }
+export async function getActiveCustomerTrucks() {
+  const trucks: CustomerTruck[] = [];
+  let page = 1;
+  let totalPages = 1;
+  do {
+    const result = await getCustomerTrucks(page, '', 'ACTIVE');
+    trucks.push(...result.trucks);
+    totalPages = result.pagination.totalPages;
+    page += 1;
+  } while (page <= totalPages);
+  return trucks;
+}
+export async function getActiveCustomerDrivers() {
+  const drivers: CustomerDriver[] = [];
+  let page = 1;
+  let totalPages = 1;
+  do {
+    const result = await getCustomerDrivers(page, '', 'ACTIVE');
+    drivers.push(...result.drivers);
+    totalPages = result.pagination.totalPages;
+    page += 1;
+  } while (page <= totalPages);
+  return drivers;
+}
 export async function createCustomerDriver(payload: DriverPayload) {
   const response = await fleetRequest<{ success: true; data: { driver: CustomerDriver } }>(
     '/customer/drivers',

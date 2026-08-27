@@ -71,6 +71,28 @@ export function CustomerOrderDetails() {
             value={order.preferredDeliveryDate ? date(order.preferredDeliveryDate) : null}
           />
           <Field label="Notes" value={order.deliveryNotes} />
+          {order.fulfilmentType === 'PICKUP' && (
+            <>
+              <Field label="Pickup Truck" value={order.pickupTruck?.plateNumber} />
+              <Field
+                label="Truck Details"
+                value={
+                  order.pickupTruck
+                    ? `${order.pickupTruck.vehicleType} · ${num(order.pickupTruck.capacityTon)} TON`
+                    : null
+                }
+              />
+              <Field label="Driver" value={order.pickupDriver?.name} />
+              <Field
+                label="Driver Details"
+                value={
+                  order.pickupDriver
+                    ? `${order.pickupDriver.mobile} · ${order.pickupDriver.licenseNumber}`
+                    : null
+                }
+              />
+            </>
+          )}
         </Card>
       </div>
       <section className="customer-card rounded-2xl border p-5">

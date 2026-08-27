@@ -14,6 +14,8 @@ export const createCustomerOrderSchema = z.object({
     }),
   preferredDeliveryDate: z.iso.date().nullable().optional(),
   deliveryNotes: z.string().trim().max(1000).nullable().optional(),
+  truckId: z.uuid().nullable().optional(),
+  driverId: z.uuid().nullable().optional(),
 });
 
 export const customerOrderIdSchema = z.string().uuid();
