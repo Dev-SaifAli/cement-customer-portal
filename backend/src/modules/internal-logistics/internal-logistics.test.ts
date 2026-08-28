@@ -50,6 +50,14 @@ describe('internal logistics API', () => {
     expect(res.status).toBe(403);
     expect(mocks.query).toHaveBeenCalledTimes(1);
   });
+  it('keeps Hader Managers out of transporter cost administration', async () => {
+    mocks.query.mockResolvedValueOnce({ rows: [user('HADER_MANAGER')] });
+    const res = await request(createApp())
+      .get('/api/v1/admin/transporter-costs')
+      .set('Authorization', auth());
+    expect(res.status).toBe(403);
+    expect(mocks.query).toHaveBeenCalledTimes(1);
+  });
   it('creates a transporter and records an audit event', async () => {
     mocks.query.mockResolvedValueOnce({ rows: [user('PRICING_ADMIN')] });
     mocks.clientQuery
@@ -127,6 +135,43 @@ describe('internal logistics API', () => {
       2,
       expect.stringContaining('cost_per_ton'),
       expect.arrayContaining([15]),
+    );
+    expect(mocks.clientQuery).toHaveBeenCalledWith(
+      expect.stringContaining('internal_logistics_events'),
+      expect.arrayContaining(['TRANSPORTER_COST_CREATED']),
+    );
+  });
+  it('records transporter deactivation as a distinct audit event', async () => {
+    mocks.query.mockResolvedValueOnce({ rows: [user('PRICING_ADMIN')] });
+    const active = {
+      id: entityId,
+      transporter_number: 'TRN-000001',
+      name: 'ABC Logistics',
+      company_name: 'ABC Logistics Co',
+      contact_person: null,
+      phone: '+966501234567',
+      email: null,
+      cr_number: null,
+      status: 'ACTIVE',
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
+    mocks.clientQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [active] })
+      .mockResolvedValueOnce({ rows: [{ ...active, status: 'INACTIVE' }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(createApp())
+      .patch(`/api/v1/admin/transporters/${entityId}`)
+      .set('Authorization', auth())
+      .send({ status: 'INACTIVE' });
+
+    expect(res.status).toBe(200);
+    expect(mocks.clientQuery).toHaveBeenCalledWith(
+      expect.stringContaining('internal_logistics_events'),
+      expect.arrayContaining(['TRANSPORTER_DEACTIVATED']),
     );
   });
   it('translates duplicate truck plates into a safe conflict', async () => {

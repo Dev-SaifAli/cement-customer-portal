@@ -83,16 +83,20 @@ export class InternalLogisticsService {
         status: 'status',
       },
       mapTransporter,
-      'TRANSPORTER_UPDATED',
+      (before, after) =>
+        before.status !== 'INACTIVE' && after.status === 'INACTIVE'
+          ? 'TRANSPORTER_DEACTIVATED'
+          : 'TRANSPORTER_UPDATED',
     );
   }
 
   async listCosts(query: LogisticsList) {
     return this.list(
       `select c.*,c.updated_at sort_updated_at,t.transporter_number,t.company_name,city.name city_name,
-       u.name updated_by_name,count(*) over()::text total_count
+       creator.name created_by_name,u.name updated_by_name,count(*) over()::text total_count
        from transporter_costs c join transporters t on t.id=c.transporter_id
        join ksa_cities city on city.id=c.hader_city_id join sales_users u on u.id=c.updated_by_sales_user_id
+       join sales_users creator on creator.id=c.created_by_sales_user_id
        where ($1::text is null or true) and ($2::text is null or t.company_name ilike '%'||$2||'%'
        or city.name ilike '%'||$2||'%' or c.cement_type ilike '%'||$2||'%')`,
       { ...query, status: undefined },
@@ -105,16 +109,29 @@ export class InternalLogisticsService {
     return this.createEntity(
       'TRANSPORTER_COST',
       user,
-      `insert into transporter_costs (transporter_id,hader_city_id,cement_type,cost_per_ton,updated_by_sales_user_id)
-       values ($1,$2,$3,$4,$5) returning *`,
+      `insert into transporter_costs (transporter_id,hader_city_id,cement_type,cost_per_ton,
+       created_by_sales_user_id,updated_by_sales_user_id)
+       values ($1,$2,$3,$4,$5,$5) returning *`,
       [input.transporterId, input.haderCityId, input.cementType, input.costPerTon, user.id],
-      'TRANSPORTER_COST_UPDATED',
+      'TRANSPORTER_COST_CREATED',
       mapCost,
       'A cost for this transporter, city, and cement type already exists.',
     );
   }
 
-  updateCost(id: string, input: Partial<TransporterCostInput>, user: SalesUser) {
+  async updateCost(id: string, input: Partial<TransporterCostInput>, user: SalesUser) {
+    const current = requireFound(
+      (
+        await pool.query<{ transporter_id: string; hader_city_id: string }>(
+          'select transporter_id,hader_city_id from transporter_costs where id=$1',
+          [id],
+        )
+      ).rows[0],
+    );
+    await this.validateCostReferences(
+      current.transporter_id,
+      input.haderCityId ?? current.hader_city_id,
+    );
     return this.updateEntity(
       'TRANSPORTER_COST',
       'transporter_costs',
@@ -356,7 +373,7 @@ export class InternalLogisticsService {
     user: SalesUser,
     fields: Record<string, string>,
     map: (row: T) => unknown,
-    event: string,
+    event: string | ((before: T, after: T) => string),
   ) {
     const entries = Object.entries(input).filter(
       ([key, value]) => value !== undefined && fields[key],
@@ -388,7 +405,15 @@ export class InternalLogisticsService {
           )
         ).rows[0],
       );
-      await audit(client, entityType, id, event, user, before, after);
+      await audit(
+        client,
+        entityType,
+        id,
+        typeof event === 'function' ? event(before, after) : event,
+        user,
+        before,
+        after,
+      );
       await client.query('commit');
       return map(after);
     } catch (error) {
@@ -496,6 +521,7 @@ function mapCost(r: LogisticsRow) {
     haderCityName: r.city_name,
     cementType: r.cement_type,
     costPerTon: Number(r.cost_per_ton),
+    createdBy: r.created_by_name,
     updatedBy: r.updated_by_name,
   };
 }
