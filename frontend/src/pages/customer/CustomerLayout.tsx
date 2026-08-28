@@ -1,5 +1,4 @@
 import {
-  Bell,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -10,7 +9,9 @@ import {
   Monitor,
   Moon,
   PackageSearch,
+  PackageCheck,
   ShoppingBag,
+  ShoppingCart,
   FileText,
   BriefcaseBusiness,
   UserCircle,
@@ -22,6 +23,7 @@ import {
 import { useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Logo from '../../components/Logo/Logo';
+import { NotificationBell } from '../../components/notifications/NotificationBell';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import { useCustomerTheme, type CustomerThemePreference } from '../../context/CustomerThemeContext';
 import type { CustomerRole } from '../../services/customerAuthService';
@@ -78,6 +80,12 @@ const customerNavigation: Array<{
     roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
   },
   {
+    to: '/customer/orders/new',
+    label: 'New Direct Order',
+    icon: <ShoppingCart size={18} />,
+    roles: ['CUSTOMER_ADMIN', 'PURCHASER'],
+  },
+  {
     to: '/customer/orders',
     activePrefix: '/customer/orders',
     label: 'Orders',
@@ -90,6 +98,13 @@ const customerNavigation: Array<{
     icon: <Truck size={18} />,
     roles: ['CUSTOMER_ADMIN', 'PURCHASER'],
   },
+  {
+    to: '/customer/shipments',
+    activePrefix: '/customer/shipments',
+    label: 'My Shipments',
+    icon: <PackageCheck size={18} />,
+    roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
+  },
 ];
 
 export function CustomerLayout() {
@@ -100,7 +115,6 @@ export function CustomerLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const visibleNavigation = customerNavigation.filter(
     (item) => user?.role && item.roles.includes(user.role),
   );
@@ -235,43 +249,11 @@ export function CustomerLayout() {
           </div>
 
           <div className="relative flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setNotificationsOpen((current) => !current);
-                setProfileMenuOpen(false);
-              }}
-              className="customer-border customer-secondary inline-flex h-10 w-10 items-center justify-center rounded-lg border transition hover:bg-[var(--customer-primary-soft)] hover:text-[var(--customer-primary)]"
-              aria-expanded={notificationsOpen}
-              aria-haspopup="menu"
-              aria-label="Notifications"
-            >
-              <Bell size={18} />
-            </button>
-            {notificationsOpen && (
-              <div
-                role="menu"
-                className="customer-card absolute right-0 top-12 z-30 w-72 rounded-xl border p-2"
-              >
-                <div className="customer-border-soft border-b px-3 py-2.5">
-                  <p className="customer-text text-sm font-bold">Notifications</p>
-                </div>
-                <div className="px-3 py-5 text-center">
-                  <span className="customer-primary-soft customer-primary mx-auto flex h-9 w-9 items-center justify-center rounded-full">
-                    <Bell size={17} />
-                  </span>
-                  <p className="customer-text mt-3 text-sm font-semibold">
-                    You&apos;re all caught up
-                  </p>
-                  <p className="customer-muted mt-1 text-xs">No new notifications.</p>
-                </div>
-              </div>
-            )}
+            <NotificationBell audience="customer" />
             <button
               type="button"
               onClick={() => {
                 setProfileMenuOpen((current) => !current);
-                setNotificationsOpen(false);
               }}
               className="customer-surface customer-border customer-secondary inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm font-semibold transition hover:bg-[var(--customer-primary-soft)] hover:text-[var(--customer-primary)]"
               aria-expanded={profileMenuOpen}
@@ -392,6 +374,10 @@ function CustomerNavLink({
   onClick?: () => void;
 }) {
   const location = useLocation();
+  const activeByPrefix = activePrefix
+    ? location.pathname.startsWith(activePrefix) &&
+      !(to === '/customer/orders' && location.pathname === '/customer/orders/new')
+    : false;
 
   return (
     <NavLink
@@ -401,7 +387,7 @@ function CustomerNavLink({
         `group relative flex h-10 items-center rounded-lg text-[13px] font-medium transition ${
           collapsed ? 'justify-center px-2' : 'gap-3 px-3'
         } ${
-          (activePrefix ? location.pathname.startsWith(activePrefix) : isActive)
+          (activePrefix ? activeByPrefix : isActive)
             ? 'bg-[#f6f2fa] text-[#54247a] before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-[#54247a]'
             : 'text-[#4b4d5c] hover:bg-slate-50 hover:text-[#1a1b23]'
         }`
@@ -433,10 +419,17 @@ function getPageContext(pathname: string) {
     return { parent: 'Contracts', title: 'Contract Details' };
   }
   if (pathname === '/customer/contracts') return { title: 'Contracts' };
+  if (pathname === '/customer/orders/new') {
+    return { parent: 'Orders', title: 'New Direct Order' };
+  }
   if (pathname.startsWith('/customer/orders/')) {
     return { parent: 'Orders', title: 'Order Details' };
   }
   if (pathname === '/customer/orders') return { title: 'Orders' };
+  if (pathname.startsWith('/customer/shipments/')) {
+    return { parent: 'My Shipments', title: 'Shipment Details' };
+  }
+  if (pathname === '/customer/shipments') return { title: 'My Shipments' };
   if (pathname.startsWith('/customer/products/')) {
     return { parent: 'Products', title: 'Product Details' };
   }

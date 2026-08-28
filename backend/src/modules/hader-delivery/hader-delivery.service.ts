@@ -11,7 +11,7 @@ interface DeliveryRequestRow {
   request_number: string;
   order_id: string;
   order_number: string;
-  contract_id: string;
+  contract_id: string | null;
   contract_reference: string | null;
   customer_account_id: string;
   company_name: string;
@@ -263,15 +263,16 @@ export async function createDeliveryRequestForOrder(
     haderCityId: string | null;
     shipToLocationId: string | null;
     quantityTon: number;
-    requestedDate: string;
-    customerUserId: string;
+    requestedDate: Date | string;
+    salesUserId: string;
   },
 ) {
   const number = await nextReference(client, 'delivery_request_number_seq', 'DR');
-  const result = await client.query<{ id: string }>(
+  const result = await client.query<{ id: string; request_number: string; status: string }>(
     `insert into delivery_requests (request_number,order_id,customer_account_id,hader_city_id,
       ship_to_location_id,quantity_ton,requested_date,status)
-     values ($1,$2,$3,$4,$5,$6,$7,'PENDING') on conflict (order_id) do nothing returning id`,
+     values ($1,$2,$3,$4,$5,$6,$7,'PENDING') on conflict (order_id) do nothing
+     returning id,request_number,status`,
     [
       number,
       input.orderId,
@@ -282,14 +283,33 @@ export async function createDeliveryRequestForOrder(
       input.requestedDate,
     ],
   );
-  const id = result.rows[0]?.id;
-  if (id)
+  const created = result.rows[0];
+  if (created)
     await client.query(
       `insert into delivery_request_events (delivery_request_id,event_type,
-    previous_status,new_status,changed_by_customer_user_id) values ($1,'DELIVERY_REQUEST_CREATED',null,'PENDING',$2)`,
-      [id, input.customerUserId],
+    previous_status,new_status,changed_by_sales_user_id) values ($1,'DELIVERY_REQUEST_CREATED',null,'PENDING',$2)`,
+      [created.id, input.salesUserId],
     );
-  return id ?? null;
+  if (created)
+    return {
+      id: created.id,
+      requestNumber: created.request_number,
+      status: created.status,
+      created: true,
+    };
+
+  const existing = await client.query<{ id: string; request_number: string; status: string }>(
+    'select id,request_number,status from delivery_requests where order_id=$1',
+    [input.orderId],
+  );
+  const row = existing.rows[0];
+  if (!row)
+    throw new AppError(
+      'Delivery request could not be created.',
+      503,
+      'DELIVERY_REQUEST_CREATE_FAILED',
+    );
+  return { id: row.id, requestNumber: row.request_number, status: row.status, created: false };
 }
 
 async function nextReference(client: PoolClient, sequence: string, prefix: string) {
@@ -348,7 +368,7 @@ function mapRequest(row: DeliveryRequestRow) {
     requestNumber: row.request_number,
     status: row.status,
     order: { id: row.order_id, number: row.order_number },
-    contract: { id: row.contract_id, reference: row.contract_reference },
+    contract: row.contract_id ? { id: row.contract_id, reference: row.contract_reference } : null,
     customer: {
       id: row.customer_account_id,
       companyName: row.company_name,
@@ -415,7 +435,7 @@ function round(value: number, digits: number) {
 }
 
 const commonJoin = `from delivery_requests dr
- inner join orders o on o.id=dr.order_id inner join contracts c on c.id=o.contract_id
+ inner join orders o on o.id=dr.order_id left join contracts c on c.id=o.contract_id
  inner join customer_accounts ca on ca.id=dr.customer_account_id
  inner join lateral (select oi.* from order_items oi where oi.order_id=o.id order by oi.created_at limit 1) oi on true
  inner join product_catalog p on p.id=oi.product_id

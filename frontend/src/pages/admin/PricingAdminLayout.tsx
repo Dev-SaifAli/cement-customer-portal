@@ -38,10 +38,7 @@ export function PricingAdminLayout() {
             sidebarCollapsed ? 'justify-center px-3' : 'justify-between px-4'
           }`}
         >
-          <Link
-            to={user?.role === 'PRICING_ADMIN' ? '/admin/product-prices' : '/admin/delivery-fleet'}
-            className={sidebarCollapsed ? 'lg:hidden' : ''}
-          >
+          <Link to="/admin/product-prices" className={sidebarCollapsed ? 'lg:hidden' : ''}>
             <Logo size="sm" />
           </Link>
           <button
@@ -63,30 +60,24 @@ export function PricingAdminLayout() {
         </div>
 
         <nav className={`space-y-1 ${sidebarCollapsed ? 'p-3' : 'p-4'}`}>
-          {user?.role === 'PRICING_ADMIN' && (
-            <AdminNav
-              to="/admin/product-prices"
-              label="Pricing"
-              icon={<BadgeDollarSign size={18} />}
-              collapsed={sidebarCollapsed}
-            />
-          )}
-          {(user?.role === 'PRICING_ADMIN' || user?.role === 'HADER_MANAGER') && (
-            <>
-              <AdminNav
-                to="/admin/transporters"
-                label="Transporters"
-                icon={<Warehouse size={18} />}
-                collapsed={sidebarCollapsed}
-              />
-              <AdminNav
-                to="/admin/transporters/costs"
-                label="Transporter Costs"
-                icon={<WalletCards size={18} />}
-                collapsed={sidebarCollapsed}
-              />
-            </>
-          )}
+          <AdminNav
+            to="/admin/product-prices"
+            label="Pricing"
+            icon={<BadgeDollarSign size={18} />}
+            collapsed={sidebarCollapsed}
+          />
+          <AdminNav
+            to="/admin/transporters"
+            label="Transporters"
+            icon={<Warehouse size={18} />}
+            collapsed={sidebarCollapsed}
+          />
+          <AdminNav
+            to="/admin/transporters/costs"
+            label="Transporter Costs"
+            icon={<WalletCards size={18} />}
+            collapsed={sidebarCollapsed}
+          />
           <AdminNav
             to="/admin/delivery-fleet"
             label="Delivery Fleet"
@@ -94,7 +85,7 @@ export function PricingAdminLayout() {
             collapsed={sidebarCollapsed}
           />
           <AdminNav
-            to="/admin/delivery-drivers"
+            to="/admin/drivers"
             label="Drivers"
             icon={<UserRound size={18} />}
             collapsed={sidebarCollapsed}

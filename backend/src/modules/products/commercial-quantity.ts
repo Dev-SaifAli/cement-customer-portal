@@ -11,7 +11,7 @@ export function packagingQuantityFromTons(
 
   if (productUom.trim().toUpperCase() === COMMERCIAL_UOM) return null;
 
-  assertPositive(unitWeightKg, 'Product unit weight');
+  requireProductWeightConfiguration(unitWeightKg, productUom);
   return roundQuantity((quantityTons * 1000) / unitWeightKg, 3);
 }
 
@@ -21,10 +21,23 @@ export function commercialTonsFromPackaging(
   productUom: string,
 ) {
   assertPositive(packagingQuantity, 'Packaging quantity');
-  if (productUom.trim().toUpperCase() === COMMERCIAL_UOM) return roundQuantity(packagingQuantity, 6);
+  if (productUom.trim().toUpperCase() === COMMERCIAL_UOM)
+    return roundQuantity(packagingQuantity, 6);
 
-  assertPositive(unitWeightKg, 'Product unit weight');
+  requireProductWeightConfiguration(unitWeightKg, productUom);
   return roundQuantity((packagingQuantity * unitWeightKg) / 1000, 6);
+}
+
+export function requireProductWeightConfiguration(unitWeightKg: number, productUom: string) {
+  if (productUom.trim().toUpperCase() === COMMERCIAL_UOM) return;
+
+  if (!Number.isFinite(unitWeightKg) || unitWeightKg <= 0) {
+    throw new AppError(
+      'Product weight configuration is missing. Please contact administrator.',
+      400,
+      'PRODUCT_WEIGHT_CONFIGURATION_MISSING',
+    );
+  }
 }
 
 function assertPositive(value: number, label: string) {

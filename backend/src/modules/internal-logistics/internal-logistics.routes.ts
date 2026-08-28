@@ -5,13 +5,8 @@ import { requireSalesAuth, requireSalesRole } from '../sales-auth/sales-auth.mid
 import { internalLogisticsController as c } from './internal-logistics.controller.js';
 
 export const internalLogisticsRouter = Router();
-const manage = requireSalesRole('PRICING_ADMIN', 'HADER_MANAGER');
-const viewFleet = requireSalesRole(
-  'PRICING_ADMIN',
-  'HADER_MANAGER',
-  'HADER_OPERATIONS',
-  'DISPATCH_USER',
-);
+const manage = requireSalesRole('PRICING_ADMIN');
+const viewFleet = requireSalesRole('PRICING_ADMIN');
 internalLogisticsRouter.use(requireSalesAuth);
 
 internalLogisticsRouter.get('/transporters', manage, asyncHandler(c.transporters.bind(c)));

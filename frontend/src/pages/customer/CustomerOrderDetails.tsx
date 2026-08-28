@@ -46,10 +46,20 @@ export function CustomerOrderDetails() {
       </div>
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Order Information" icon={<FileText size={17} />}>
-          <Field label="Contract Number" value={order.contract.reference} />
+          <Field
+            label="Order Type"
+            value={order.orderType === 'DIRECT' ? 'Direct Order' : 'Contract Order'}
+          />
+          {order.contract && <Field label="Contract Number" value={order.contract.reference} />}
           <Field label="Product" value={`${order.product.name} (${order.product.code})`} />
           <Field label="Packaging" value={order.product.packaging} />
           <Field label="Quantity" value={`${num(order.requestedQuantityTons)} TON`} />
+          {order.orderType === 'DIRECT' && order.product.equivalentPackagingUnits !== null && (
+            <Field
+              label="Equivalent Bags"
+              value={`${num(order.product.equivalentPackagingUnits)} Bags`}
+            />
+          )}
           <Field
             label="Fulfilment"
             value={order.fulfilmentType === 'DELIVERY' ? 'Hader Delivery' : 'Pick-Up'}
@@ -71,6 +81,28 @@ export function CustomerOrderDetails() {
             value={order.preferredDeliveryDate ? date(order.preferredDeliveryDate) : null}
           />
           <Field label="Notes" value={order.deliveryNotes} />
+          {order.fulfilmentType === 'PICKUP' && (
+            <>
+              <Field label="Pickup Truck" value={order.pickupTruck?.plateNumber} />
+              <Field
+                label="Truck Details"
+                value={
+                  order.pickupTruck
+                    ? `${order.pickupTruck.vehicleType} · ${num(order.pickupTruck.capacityTon)} TON`
+                    : null
+                }
+              />
+              <Field label="Driver" value={order.pickupDriver?.name} />
+              <Field
+                label="Driver Details"
+                value={
+                  order.pickupDriver
+                    ? `${order.pickupDriver.mobile} · ${order.pickupDriver.licenseNumber}`
+                    : null
+                }
+              />
+            </>
+          )}
         </Card>
       </div>
       <section className="customer-card rounded-2xl border p-5">
@@ -83,10 +115,12 @@ export function CustomerOrderDetails() {
           <Field label="Subtotal" value={money(order.subtotal)} />
           <Field label={`VAT (${order.vatRate}%)`} value={money(order.vatAmount)} />
           <Field label="Grand Total" value={money(order.grandTotal)} strong />
-          <Field
-            label="Remaining Contract Quantity"
-            value={`${num(order.remainingContractQuantityTons)} TON`}
-          />
+          {order.remainingContractQuantityTons !== null && (
+            <Field
+              label="Remaining Contract Quantity"
+              value={`${num(order.remainingContractQuantityTons)} TON`}
+            />
+          )}
         </div>
       </section>
     </div>

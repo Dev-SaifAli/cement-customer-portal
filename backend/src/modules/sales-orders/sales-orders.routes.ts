@@ -16,3 +16,7 @@ salesOrdersRouter.get(
   '/:id',
   asyncHandler((request, response) => salesOrdersController.show(request, response)),
 );
+salesOrdersRouter.post(
+  '/:id/start-processing',
+  asyncHandler((request, response) => salesOrdersController.startProcessing(request, response)),
+);

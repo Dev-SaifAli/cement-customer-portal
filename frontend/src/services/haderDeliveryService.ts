@@ -8,7 +8,7 @@ export interface DeliveryRequest {
   requestNumber: string;
   status: DeliveryRequestStatus;
   order: { id: string; number: string };
-  contract: { id: string; reference: string | null };
+  contract: { id: string; reference: string | null } | null;
   customer: { id: string; companyName: string; contact: string | null; phone: string | null };
   product: { id: string; code: string; name: string; packaging: string; uom: string };
   quantityTon: number;

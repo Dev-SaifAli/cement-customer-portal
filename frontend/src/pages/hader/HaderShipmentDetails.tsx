@@ -46,7 +46,7 @@ export function HaderShipmentDetails({ audience = 'hader' }: { audience?: 'hader
         </Card>
         <Card title="Order">
           <Info label="Order Number" value={request.order.number} />
-          <Info label="Contract" value={request.contract.reference} />
+          <Info label="Contract" value={request.contract?.reference ?? 'Direct Order'} />
           <Info label="Product" value={`${request.product.name} (${request.product.code})`} />
           <Info label="Packaging" value={request.product.packaging} />
         </Card>

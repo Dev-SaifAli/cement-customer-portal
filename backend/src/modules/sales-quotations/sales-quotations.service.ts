@@ -1,6 +1,7 @@
 import { env } from '../../config/env.js';
 import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
+import { notificationEvents } from '../notifications/notification-events.js';
 import type { SalesRole, SalesUser } from '../sales-auth/sales-auth.types.js';
 import type {
   ListSalesQuotationsQuery,
@@ -293,7 +294,11 @@ export class SalesQuotationsService {
             'QUOTATION_LIST_PRICE_NOT_CONFIGURED',
           );
         }
-        const discount = calculateProductDiscount(productList, input.discountMode, input.discountValue);
+        const discount = calculateProductDiscount(
+          productList,
+          input.discountMode,
+          input.discountValue,
+        );
         const productPrice = discount
           ? money(productList - discount.amountPerTon)
           : money(input.productPrice);
@@ -465,7 +470,15 @@ export class SalesQuotationsService {
     } finally {
       client.release();
     }
-    return this.getById(id, user);
+    const details = await this.getById(id, user);
+    await notificationEvents.quotationApprovalRequired(
+      details.status === 'PENDING_HADER_APPROVAL'
+        ? 'HADER_APPROVAL_REQUIRED'
+        : 'PRICE_APPROVAL_REQUIRED',
+      id,
+      details.reference ?? 'Quotation',
+    );
+    return details;
   }
 
   async approve(id: string, user: SalesUser) {
@@ -507,7 +520,15 @@ export class SalesQuotationsService {
     } finally {
       client.release();
     }
-    return this.getById(id, user);
+    const details = await this.getById(id, user);
+    if (details.status === 'PENDING_PRICE_APPROVAL') {
+      await notificationEvents.quotationApprovalRequired(
+        'PRICE_APPROVAL_REQUIRED',
+        id,
+        details.reference ?? 'Quotation',
+      );
+    }
+    return details;
   }
 
   async reject(id: string, reason: string, user: SalesUser) {
@@ -579,7 +600,13 @@ export class SalesQuotationsService {
     } finally {
       client.release();
     }
-    return this.getById(id, user);
+    const details = await this.getById(id, user);
+    await notificationEvents.quotationReadyForCustomer(
+      details.customer.id,
+      id,
+      details.reference ?? 'Quotation',
+    );
+    return details;
   }
 
   private async getQuotation(id: string) {
@@ -887,7 +914,10 @@ function nullableNumber(value: string | number | null | undefined) {
 function money(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
-function requireEquivalentTons(item: { equivalent_tons?: string | number | null; product_code: string }) {
+function requireEquivalentTons(item: {
+  equivalent_tons?: string | number | null;
+  product_code: string;
+}) {
   const equivalentTons = nullableNumber(item.equivalent_tons);
   if (equivalentTons === null || equivalentTons <= 0) {
     throw new AppError(

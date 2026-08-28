@@ -29,6 +29,24 @@ const productId = '44444444-4444-4444-8444-444444444444';
 const orderId = '55555555-5555-4555-8555-555555555555';
 const cityId = '66666666-6666-4666-8666-666666666666';
 const clientRequestId = '99999999-9999-4999-8999-999999999999';
+const truckId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const driverId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const directRequestId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+const activeTruckRow = {
+  id: truckId,
+  plate_number: 'ABC-1234',
+  vehicle_type: 'Trailer',
+  capacity_ton: '20.000',
+  status: 'ACTIVE',
+};
+const activeDriverRow = {
+  id: driverId,
+  name: 'Ahmed Ali',
+  mobile: '+966555000222',
+  license_number: 'LIC-1001',
+  status: 'ACTIVE',
+};
 
 const authenticatedCustomerUserRow = {
   id: customerUserId,
@@ -87,7 +105,7 @@ function createValidCustomerToken() {
   return `${header}.${payload}.${signature}`;
 }
 
-function createOrderRequest(quantity = 10) {
+function createOrderRequest(quantity = 10, overrides: Record<string, unknown> = {}) {
   return request(createApp())
     .post(`/api/v1/customer/contracts/${contractId}/orders`)
     .set({ Cookie: `customer_session=${createValidCustomerToken()}` })
@@ -96,14 +114,29 @@ function createOrderRequest(quantity = 10) {
       requestedQuantityTons: quantity,
       preferredDeliveryDate: '2026-09-01',
       deliveryNotes: 'Call before arrival',
+      ...overrides,
     });
 }
 
-function configureTransaction(contract = activeContractRow) {
+function configureTransaction(
+  contract = activeContractRow,
+  fleet: {
+    truck?: typeof activeTruckRow | null;
+    driver?: typeof activeDriverRow | null;
+  } = {},
+) {
   connect.mockResolvedValue({ query: clientQuery, release });
   clientQuery.mockImplementation((sql: string) => {
     if (sql.includes('from contracts') && sql.includes('for update of contracts')) {
       return Promise.resolve({ rows: contract ? [contract] : [] });
+    }
+    if (sql.includes('from customer_trucks')) {
+      return Promise.resolve({ rows: fleet.truck === null ? [] : [fleet.truck ?? activeTruckRow] });
+    }
+    if (sql.includes('from customer_drivers')) {
+      return Promise.resolve({
+        rows: fleet.driver === null ? [] : [fleet.driver ?? activeDriverRow],
+      });
     }
     if (sql.includes("nextval('order_reference_seq')")) {
       return Promise.resolve({ rows: [{ sequence: '7' }] });
@@ -141,6 +174,86 @@ function configureTransaction(contract = activeContractRow) {
   });
 }
 
+function directOrderQuery(sql: string) {
+  if (sql.includes('from product_catalog')) {
+    return Promise.resolve({
+      rows: [
+        {
+          id: productId,
+          product_code: 'CEM-OPC-50KG',
+          product_name: 'Ordinary Portland Cement',
+          packaging_type: 'Bag',
+          uom: '50KG_BAG',
+          unit_weight_kg: '50',
+          is_white_cement: false,
+          image: '/products/opc.png',
+        },
+      ],
+    });
+  }
+  if (sql.includes('registration_drafts.delivery_locations')) {
+    return Promise.resolve({
+      rows: [
+        {
+          delivery_locations: [
+            { id: 'SHIP-TO-01', name: 'Main Site', city: 'Jeddah', region: 'Makkah' },
+          ],
+        },
+      ],
+    });
+  }
+  if (sql.includes('from ksa_cities')) {
+    return Promise.resolve({ rows: [{ id: cityId, name: 'Jeddah', is_hader_enabled: true }] });
+  }
+  if (sql.includes('from product_list_prices')) {
+    return Promise.resolve({ rows: [{ list_price: '195.00' }] });
+  }
+  if (sql.includes('from hader_delivery_prices')) {
+    return Promise.resolve({ rows: [{ delivery_price: '40.00' }] });
+  }
+  return null;
+}
+
+function directOrderReadRow() {
+  return {
+    id: orderId,
+    order_number: 'ORD-2026-000008',
+    contract_id: null,
+    contract_reference: null,
+    customer_account_id: customerAccountId,
+    company_name: 'Activated Cement Customer',
+    status: 'SUBMITTED',
+    fulfilment_type: 'DELIVERY',
+    requested_quantity_tons: '20.000',
+    remaining_contract_quantity_snapshot: null,
+    approved_customer_rate_per_ton: '235.00',
+    amount: '4700.00',
+    vat_rate: '15.00',
+    vat_amount: '705.00',
+    grand_total: '5405.00',
+    preferred_delivery_date: '2026-09-01',
+    delivery_notes: 'Call before arrival',
+    ship_to_snapshot: { id: 'SHIP-TO-01', name: 'Main Site', city: 'Jeddah' },
+    pickup_location_id: null,
+    pickup_location_name: null,
+    customer_truck_id: null,
+    customer_driver_id: null,
+    pickup_truck_snapshot: null,
+    pickup_driver_snapshot: null,
+    hader_city_name: 'Jeddah',
+    submitted_at: '2026-08-27T08:00:00.000Z',
+    created_at: '2026-08-27T08:00:00.000Z',
+    updated_at: '2026-08-27T08:00:00.000Z',
+    product_id: productId,
+    product_code: 'CEM-OPC-50KG',
+    product_name: 'Ordinary Portland Cement',
+    packaging: 'Bag',
+    contract_uom: '50KG_BAG',
+    unit_weight_kg: '50.000',
+    packaging_quantity: '400.000',
+  };
+}
+
 describe('customer order from contract API', () => {
   beforeEach(() => {
     poolQuery.mockReset();
@@ -159,7 +272,7 @@ describe('customer order from contract API', () => {
     expect(connect).not.toHaveBeenCalled();
   });
 
-  it('creates a submitted order and atomically reduces remaining contract TON', async () => {
+  it('creates a submitted order without handing it to Hader before Sales processing', async () => {
     poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
     configureTransaction();
 
@@ -188,9 +301,9 @@ describe('customer order from contract API', () => {
       contractId,
       70,
     ]);
-    expect(clientQuery).toHaveBeenCalledWith(
+    expect(clientQuery).not.toHaveBeenCalledWith(
       expect.stringContaining('insert into delivery_requests'),
-      expect.arrayContaining([orderId, customerAccountId, cityId, 'SHIP-TO-01', 10]),
+      expect.anything(),
     );
     expect(clientQuery).toHaveBeenCalledWith('commit');
     expect(release).toHaveBeenCalledOnce();
@@ -206,13 +319,146 @@ describe('customer order from contract API', () => {
       pricing_city_id: null,
     } as unknown as typeof activeContractRow);
 
-    const response = await createOrderRequest(10);
+    const response = await createOrderRequest(10, { truckId, driverId });
 
     expect(response.status).toBe(201);
+    expect(response.body.data.order).toMatchObject({
+      pickupTruck: {
+        id: truckId,
+        plateNumber: 'ABC-1234',
+        vehicleType: 'Trailer',
+        capacityTon: 20,
+      },
+      pickupDriver: {
+        id: driverId,
+        name: 'Ahmed Ali',
+        licenseNumber: 'LIC-1001',
+      },
+    });
+    expect(clientQuery).toHaveBeenCalledWith(expect.stringContaining('from customer_trucks'), [
+      truckId,
+      customerAccountId,
+    ]);
+    expect(clientQuery).toHaveBeenCalledWith(expect.stringContaining('from customer_drivers'), [
+      driverId,
+      customerAccountId,
+    ]);
     expect(clientQuery).not.toHaveBeenCalledWith(
       expect.stringContaining('insert into delivery_requests'),
       expect.anything(),
     );
+  });
+
+  it('requires both a truck and driver for a pick-up order', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
+    configureTransaction({
+      ...activeContractRow,
+      fulfilment: 'PICKUP',
+      pickup_location_id: 'ALSAFWA_PLANT_MAIN',
+      delivery_location_id: null,
+      pricing_city_id: null,
+    } as unknown as typeof activeContractRow);
+
+    const response = await createOrderRequest(10, { preferredDeliveryDate: null });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('ORDER_PICKUP_FLEET_REQUIRED');
+    expect(clientQuery).toHaveBeenCalledWith('rollback');
+  });
+
+  it('rejects another customer truck', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
+    configureTransaction(
+      {
+        ...activeContractRow,
+        fulfilment: 'PICKUP',
+        pickup_location_id: 'ALSAFWA_PLANT_MAIN',
+        delivery_location_id: null,
+        pricing_city_id: null,
+      } as unknown as typeof activeContractRow,
+      { truck: null },
+    );
+
+    const response = await createOrderRequest(10, { truckId, driverId });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('ORDER_PICKUP_TRUCK_NOT_AVAILABLE');
+  });
+
+  it('rejects an inactive truck', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
+    configureTransaction(
+      {
+        ...activeContractRow,
+        fulfilment: 'PICKUP',
+        pickup_location_id: 'ALSAFWA_PLANT_MAIN',
+        delivery_location_id: null,
+        pricing_city_id: null,
+      } as unknown as typeof activeContractRow,
+      { truck: { ...activeTruckRow, status: 'INACTIVE' } },
+    );
+
+    const response = await createOrderRequest(10, { truckId, driverId });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe('ORDER_PICKUP_TRUCK_INACTIVE');
+  });
+
+  it('rejects an inactive driver', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
+    configureTransaction(
+      {
+        ...activeContractRow,
+        fulfilment: 'PICKUP',
+        pickup_location_id: 'ALSAFWA_PLANT_MAIN',
+        delivery_location_id: null,
+        pricing_city_id: null,
+      } as unknown as typeof activeContractRow,
+      { driver: { ...activeDriverRow, status: 'INACTIVE' } },
+    );
+
+    const response = await createOrderRequest(10, { truckId, driverId });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe('ORDER_PICKUP_DRIVER_INACTIVE');
+  });
+
+  it('rejects another customer driver', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
+    configureTransaction(
+      {
+        ...activeContractRow,
+        fulfilment: 'PICKUP',
+        pickup_location_id: 'ALSAFWA_PLANT_MAIN',
+        delivery_location_id: null,
+        pricing_city_id: null,
+      } as unknown as typeof activeContractRow,
+      { driver: null },
+    );
+
+    const response = await createOrderRequest(10, { truckId, driverId });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('ORDER_PICKUP_DRIVER_NOT_AVAILABLE');
+  });
+
+  it('rejects a truck below the requested TON capacity', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
+    configureTransaction(
+      {
+        ...activeContractRow,
+        fulfilment: 'PICKUP',
+        pickup_location_id: 'ALSAFWA_PLANT_MAIN',
+        delivery_location_id: null,
+        pricing_city_id: null,
+      } as unknown as typeof activeContractRow,
+      { truck: { ...activeTruckRow, capacity_ton: '5.000' } },
+    );
+
+    const response = await createOrderRequest(10, { truckId, driverId });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe('ORDER_PICKUP_TRUCK_CAPACITY_EXCEEDED');
   });
 
   it('does not expose a contract owned by another customer', async () => {
@@ -321,5 +567,108 @@ describe('customer order from contract API', () => {
       expect.anything(),
     );
     expect(clientQuery).toHaveBeenCalledWith('commit');
+  });
+});
+
+describe('customer direct order API', () => {
+  beforeEach(() => {
+    poolQuery.mockReset();
+    connect.mockReset();
+    clientQuery.mockReset();
+    release.mockReset();
+  });
+
+  it('calculates a customer-safe delivered rate from authoritative per-TON pricing', async () => {
+    poolQuery.mockImplementation((sql: string) => {
+      if (sql.includes('from customer_users'))
+        return Promise.resolve({ rows: [authenticatedCustomerUserRow] });
+      return directOrderQuery(sql) ?? Promise.resolve({ rows: [] });
+    });
+
+    const response = await request(createApp())
+      .post('/api/v1/customer/orders/price')
+      .set({ Cookie: `customer_session=${createValidCustomerToken()}` })
+      .send({
+        productId,
+        quantityTons: 20,
+        fulfilmentType: 'DELIVERY',
+        shipToLocationId: 'SHIP-TO-01',
+        pickupLocationId: null,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.pricing).toMatchObject({
+      quantityTons: 20,
+      equivalentPackagingUnits: 400,
+      customerRatePerTon: 235,
+      subtotal: 4700,
+      vatRate: 15,
+      vatAmount: 705,
+      grandTotal: 5405,
+    });
+    expect(response.body.data.pricing).not.toHaveProperty('productPrice');
+    expect(response.body.data.pricing).not.toHaveProperty('deliveryPrice');
+  });
+
+  it('creates a submitted direct order with a null contract and recalculated totals', async () => {
+    poolQuery.mockImplementation((sql: string) => {
+      if (sql.includes('from customer_users'))
+        return Promise.resolve({ rows: [authenticatedCustomerUserRow] });
+      if (sql.includes('from orders')) return Promise.resolve({ rows: [directOrderReadRow()] });
+      return Promise.resolve({ rows: [] });
+    });
+    connect.mockResolvedValue({ query: clientQuery, release });
+    clientQuery.mockImplementation((sql: string) => {
+      const pricingResult = directOrderQuery(sql);
+      if (pricingResult) return pricingResult;
+      if (sql.includes("nextval('order_reference_seq')"))
+        return Promise.resolve({ rows: [{ sequence: '8' }] });
+      if (sql.includes('insert into orders')) return Promise.resolve({ rows: [{ id: orderId }] });
+      return Promise.resolve({ rows: [] });
+    });
+
+    const response = await request(createApp())
+      .post('/api/v1/customer/orders')
+      .set({ Cookie: `customer_session=${createValidCustomerToken()}` })
+      .send({
+        clientRequestId: directRequestId,
+        productId,
+        quantityTons: 20,
+        fulfilmentType: 'DELIVERY',
+        shipToLocationId: 'SHIP-TO-01',
+        pickupLocationId: null,
+        requestedDeliveryDate: '2026-09-01',
+        notes: 'Call before arrival',
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.data.order).toMatchObject({
+      contract: null,
+      orderType: 'DIRECT',
+      requestedQuantityTons: 20,
+      product: {
+        unitWeightKg: 50,
+        equivalentPackagingUnits: 400,
+      },
+      customerRatePerTon: 235,
+      subtotal: 4700,
+      grandTotal: 5405,
+    });
+    expect(clientQuery).toHaveBeenCalledWith(
+      expect.stringContaining('insert into orders'),
+      expect.arrayContaining([customerAccountId, 'DELIVERY', cityId, 20, 235, 4700]),
+    );
+    expect(clientQuery).not.toHaveBeenCalledWith(
+      expect.stringContaining('update contracts'),
+      expect.anything(),
+    );
+    const eventCall = clientQuery.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into order_events'),
+    );
+    expect(eventCall?.[0]).toContain('DIRECT_ORDER_CREATED');
+    expect(eventCall?.[0]).toContain('ORDER_SUBMITTED');
+    expect(eventCall?.[1]).toEqual(
+      expect.arrayContaining([orderId, customerUserId, expect.stringContaining('ORD-2026-000008')]),
+    );
   });
 });

@@ -78,7 +78,7 @@ export function HaderDeliveryRequestDetails() {
             <Status value={item.status} />
           </div>
           <p className="mt-1 text-sm text-slate-500">
-            Order {item.order.number} · Contract {item.contract.reference ?? 'Not provided'}
+            Order {item.order.number} · Contract {item.contract?.reference ?? 'Direct Order'}
           </p>
         </div>
         <div className="flex gap-2">

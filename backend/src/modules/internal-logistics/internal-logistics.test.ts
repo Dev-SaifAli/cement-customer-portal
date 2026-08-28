@@ -44,13 +44,11 @@ describe('internal logistics API', () => {
     expect(res.status).toBe(403);
     expect(mocks.query).toHaveBeenCalledTimes(1);
   });
-  it('allows Hader Operations read-only fleet access', async () => {
-    mocks.query
-      .mockResolvedValueOnce({ rows: [user('HADER_OPERATIONS')] })
-      .mockResolvedValueOnce({ rows: [] });
+  it('keeps Hader Operations out of Administration master-data APIs', async () => {
+    mocks.query.mockResolvedValueOnce({ rows: [user('HADER_OPERATIONS')] });
     const res = await request(createApp()).get('/api/v1/admin/fleet').set('Authorization', auth());
-    expect(res.status).toBe(200);
-    expect(res.body.data.trucks.pagination.pageSize).toBe(10);
+    expect(res.status).toBe(403);
+    expect(mocks.query).toHaveBeenCalledTimes(1);
   });
   it('creates a transporter and records an audit event', async () => {
     mocks.query.mockResolvedValueOnce({ rows: [user('PRICING_ADMIN')] });
@@ -94,7 +92,7 @@ describe('internal logistics API', () => {
   });
   it('stores transporter cost strictly as SAR per TON', async () => {
     mocks.query
-      .mockResolvedValueOnce({ rows: [user('HADER_MANAGER')] })
+      .mockResolvedValueOnce({ rows: [user('PRICING_ADMIN')] })
       .mockResolvedValueOnce({ rows: [{ transporter: true, city: true }] });
     mocks.clientQuery
       .mockResolvedValueOnce({ rows: [] })
@@ -132,7 +130,7 @@ describe('internal logistics API', () => {
     );
   });
   it('translates duplicate truck plates into a safe conflict', async () => {
-    mocks.query.mockResolvedValueOnce({ rows: [user('HADER_MANAGER')] });
+    mocks.query.mockResolvedValueOnce({ rows: [user('PRICING_ADMIN')] });
     mocks.clientQuery
       .mockResolvedValueOnce({ rows: [] })
       .mockRejectedValueOnce(Object.assign(new Error('duplicate'), { code: '23505' }))
