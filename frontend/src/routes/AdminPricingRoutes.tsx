@@ -12,13 +12,24 @@ export function AdminPricingRoutes() {
         <Route element={<RequireInternalAdmin />}>
           <Route element={<PricingAdminLayout />}>
             <Route path="product-prices" element={<AdminProductPrices />} />
-            <Route path="transporters" element={<AdminLogisticsPage kind="transporters" />} />
+            <Route
+              path="transporters"
+              element={<AdminLogisticsPage key="transporters" kind="transporters" />}
+            />
             <Route
               path="transporters/costs"
-              element={<AdminLogisticsPage kind="transporter-costs" />}
+              element={
+                <AdminLogisticsPage key="transporter-costs" kind="transporter-costs" />
+              }
             />
-            <Route path="delivery-fleet" element={<AdminLogisticsPage kind="fleet" />} />
-            <Route path="drivers" element={<AdminLogisticsPage kind="drivers" />} />
+            <Route
+              path="delivery-fleet"
+              element={<AdminLogisticsPage key="fleet" kind="fleet" />}
+            />
+            <Route
+              path="drivers"
+              element={<AdminLogisticsPage key="drivers" kind="drivers" />}
+            />
             <Route path="delivery-drivers" element={<Navigate to="/admin/drivers" replace />} />
           </Route>
         </Route>

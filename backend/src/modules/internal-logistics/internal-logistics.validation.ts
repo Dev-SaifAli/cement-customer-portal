@@ -27,7 +27,9 @@ export const updateTransporterSchema = transporterSchema.partial();
 export const transporterCostSchema = z.object({
   transporterId: z.string().uuid(),
   haderCityId: z.string().uuid(),
-  cementType: z.enum(['STANDARD_CEMENT', 'WHITE_CEMENT']),
+  cementType: z
+    .enum(['STANDARD', 'STANDARD_CEMENT', 'WHITE_CEMENT'])
+    .transform((value) => (value === 'STANDARD' ? 'STANDARD_CEMENT' : value)),
   costPerTon: z.number().finite().min(0).max(999_999_999.99),
 });
 export const updateTransporterCostSchema = transporterCostSchema

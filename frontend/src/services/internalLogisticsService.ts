@@ -25,6 +25,7 @@ export interface TransporterCost {
   haderCityName?: string;
   cementType: 'STANDARD_CEMENT' | 'WHITE_CEMENT';
   costPerTon: number;
+  createdBy?: string;
   updatedBy?: string;
   updatedAt: string;
 }

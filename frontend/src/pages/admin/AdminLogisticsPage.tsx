@@ -41,7 +41,7 @@ const configs = {
 
 export function AdminLogisticsPage({ kind }: { kind: LogisticsKind }) {
   const { user } = useSalesAuth();
-  const canManage = user?.role === 'PRICING_ADMIN' || user?.role === 'HADER_MANAGER';
+  const canManage = user?.role === 'PRICING_ADMIN';
   const [page, setPage] = useState(1),
     [search, setSearch] = useState(''),
     [status, setStatus] = useState('');
@@ -542,7 +542,7 @@ function rowValues(kind: LogisticsKind, r: LogisticsRecord): React.ReactNode[] {
       x.truckNumber,
       x.plateNumber,
       x.vehicleType,
-      x.capacityTon.toFixed(3),
+      formatNumber(x.capacityTon, 3),
       x.assignedDriverName ?? 'Unassigned',
       <Status value={x.status} />,
     ];
@@ -560,6 +560,10 @@ function Status({ value }: { value: string }) {
       {label(value)}
     </span>
   );
+}
+function formatNumber(value: unknown, fractionDigits: number) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(fractionDigits) : 'Not provided';
 }
 function fields(kind: LogisticsKind, refs: LogisticsReferences): FieldDef[] {
   if (kind === 'transporters')
@@ -666,6 +670,7 @@ function documentTypes(kind: LogisticsKind) {
       { key: 'CR_DOCUMENT', label: 'CR Document' },
       { key: 'INSURANCE', label: 'Insurance' },
       { key: 'AGREEMENT', label: 'Agreement' },
+      { key: 'OTHER_SUPPORTING_DOCUMENT', label: 'Other Supporting Document' },
     ];
   if (kind === 'fleet')
     return [
