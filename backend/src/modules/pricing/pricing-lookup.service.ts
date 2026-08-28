@@ -34,14 +34,16 @@ interface ProductPriceScope {
   packaging: string;
 }
 
+type PricingExecutor = Pick<PoolClient, 'query'>;
+
 interface DeliveryPriceScope {
   cityId: string;
   isWhiteCement?: boolean;
 }
 
 export class PricingLookupService {
-  async getProductListPrice(scope: ProductPriceScope) {
-    const result = await pool.query<{ list_price: string }>(
+  async getProductListPrice(scope: ProductPriceScope, executor: PricingExecutor = pool) {
+    const result = await executor.query<{ list_price: string }>(
       `select list_price from product_list_prices
        where product_id = $1 and city_id = $2
          and packaging_key = lower(trim($3)) and is_active = true
@@ -52,8 +54,8 @@ export class PricingLookupService {
     return result.rows[0] ? Number(result.rows[0].list_price) : null;
   }
 
-  async getHaderDeliveryPrice(scope: DeliveryPriceScope) {
-    const result = await pool.query<{ delivery_price: string }>(
+  async getHaderDeliveryPrice(scope: DeliveryPriceScope, executor: PricingExecutor = pool) {
+    const result = await executor.query<{ delivery_price: string }>(
       `select case
          when $2::boolean then prices.white_cement_delivery_price
          else prices.standard_delivery_price

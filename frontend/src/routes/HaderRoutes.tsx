@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { SalesAuthProvider, useSalesAuth } from '../context/SalesAuthContext';
+import { CustomerThemeProvider } from '../context/CustomerThemeContext';
 import { HaderDeliveryRequestDetails } from '../pages/hader/HaderDeliveryRequestDetails';
 import { HaderDeliveryRequests } from '../pages/hader/HaderDeliveryRequests';
 import { HaderLayout } from '../pages/hader/HaderLayout';
@@ -10,21 +11,23 @@ import { HaderShipments } from '../pages/hader/HaderShipments';
 const roles = ['HADER_MANAGER', 'HADER_OPERATIONS', 'DISPATCH_USER'];
 export function HaderRoutes() {
   return (
-    <SalesAuthProvider>
-      <Routes>
-        <Route element={<RequireHader />}>
-          <Route element={<HaderLayout />}>
-            <Route index element={<Navigate to="delivery-requests" replace />} />
-            <Route path="delivery-requests" element={<HaderDeliveryRequests />} />
-            <Route path="delivery-requests/:id" element={<HaderDeliveryRequestDetails />} />
-            <Route path="shipments" element={<HaderShipments />} />
-            <Route path="shipments/create" element={<HaderShipmentCreate />} />
-            <Route path="shipments/:id" element={<HaderShipmentDetails />} />
+    <CustomerThemeProvider>
+      <SalesAuthProvider>
+        <Routes>
+          <Route element={<RequireHader />}>
+            <Route element={<HaderLayout />}>
+              <Route index element={<Navigate to="delivery-requests" replace />} />
+              <Route path="delivery-requests" element={<HaderDeliveryRequests />} />
+              <Route path="delivery-requests/:id" element={<HaderDeliveryRequestDetails />} />
+              <Route path="shipments" element={<HaderShipments />} />
+              <Route path="shipments/create" element={<HaderShipmentCreate />} />
+              <Route path="shipments/:id" element={<HaderShipmentDetails />} />
+            </Route>
           </Route>
-        </Route>
-        <Route path="*" element={<Navigate to="/hader/delivery-requests" replace />} />
-      </Routes>
-    </SalesAuthProvider>
+          <Route path="*" element={<Navigate to="/hader/delivery-requests" replace />} />
+        </Routes>
+      </SalesAuthProvider>
+    </CustomerThemeProvider>
   );
 }
 function RequireHader() {
@@ -32,7 +35,7 @@ function RequireHader() {
   const location = useLocation();
   if (loading)
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="customer-portal customer-page-bg customer-secondary flex min-h-screen items-center justify-center">
         Restoring internal session...
       </div>
     );

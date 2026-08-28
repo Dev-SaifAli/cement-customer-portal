@@ -5,20 +5,21 @@ export type OrderScope = { customerAccountId?: string };
 export type OrderListFilters = {
   page: number;
   search?: string | undefined;
+  orderType?: 'DIRECT' | 'CONTRACT' | undefined;
   status?: string | undefined;
 };
 
 interface OrderReadRow {
   id: string;
   order_number: string;
-  contract_id: string;
+  contract_id: string | null;
   contract_reference: string | null;
   customer_account_id: string;
   company_name: string | null;
   status: string;
   fulfilment_type: 'PICKUP' | 'DELIVERY';
   requested_quantity_tons: string;
-  remaining_contract_quantity_snapshot: string;
+  remaining_contract_quantity_snapshot: string | null;
   approved_customer_rate_per_ton: string;
   amount: string;
   vat_rate: string;
@@ -37,13 +38,38 @@ interface OrderReadRow {
   submitted_at: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  processed_by_sales_user_id: string | null;
+  processed_at: Date | string | null;
   product_id: string;
   product_code: string;
   product_name: string;
   packaging: string;
   contract_uom: string;
+  unit_weight_kg: string | null;
+  packaging_quantity: string | null;
   shipment_count?: string;
   latest_shipment_status?: string | null;
+  delivery_request_id: string | null;
+  delivery_request_number: string | null;
+  delivery_request_status: string | null;
+}
+
+export interface OrderProcessingCandidate {
+  id: string;
+  order_number: string;
+  status: string;
+  customer_status: string;
+  product_active: boolean;
+  requested_quantity_tons: string;
+  fulfilment_type: 'PICKUP' | 'DELIVERY';
+  hader_city_id: string | null;
+  hader_city_name: string | null;
+  customer_account_id: string;
+  preferred_delivery_date: Date | string | null;
+  ship_to_location_id: string | null;
+  ship_to_snapshot: unknown;
+  pickup_location_id: string | null;
+  pickup_location_name: string | null;
 }
 
 const pageSize = 10;
@@ -78,6 +104,8 @@ export class OrdersRepository {
       values.push(filters.status);
       clauses.push(`orders.status = $${values.length}`);
     }
+    if (filters.orderType === 'DIRECT') clauses.push('orders.contract_id is null');
+    if (filters.orderType === 'CONTRACT') clauses.push('orders.contract_id is not null');
     if (filters.search) {
       values.push(`%${filters.search.toLowerCase()}%`);
       clauses.push(`(
@@ -127,12 +155,67 @@ export class OrdersRepository {
     );
     return result.rows[0] ? mapOrderReadRow(result.rows[0]) : null;
   }
+
+  async getProcessingCandidateForUpdate(id: string, client: PoolClient) {
+    const result = await client.query<OrderProcessingCandidate>(
+      `select orders.id, orders.order_number, orders.status, orders.customer_account_id,
+              customer_accounts.status as customer_status,
+              product_catalog.is_active as product_active,
+              orders.requested_quantity_tons, orders.fulfilment_type, orders.preferred_delivery_date,
+              orders.hader_city_id, orders.hader_city_name,
+              orders.ship_to_location_id, orders.ship_to_snapshot,
+              orders.pickup_location_id, orders.pickup_location_name
+       from orders
+       inner join customer_accounts on customer_accounts.id = orders.customer_account_id
+       inner join lateral (
+         select order_items.product_id
+         from order_items
+         where order_items.order_id = orders.id
+         order by order_items.created_at asc
+         limit 1
+       ) order_item on true
+       inner join product_catalog on product_catalog.id = order_item.product_id
+       where orders.id = $1
+       for update of orders`,
+      [id],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async markProcessing(id: string, salesUserId: string, client: PoolClient) {
+    await client.query(
+      `update orders
+       set status = 'PROCESSING', processed_by_sales_user_id = $2,
+           processed_at = now(), updated_at = now()
+       where id = $1`,
+      [id, salesUserId],
+    );
+  }
+
+  async addProcessingStartedEvent(
+    order: Pick<OrderProcessingCandidate, 'id' | 'order_number'>,
+    salesUserId: string,
+    client: PoolClient,
+  ) {
+    await client.query(
+      `insert into order_events (
+         order_id, event_type, previous_status, new_status,
+         changed_by_sales_user_id, event_data
+       ) values ($1, 'ORDER_PROCESSING_STARTED', 'SUBMITTED', 'PROCESSING', $2, $3::jsonb)`,
+      [
+        order.id,
+        salesUserId,
+        JSON.stringify({ orderReference: order.order_number, actorType: 'SALES' }),
+      ],
+    );
+  }
 }
 
 export const ordersRepository = new OrdersRepository();
 
 const orderJoinSql = `from orders
- inner join contracts on contracts.id = orders.contract_id
+ left join contracts on contracts.id = orders.contract_id
+ left join delivery_requests on delivery_requests.order_id = orders.id
  inner join customer_accounts on customer_accounts.id = orders.customer_account_id
  inner join lateral (
    select order_items.*
@@ -144,22 +227,32 @@ const orderJoinSql = `from orders
 
 const orderSelectSql = `select orders.*,
   contracts.reference as contract_reference,
-  customer_accounts.company_name,
-  order_items.product_id,
-  order_items.product_code,
-  order_items.product_name,
-  order_items.packaging,
- order_items.contract_uom
- ${orderJoinSql}`;
-
-const orderSelectWithShipmentSql = `select orders.*,
-  contracts.reference as contract_reference,
+  delivery_requests.id as delivery_request_id,
+  delivery_requests.request_number as delivery_request_number,
+  delivery_requests.status as delivery_request_status,
   customer_accounts.company_name,
   order_items.product_id,
   order_items.product_code,
   order_items.product_name,
   order_items.packaging,
   order_items.contract_uom,
+  order_items.unit_weight_kg,
+  order_items.packaging_quantity
+ ${orderJoinSql}`;
+
+const orderSelectWithShipmentSql = `select orders.*,
+  contracts.reference as contract_reference,
+  delivery_requests.id as delivery_request_id,
+  delivery_requests.request_number as delivery_request_number,
+  delivery_requests.status as delivery_request_status,
+  customer_accounts.company_name,
+  order_items.product_id,
+  order_items.product_code,
+  order_items.product_name,
+  order_items.packaging,
+  order_items.contract_uom,
+  order_items.unit_weight_kg,
+  order_items.packaging_quantity,
   shipment_summary.shipment_count,
   shipment_summary.latest_shipment_status
  ${orderJoinSql}
@@ -173,12 +266,16 @@ function mapOrderReadRow(row: OrderReadRow) {
   return {
     id: row.id,
     orderNumber: row.order_number,
-    contract: { id: row.contract_id, reference: row.contract_reference },
+    contract: row.contract_id ? { id: row.contract_id, reference: row.contract_reference } : null,
+    orderType: row.contract_id ? ('CONTRACT' as const) : ('DIRECT' as const),
     customer: { id: row.customer_account_id, companyName: row.company_name },
     status: row.status,
     fulfilmentType: row.fulfilment_type,
     requestedQuantityTons: Number(row.requested_quantity_tons),
-    remainingContractQuantityTons: Number(row.remaining_contract_quantity_snapshot),
+    remainingContractQuantityTons:
+      row.remaining_contract_quantity_snapshot === null
+        ? null
+        : Number(row.remaining_contract_quantity_snapshot),
     preferredDeliveryDate: dateOnly(row.preferred_delivery_date),
     deliveryNotes: row.delivery_notes,
     shipTo: objectValue(row.ship_to_snapshot),
@@ -194,6 +291,9 @@ function mapOrderReadRow(row: OrderReadRow) {
       name: row.product_name,
       packaging: row.packaging,
       uom: row.contract_uom,
+      unitWeightKg: row.unit_weight_kg == null ? null : Number(row.unit_weight_kg),
+      equivalentPackagingUnits:
+        row.packaging_quantity == null ? null : Number(row.packaging_quantity),
     },
     customerRatePerTon: Number(row.approved_customer_rate_per_ton),
     subtotal: Number(row.amount),
@@ -203,6 +303,19 @@ function mapOrderReadRow(row: OrderReadRow) {
     submittedAt: dateTime(row.submitted_at),
     createdAt: dateTime(row.created_at),
     updatedAt: dateTime(row.updated_at),
+    processing: row.processed_at
+      ? {
+          processedBySalesUserId: row.processed_by_sales_user_id,
+          processedAt: dateTime(row.processed_at),
+        }
+      : null,
+    deliveryRequest: row.delivery_request_id
+      ? {
+          id: row.delivery_request_id,
+          requestNumber: row.delivery_request_number,
+          status: row.delivery_request_status,
+        }
+      : null,
     ...(row.shipment_count !== undefined
       ? {
           shipmentSummary: {

@@ -5,15 +5,12 @@ import {
   LogOut,
   Menu,
   PackageCheck,
-  Truck,
-  UserRound,
-  WalletCards,
-  Warehouse,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import Logo from '../../components/Logo/Logo';
+import { NotificationBell } from '../../components/notifications/NotificationBell';
 import { useSalesAuth } from '../../context/SalesAuthContext';
 import { getSalesRoleLabel } from '../../utils/salesRouting';
 
@@ -27,7 +24,7 @@ export function HaderLayout() {
     navigate('/sales/login', { replace: true });
   };
   return (
-    <div className="min-h-screen bg-slate-50 font-['Manrope',system-ui,sans-serif] text-slate-950">
+    <div className="customer-portal customer-page-bg customer-text min-h-screen font-['Manrope',system-ui,sans-serif]">
       <aside
         className={`fixed inset-y-0 left-0 z-40 border-r border-slate-200 bg-white transition-all lg:translate-x-0 ${collapsed ? 'lg:w-[72px]' : 'lg:w-60'} ${open ? 'translate-x-0' : '-translate-x-full'} w-60`}
       >
@@ -58,34 +55,6 @@ export function HaderLayout() {
             label="Shipments"
             collapsed={collapsed}
           />
-          {user?.role === 'HADER_MANAGER' && (
-            <>
-              <Nav
-                to="/admin/transporters"
-                icon={<Warehouse size={18} />}
-                label="Transporters"
-                collapsed={collapsed}
-              />
-              <Nav
-                to="/admin/transporters/costs"
-                icon={<WalletCards size={18} />}
-                label="Transporter Costs"
-                collapsed={collapsed}
-              />
-            </>
-          )}
-          <Nav
-            to="/admin/delivery-fleet"
-            icon={<Truck size={18} />}
-            label="Delivery Fleet"
-            collapsed={collapsed}
-          />
-          <Nav
-            to="/admin/delivery-drivers"
-            icon={<UserRound size={18} />}
-            label="Drivers"
-            collapsed={collapsed}
-          />
         </nav>
       </aside>
       {open && (
@@ -104,6 +73,7 @@ export function HaderLayout() {
             <p className="text-xs text-slate-500">Delivery requests and shipment preparation</p>
           </div>
           <div className="ml-auto flex items-center gap-3">
+            <NotificationBell audience="sales" />
             <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold">{user?.name}</p>
               <p className="text-xs text-slate-500">{user ? getSalesRoleLabel(user.role) : ''}</p>

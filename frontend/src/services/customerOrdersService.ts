@@ -19,11 +19,12 @@ export interface PickupDriverSnapshot {
 export interface CustomerOrder {
   id: string;
   orderNumber: string;
-  contract: { id: string; reference: string | null };
+  contract: { id: string; reference: string | null } | null;
+  orderType: 'DIRECT' | 'CONTRACT';
   status: OrderStatus;
   fulfilmentType: 'PICKUP' | 'DELIVERY';
   requestedQuantityTons: number;
-  remainingContractQuantityTons: number;
+  remainingContractQuantityTons: number | null;
   preferredDeliveryDate: string | null;
   deliveryNotes: string | null;
   shipTo: {
@@ -37,7 +38,20 @@ export interface CustomerOrder {
   pickupTruck: PickupTruckSnapshot | null;
   pickupDriver: PickupDriverSnapshot | null;
   haderCity: string | null;
-  product: { id: string; code: string; name: string; packaging: string; uom: string };
+  deliveryRequest: {
+    id: string;
+    requestNumber: string | null;
+    status: string | null;
+  } | null;
+  product: {
+    id: string;
+    code: string;
+    name: string;
+    packaging: string;
+    uom: string;
+    unitWeightKg: number | null;
+    equivalentPackagingUnits: number | null;
+  };
   customerRatePerTon: number;
   subtotal: number;
   vatRate: number;
@@ -46,6 +60,39 @@ export interface CustomerOrder {
   submittedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DirectOrderInput {
+  productId: string;
+  quantityTons: number;
+  fulfilmentType: 'DELIVERY' | 'PICKUP';
+  shipToLocationId: string | null;
+  pickupLocationId: string | null;
+  requestedDeliveryDate: string | null;
+  notes: string | null;
+}
+
+export interface DirectOrderPricing {
+  product: {
+    id: string;
+    code: string;
+    name: string;
+    image: string | null;
+    packaging: string;
+    uom: string;
+    commercialUom: 'TON';
+  };
+  quantityTons: number;
+  equivalentPackagingUnits: number | null;
+  fulfilmentType: 'DELIVERY' | 'PICKUP';
+  haderCity: { id: string; name: string };
+  shipTo: CustomerOrder['shipTo'];
+  pickupLocation: CustomerOrder['pickupLocation'];
+  customerRatePerTon: number;
+  subtotal: number;
+  vatRate: number;
+  vatAmount: number;
+  grandTotal: number;
 }
 
 export interface CustomerOrdersList {
@@ -78,10 +125,27 @@ export async function createCustomerOrder(
   return response.data.order;
 }
 
+export async function priceDirectOrder(payload: DirectOrderInput) {
+  const response = await request<{ success: boolean; data: { pricing: DirectOrderPricing } }>(
+    '/customer/orders/price',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+  return response.data.pricing;
+}
+
+export async function createDirectOrder(payload: DirectOrderInput & { clientRequestId: string }) {
+  const response = await request<{ success: boolean; data: { order: CustomerOrder } }>(
+    '/customer/orders',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+  return response.data.order;
+}
+
 export async function listCustomerOrders(
   params: {
     page?: number;
     search?: string;
+    orderType?: 'DIRECT' | 'CONTRACT' | '';
     status?: OrderStatus | '';
   } = {},
 ) {

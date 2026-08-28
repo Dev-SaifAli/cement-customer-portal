@@ -7,6 +7,7 @@ import { CustomerLayout } from '../pages/customer/CustomerLayout';
 import { CustomerLanding } from '../pages/customer/CustomerLanding';
 import { CustomerLocations } from '../pages/customer/CustomerLocations';
 import { CustomerCreateOrder } from '../pages/customer/CustomerCreateOrder';
+import { CustomerDirectOrder } from '../pages/customer/CustomerDirectOrder';
 import { CustomerOrderDetails } from '../pages/customer/CustomerOrderDetails';
 import { CustomerOrders } from '../pages/customer/CustomerOrders';
 import { CustomerProductDetails } from '../pages/customer/CustomerProductDetails';
@@ -17,6 +18,8 @@ import { CustomerQuotationRoute } from '../pages/customer/CustomerQuotationRoute
 import { CustomerQuotations } from '../pages/customer/CustomerQuotations';
 import { CustomerUsers } from '../pages/customer/CustomerUsers';
 import { CustomerFleet } from '../pages/customer/CustomerFleet';
+import { CustomerShipmentDetails } from '../pages/customer/CustomerShipmentDetails';
+import { CustomerShipments } from '../pages/customer/CustomerShipments';
 
 export function CustomerRoutes() {
   return (
@@ -38,8 +41,11 @@ export function CustomerRoutes() {
               <Route path="contracts/:id" element={<CustomerContractDetailsPage />} />
               <Route path="contracts/:id/order" element={<CustomerCreateOrder />} />
               <Route path="orders" element={<CustomerOrders />} />
+              <Route path="orders/new" element={<CustomerDirectOrder />} />
               <Route path="orders/:id" element={<CustomerOrderDetails />} />
               <Route path="fleet" element={<CustomerFleet />} />
+              <Route path="shipments" element={<CustomerShipments />} />
+              <Route path="shipments/:id" element={<CustomerShipmentDetails />} />
               <Route path="users" element={<CustomerUsers />} />
             </Route>
           </Route>

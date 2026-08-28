@@ -1,4 +1,4 @@
-/* Customer Portal semantic theme. Scoped so Sales, Admin, auth, and registration stay unchanged. */
+/* Shared Customer and Sales portal semantic theme. Admin, auth, and registration stay unchanged. */
 html[data-customer-route='true'][data-customer-theme='dark'],
 html[data-customer-route='true'][data-customer-theme='dark'] body {
   background: #0f1117;
@@ -104,9 +104,12 @@ html[data-customer-theme='dark'] .customer-portal {
   background-color: var(--customer-surface) !important;
 }
 .customer-portal .bg-slate-50,
+.customer-portal [class~='bg-slate-50/80'],
 .customer-portal [class~='bg-slate-50/60'],
 .customer-portal [class~='bg-slate-50/70'],
 .customer-portal [class~='bg-[#f8fafc]'],
+.customer-portal [class~='bg-[#faf7fc]'],
+.customer-portal [class~='bg-[#faf8fc]'],
 .customer-portal [class~='bg-[#faf9fb]'],
 .customer-portal [class~='bg-[#fdfafd]'],
 .customer-portal [class~='bg-[#fdfbfd]'] {
@@ -131,6 +134,7 @@ html[data-customer-theme='dark'] .customer-portal {
 }
 .customer-portal .text-slate-700,
 .customer-portal .text-slate-600,
+.customer-portal [class~='text-[#475569]'],
 .customer-portal [class~='text-[#4b4d5c]'] {
   color: var(--customer-text-secondary) !important;
 }
@@ -139,6 +143,7 @@ html[data-customer-theme='dark'] .customer-portal {
 .customer-portal .text-slate-300,
 .customer-portal [class~='text-[#64748b]'],
 .customer-portal [class~='text-[#94a3b8]'],
+.customer-portal [class~='text-[#cbd5e1]'],
 .customer-portal [class~='text-[#c5c1ca]'] {
   color: var(--customer-text-muted) !important;
 }
@@ -153,6 +158,8 @@ html[data-customer-theme='dark'] .customer-portal {
 .customer-portal .border-slate-100,
 .customer-portal .border-slate-200,
 .customer-portal .border-slate-300,
+.customer-portal [class~='border-[#cbd5e1]'],
+.customer-portal [class~='border-[#e2e8f0]'],
 .customer-portal [class~='border-[#e3e1e8]'],
 .customer-portal [class~='border-[#eceaf0]'],
 .customer-portal [class~='border-[#d9d5de]'],
@@ -207,12 +214,15 @@ html[data-customer-theme='dark']
   background: var(--customer-surface-secondary);
 }
 
-/* Normalize light-only Tailwind hover utilities across existing Customer pages. */
+/* Normalize light-only Tailwind hover utilities across existing portal pages. */
 html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-white']:hover,
 html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-slate-50']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-slate-50/80']:hover,
 html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-slate-100']:hover,
 html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-slate-200']:hover,
 html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-[#f8fafc]']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-[#faf7fc]']:hover,
+html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-[#faf8fc]']:hover,
 html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-[#faf9fb]']:hover,
 html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-[#fdfafd]']:hover,
 html[data-customer-theme='dark'] .customer-portal [class~='hover:bg-[#fdfbfd]']:hover,

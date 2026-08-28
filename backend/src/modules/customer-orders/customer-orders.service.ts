@@ -1,11 +1,19 @@
 import type { PoolClient } from 'pg';
+import { env } from '../../config/env.js';
 import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import type { CustomerUser } from '../customer-auth/customer-auth.types.js';
-import { createDeliveryRequestForOrder } from '../hader-delivery/hader-delivery.service.js';
+import { notificationEvents } from '../notifications/notification-events.js';
+import {
+  packagingQuantityFromTons,
+  requireProductWeightConfiguration,
+} from '../products/commercial-quantity.js';
+import { pricingLookupService } from '../pricing/pricing-lookup.service.js';
 import { ordersRepository } from './orders.repository.js';
 import type {
   CreateCustomerOrderPayload,
+  CreateDirectOrderPayload,
+  DirectOrderPricingPayload,
   ListCustomerOrdersQuery,
 } from './customer-orders.validation.js';
 
@@ -79,7 +87,7 @@ interface PickupFleetSnapshot {
 interface OrderRow {
   id: string;
   order_number: string;
-  contract_id: string;
+  contract_id: string | null;
   customer_account_id: string;
   ship_to_location_id: string | null;
   pickup_location_id: string | null;
@@ -89,7 +97,7 @@ interface OrderRow {
   created_by_customer_user_id: string;
   status: 'SUBMITTED';
   requested_quantity_tons: string;
-  remaining_contract_quantity_snapshot: string;
+  remaining_contract_quantity_snapshot: string | null;
   approved_customer_rate_per_ton: string;
   amount: string;
   submitted_at: Date | string;
@@ -104,6 +112,43 @@ interface OrderRow {
   pickup_driver_snapshot: unknown;
 }
 
+interface DirectProductRow {
+  id: string;
+  product_code: string;
+  product_name: string;
+  packaging_type: string;
+  uom: string;
+  unit_weight_kg: string;
+  is_white_cement: boolean;
+  image: string | null;
+}
+
+interface PricingCityRow {
+  id: string;
+  name: string;
+  is_hader_enabled: boolean;
+}
+
+interface DirectOrderContext {
+  product: DirectProductRow;
+  city: PricingCityRow;
+  shipTo: DeliveryLocationSnapshot | null;
+  pickupLocation: { id: string; name: string; city: string } | null;
+  quantityTons: number;
+  equivalentPackagingUnits: number | null;
+  customerRatePerTon: number;
+  subtotal: number;
+  vatRate: number;
+  vatAmount: number;
+  grandTotal: number;
+}
+
+type QueryExecutor = Pick<PoolClient, 'query'>;
+
+const directOrderPickupLocations = [
+  { id: 'ALSAFWA_PLANT_MAIN', name: 'AlSafwa Cement Plant', city: 'Jeddah' },
+] as const;
+
 export class CustomerOrdersService {
   async list(customerUser: CustomerUser, query: ListCustomerOrdersQuery) {
     return ordersRepository.list({ customerAccountId: customerUser.customerAccountId }, query);
@@ -115,6 +160,152 @@ export class CustomerOrdersService {
     });
     if (!order) throw new AppError('Order was not found.', 404, 'CUSTOMER_ORDER_NOT_FOUND');
     return order;
+  }
+
+  async priceDirect(customerUser: CustomerUser, payload: DirectOrderPricingPayload) {
+    requireOrderWriteAccess(customerUser);
+    const context = await resolveDirectOrderContext(customerUser, payload);
+    return mapDirectPricing(context);
+  }
+
+  async createDirect(customerUser: CustomerUser, payload: CreateDirectOrderPayload) {
+    requireOrderWriteAccess(customerUser);
+    const client = await pool.connect();
+    let createdOrderId: string | null = null;
+
+    try {
+      await client.query('begin');
+      await client.query(`select pg_advisory_xact_lock(hashtext($1), hashtext($2))`, [
+        customerUser.customerAccountId,
+        payload.clientRequestId,
+      ]);
+      const existingOrder = await ordersRepository.getByIdempotencyKey(
+        customerUser.customerAccountId,
+        payload.clientRequestId,
+        client,
+      );
+      if (existingOrder) {
+        if (existingOrder.contract !== null) {
+          throw new AppError(
+            'The order request identifier has already been used.',
+            409,
+            'ORDER_REQUEST_ID_REUSED',
+          );
+        }
+        await client.query('commit');
+        return existingOrder;
+      }
+
+      const context = await resolveDirectOrderContext(customerUser, payload, client);
+      if (payload.fulfilmentType === 'DELIVERY' && !payload.requestedDeliveryDate) {
+        throw new AppError(
+          'Requested delivery date is required for delivery orders.',
+          400,
+          'ORDER_DELIVERY_DATE_REQUIRED',
+        );
+      }
+
+      const orderNumber = await nextOrderNumber(client);
+      const orderResult = await client.query<{ id: string }>(
+        `insert into orders (
+           order_number, contract_id, customer_account_id, ship_to_location_id,
+           pickup_location_id, fulfilment_type, hader_city_id, hader_city_name,
+           created_by_customer_user_id, status, requested_quantity_tons,
+           remaining_contract_quantity_snapshot, approved_customer_rate_per_ton,
+           amount, client_request_id, preferred_delivery_date, delivery_notes,
+           ship_to_snapshot, pickup_location_name, vat_rate, vat_amount, grand_total,
+           submitted_at
+         ) values (
+           $1, null, $2, $3, $4, $5, $6, $7, $8, 'SUBMITTED', $9, null, $10, $11,
+           $12, $13, $14, $15::jsonb, $16, $17, $18, $19, now()
+         ) returning id`,
+        [
+          orderNumber,
+          customerUser.customerAccountId,
+          context.shipTo?.id ?? null,
+          context.pickupLocation?.id ?? null,
+          payload.fulfilmentType,
+          context.city.id,
+          context.city.name,
+          customerUser.id,
+          context.quantityTons,
+          context.customerRatePerTon,
+          context.subtotal,
+          payload.clientRequestId,
+          payload.requestedDeliveryDate ?? null,
+          payload.notes ?? null,
+          context.shipTo ? JSON.stringify(context.shipTo) : null,
+          context.pickupLocation?.name ?? null,
+          context.vatRate,
+          context.vatAmount,
+          context.grandTotal,
+        ],
+      );
+      const orderId = orderResult.rows[0]?.id;
+      if (!orderId) throw new AppError('Order could not be created.', 503, 'ORDER_CREATE_FAILED');
+      createdOrderId = orderId;
+
+      await client.query(
+        `insert into order_items (
+           order_id, contract_item_id, product_id, product_code, product_name,
+           packaging, contract_uom, requested_quantity_tons, equivalent_tons,
+           approved_customer_rate_per_ton, amount, unit_weight_kg, packaging_quantity
+         ) values ($1, null, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, $11)`,
+        [
+          orderId,
+          context.product.id,
+          context.product.product_code,
+          context.product.product_name,
+          context.product.packaging_type,
+          context.product.uom,
+          context.quantityTons,
+          context.customerRatePerTon,
+          context.subtotal,
+          Number(context.product.unit_weight_kg),
+          context.equivalentPackagingUnits,
+        ],
+      );
+
+      await client.query(
+        `insert into order_events (
+           order_id, event_type, previous_status, new_status,
+           changed_by_customer_user_id, event_data
+         ) values
+           ($1, 'DIRECT_ORDER_CREATED', null, 'SUBMITTED', $2, $3::jsonb),
+           ($1, 'ORDER_SUBMITTED', null, 'SUBMITTED', $2, $4::jsonb)`,
+        [
+          orderId,
+          customerUser.id,
+          JSON.stringify({
+            source: 'DIRECT',
+            orderReference: orderNumber,
+            productId: context.product.id,
+            quantityTons: context.quantityTons,
+          }),
+          JSON.stringify({
+            source: 'DIRECT',
+            orderReference: orderNumber,
+            submittedBy: customerUser.id,
+          }),
+        ],
+      );
+
+      await client.query('commit');
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    const createdOrder = createdOrderId
+      ? await ordersRepository.getById(createdOrderId, {
+          customerAccountId: customerUser.customerAccountId,
+        })
+      : null;
+    if (!createdOrder) throw new AppError('Order could not be loaded.', 503, 'ORDER_LOAD_FAILED');
+    await notificationEvents.orderSubmitted(createdOrder.id, createdOrder.orderNumber);
+    return createdOrder;
   }
 
   async createFromContract(
@@ -137,7 +328,7 @@ export class CustomerOrdersService {
         client,
       );
       if (existingOrder) {
-        if (existingOrder.contract.id !== contractId) {
+        if (!existingOrder.contract || existingOrder.contract.id !== contractId) {
           throw new AppError(
             'The order request identifier has already been used.',
             409,
@@ -343,20 +534,10 @@ export class CustomerOrdersService {
         ],
       );
 
-      if (contract.fulfilment === 'DELIVERY' && payload.preferredDeliveryDate) {
-        await createDeliveryRequestForOrder(client, {
-          orderId: order.id,
-          customerAccountId: customerUser.customerAccountId,
-          haderCityId: contract.pricing_city_id,
-          shipToLocationId: contract.delivery_location_id,
-          quantityTon: requestedQuantityTons,
-          requestedDate: payload.preferredDeliveryDate,
-          customerUserId: customerUser.id,
-        });
-      }
-
       await client.query('commit');
-      return mapOrder(order, contract, shipToSnapshot, payload, pickupFleet);
+      const createdOrder = mapOrder(order, contract, shipToSnapshot, payload, pickupFleet);
+      await notificationEvents.orderSubmitted(createdOrder.id, createdOrder.orderNumber);
+      return createdOrder;
     } catch (error) {
       await client.query('rollback');
       throw error;
@@ -364,6 +545,197 @@ export class CustomerOrdersService {
       client.release();
     }
   }
+}
+
+async function resolveDirectOrderContext(
+  customerUser: CustomerUser,
+  payload: DirectOrderPricingPayload,
+  executor: QueryExecutor = pool,
+): Promise<DirectOrderContext> {
+  const productResult = await executor.query<DirectProductRow>(
+    `select id, product_code, product_name, packaging_type, uom,
+            unit_weight_kg, is_white_cement, image
+     from product_catalog
+     where id = $1 and is_active = true
+     limit 1`,
+    [payload.productId],
+  );
+  const product = productResult.rows[0];
+  if (!product) {
+    throw new AppError(
+      'The selected product is not available.',
+      404,
+      'DIRECT_ORDER_PRODUCT_NOT_FOUND',
+    );
+  }
+
+  const quantityTons = round(payload.quantityTons, 3);
+  const unitWeightKg = Number(product.unit_weight_kg);
+  requireProductWeightConfiguration(unitWeightKg, product.uom);
+  const equivalentPackagingUnits = packagingQuantityFromTons(
+    quantityTons,
+    unitWeightKg,
+    product.uom,
+  );
+
+  let shipTo: DeliveryLocationSnapshot | null = null;
+  let pickupLocation: DirectOrderContext['pickupLocation'] = null;
+  let pricingCityName: string;
+
+  if (payload.fulfilmentType === 'DELIVERY') {
+    if (!payload.shipToLocationId) {
+      throw new AppError(
+        'A ship-to location is required for delivery orders.',
+        400,
+        'DIRECT_ORDER_SHIP_TO_REQUIRED',
+      );
+    }
+
+    const locationResult = await executor.query<{ delivery_locations: unknown }>(
+      `select registration_drafts.delivery_locations
+       from customer_accounts
+       inner join registration_drafts
+         on registration_drafts.id = customer_accounts.registration_id
+       where customer_accounts.id = $1
+         and customer_accounts.registration_id = $2
+       limit 1`,
+      [customerUser.account.id, customerUser.account.registrationId],
+    );
+    shipTo =
+      parseDeliveryLocations(locationResult.rows[0]?.delivery_locations).find(
+        (location) => location.id === payload.shipToLocationId,
+      ) ?? null;
+    if (!shipTo) {
+      throw new AppError(
+        'The selected delivery location is not available for this customer.',
+        404,
+        'DIRECT_ORDER_SHIP_TO_NOT_FOUND',
+      );
+    }
+    if (!shipTo.city?.trim()) {
+      throw new AppError(
+        'Pricing city is not configured for this delivery location.',
+        400,
+        'DIRECT_ORDER_PRICING_CITY_MISSING',
+      );
+    }
+    pricingCityName = shipTo.city;
+  } else {
+    if (!payload.pickupLocationId) {
+      throw new AppError(
+        'A pickup location is required for pick-up orders.',
+        400,
+        'DIRECT_ORDER_PICKUP_REQUIRED',
+      );
+    }
+    pickupLocation =
+      directOrderPickupLocations.find((location) => location.id === payload.pickupLocationId) ??
+      null;
+    if (!pickupLocation) {
+      throw new AppError(
+        'The selected pickup location is not available.',
+        404,
+        'DIRECT_ORDER_PICKUP_NOT_FOUND',
+      );
+    }
+    pricingCityName = pickupLocation.city;
+  }
+
+  const cityResult = await executor.query<PricingCityRow>(
+    `select id, name, is_hader_enabled
+     from ksa_cities
+     where name_key = lower(regexp_replace(btrim($1), '\\s+', ' ', 'g'))
+       and is_active = true
+     limit 1`,
+    [pricingCityName],
+  );
+  const city = cityResult.rows[0];
+  if (!city) {
+    throw new AppError(
+      'Pricing city is not configured for this delivery location.',
+      400,
+      'DIRECT_ORDER_PRICING_CITY_MISSING',
+    );
+  }
+
+  const productPrice = await pricingLookupService.getProductListPrice(
+    { productId: product.id, cityId: city.id, packaging: product.packaging_type },
+    executor,
+  );
+  if (productPrice === null) {
+    throw new AppError(
+      `List pricing is not configured for ${product.product_code} in ${city.name}.`,
+      409,
+      'DIRECT_ORDER_PRODUCT_PRICING_MISSING',
+    );
+  }
+
+  let deliveryPrice = 0;
+  if (payload.fulfilmentType === 'DELIVERY') {
+    if (!city.is_hader_enabled) {
+      throw new AppError(
+        'Hader delivery is not configured for the selected city.',
+        409,
+        'DIRECT_ORDER_HADER_CITY_UNAVAILABLE',
+      );
+    }
+    const configuredDeliveryPrice = await pricingLookupService.getHaderDeliveryPrice(
+      { cityId: city.id, isWhiteCement: product.is_white_cement },
+      executor,
+    );
+    if (configuredDeliveryPrice === null) {
+      throw new AppError(
+        `Delivery pricing is not configured for ${city.name}.`,
+        409,
+        'DIRECT_ORDER_DELIVERY_PRICING_MISSING',
+      );
+    }
+    deliveryPrice = configuredDeliveryPrice;
+  }
+
+  const customerRatePerTon = round(productPrice + deliveryPrice, 2);
+  const subtotal = round(quantityTons * customerRatePerTon, 2);
+  const vatRate = round(env.QUOTATION_VAT_RATE * 100, 2);
+  const vatAmount = round(subtotal * env.QUOTATION_VAT_RATE, 2);
+
+  return {
+    product,
+    city,
+    shipTo,
+    pickupLocation,
+    quantityTons,
+    equivalentPackagingUnits,
+    customerRatePerTon,
+    subtotal,
+    vatRate,
+    vatAmount,
+    grandTotal: round(subtotal + vatAmount, 2),
+  };
+}
+
+function mapDirectPricing(context: DirectOrderContext) {
+  return {
+    product: {
+      id: context.product.id,
+      code: context.product.product_code,
+      name: context.product.product_name,
+      image: context.product.image,
+      packaging: context.product.packaging_type,
+      uom: context.product.uom,
+      commercialUom: 'TON' as const,
+    },
+    quantityTons: context.quantityTons,
+    equivalentPackagingUnits: context.equivalentPackagingUnits,
+    fulfilmentType: context.shipTo ? ('DELIVERY' as const) : ('PICKUP' as const),
+    haderCity: { id: context.city.id, name: context.city.name },
+    shipTo: context.shipTo,
+    pickupLocation: context.pickupLocation,
+    customerRatePerTon: context.customerRatePerTon,
+    subtotal: context.subtotal,
+    vatRate: context.vatRate,
+    vatAmount: context.vatAmount,
+    grandTotal: context.grandTotal,
+  };
 }
 
 export const customerOrdersService = new CustomerOrdersService();
@@ -572,12 +944,14 @@ function mapOrder(
     orderNumber: order.order_number,
     contractId: order.contract_id,
     contract: { id: contract.id, reference: contract.reference },
+    orderType: 'CONTRACT' as const,
     customerAccountId: order.customer_account_id,
     status: order.status,
     requestedQuantityTons: Number(order.requested_quantity_tons),
     remainingContractQuantityTons: Number(order.remaining_contract_quantity_snapshot),
     fulfilmentType: order.fulfilment_type,
     haderCity: order.hader_city_name,
+    deliveryRequest: null,
     preferredDeliveryDate: payload.preferredDeliveryDate ?? null,
     deliveryNotes: payload.deliveryNotes ?? null,
     shipTo,
@@ -598,6 +972,8 @@ function mapOrder(
       name: contract.product_name,
       packaging: contract.packaging,
       uom: contract.uom,
+      unitWeightKg: null,
+      equivalentPackagingUnits: null,
     },
     customerRatePerTon: Number(order.approved_customer_rate_per_ton),
     subtotal: Number(order.amount),

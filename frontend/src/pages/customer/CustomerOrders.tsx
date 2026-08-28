@@ -11,6 +11,7 @@ export function CustomerOrders() {
   const [result, setResult] = useState<CustomerOrdersList | null>(null);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [orderType, setOrderType] = useState<'DIRECT' | 'CONTRACT' | ''>('');
   const [status, setStatus] = useState<OrderStatus | ''>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -19,7 +20,7 @@ export function CustomerOrders() {
     const timer = window.setTimeout(() => {
       let cancelled = false;
       setLoading(true);
-      listCustomerOrders({ page, search: search.trim(), status })
+      listCustomerOrders({ page, search: search.trim(), orderType, status })
         .then((data) => {
           if (!cancelled) setResult(data);
         })
@@ -34,7 +35,7 @@ export function CustomerOrders() {
       };
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [page, search, status]);
+  }, [orderType, page, search, status]);
 
   const pagination = result?.pagination;
   return (
@@ -42,7 +43,7 @@ export function CustomerOrders() {
       <div>
         <h1 className="customer-text text-2xl font-bold">Orders</h1>
         <p className="customer-secondary mt-1 text-sm">
-          Track orders placed against your active contracts.
+          Track direct orders and orders placed against your active contracts.
         </p>
       </div>
       <section className="customer-card overflow-hidden rounded-2xl border">
@@ -60,6 +61,18 @@ export function CustomerOrders() {
             />
           </div>
           <div className="flex items-center gap-3">
+            <select
+              value={orderType}
+              onChange={(event) => {
+                setOrderType(event.target.value as 'DIRECT' | 'CONTRACT' | '');
+                setPage(1);
+              }}
+              className="customer-input customer-border customer-text h-10 rounded-lg border px-3 text-sm"
+            >
+              <option value="">All Order Types</option>
+              <option value="DIRECT">Direct</option>
+              <option value="CONTRACT">Contract</option>
+            </select>
             <select
               value={status}
               onChange={(event) => {
@@ -88,7 +101,7 @@ export function CustomerOrders() {
             <PackageOpen size={34} className="customer-muted mx-auto" />
             <h2 className="customer-text mt-3 font-bold">No orders yet</h2>
             <p className="customer-secondary mt-1 text-sm">
-              Create an order from an active contract.
+              Create a direct order or place an order from an active contract.
             </p>
           </div>
         ) : (
@@ -98,11 +111,12 @@ export function CustomerOrders() {
                 <thead className="customer-surface-secondary customer-secondary text-xs">
                   <tr>
                     <th className="px-4 py-3">Order Number</th>
+                    <th className="px-4 py-3">Order Type</th>
                     <th className="px-4 py-3">Contract Number</th>
                     <th className="px-4 py-3">Product</th>
                     <th className="px-4 py-3">Quantity TON</th>
                     <th className="px-4 py-3">Fulfilment</th>
-                    <th className="px-4 py-3">Requested Date</th>
+                    <th className="px-4 py-3">Created Date</th>
                     <th className="px-4 py-3">Status</th>
                   </tr>
                 </thead>
@@ -118,7 +132,10 @@ export function CustomerOrders() {
                         </Link>
                       </td>
                       <td className="customer-text px-4 py-3 font-semibold">
-                        {order.contract.reference}
+                        {order.orderType === 'DIRECT' ? 'Direct' : 'Contract'}
+                      </td>
+                      <td className="customer-text px-4 py-3 font-semibold">
+                        {order.contract?.reference ?? '—'}
                       </td>
                       <td className="px-4 py-3">
                         <p className="customer-text font-semibold">{order.product.name}</p>
@@ -130,9 +147,7 @@ export function CustomerOrders() {
                       <td className="customer-text px-4 py-3">
                         {order.fulfilmentType === 'DELIVERY' ? 'Hader Delivery' : 'Pick-Up'}
                       </td>
-                      <td className="customer-text px-4 py-3">
-                        {formatDate(order.submittedAt ?? order.createdAt)}
-                      </td>
+                      <td className="customer-text px-4 py-3">{formatDate(order.createdAt)}</td>
                       <td className="px-4 py-3">
                         <Status value={order.status} />
                       </td>

@@ -2,9 +2,11 @@ import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import type { CustomerUser } from '../customer-auth/customer-auth.types.js';
 import { customerLocationsService } from '../customer-locations/customer-locations.service.js';
+import { notificationEvents } from '../notifications/notification-events.js';
 import {
   COMMERCIAL_UOM,
   packagingQuantityFromTons,
+  requireProductWeightConfiguration,
 } from '../products/commercial-quantity.js';
 import type {
   CustomerQuotationPayload,
@@ -355,7 +357,9 @@ export class CustomerQuotationsService {
       );
 
       await client.query('commit');
-      return this.getById(customerUser, quotation.id);
+      const details = await this.getById(customerUser, quotation.id);
+      await notificationEvents.quotationSubmitted(quotation.id, quotation.reference ?? 'Quotation');
+      return details;
     } catch (error) {
       await client.query('rollback');
       throw error;
@@ -450,6 +454,8 @@ export class CustomerQuotationsService {
       const product = productById.get(item.productId);
       if (!product) return;
 
+      requireProductWeightConfiguration(Number(product.unit_weight_kg), product.uom);
+
       const isBag = product.packaging_type.toLowerCase().includes('bag');
       if (!isBag && item.palletRequired) {
         throw new AppError(
@@ -505,7 +511,19 @@ export class CustomerQuotationsService {
       client.release();
     }
 
-    return this.getById(customerUser, quotationId);
+    const details = await this.getById(customerUser, quotationId);
+    const notificationType =
+      newStatus === 'ACCEPTED'
+        ? 'QUOTATION_ACCEPTED'
+        : newStatus === 'REJECTED'
+          ? 'QUOTATION_REJECTED'
+          : 'CLARIFICATION_REQUESTED';
+    await notificationEvents.customerQuotationDecision(
+      notificationType,
+      quotationId,
+      details.reference ?? 'Quotation',
+    );
+    return details;
   }
 
   private async replaceItems(
@@ -516,7 +534,7 @@ export class CustomerQuotationsService {
     const productIds = Array.from(new Set(payload.items.map((item) => item.productId)));
     const productResult = await client.query<ProductRow>(
       `select id, product_code, product_name, description, short_description, image,
-              packaging_type, uom, category
+              packaging_type, uom, unit_weight_kg, commercial_uom, category
        from product_catalog
        where id = any($1::uuid[])
          and is_active = true`,
@@ -714,8 +732,7 @@ function mapQuotation(
       uom: item.uom,
       quantity: Number(item.quantity_tons),
       quantityTon: Number(item.quantity_tons),
-      packagingQuantity:
-        item.packaging_quantity === null ? null : Number(item.packaging_quantity),
+      packagingQuantity: item.packaging_quantity === null ? null : Number(item.packaging_quantity),
       commercialUom: COMMERCIAL_UOM,
       unitWeightKg: Number(item.unit_weight_kg),
       equivalentTons: Number(item.equivalent_tons),

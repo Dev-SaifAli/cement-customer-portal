@@ -15,6 +15,7 @@ import { customerOrdersRouter } from '../modules/customer-orders/customer-orders
 import { customerProductsRouter } from '../modules/customer-products/customer-products.routes.js';
 import { customerProfileRouter } from '../modules/customer-profile/customer-profile.routes.js';
 import { customerQuotationsRouter } from '../modules/customer-quotations/customer-quotations.routes.js';
+import { customerShipmentsRouter } from '../modules/customer-shipments/customer-shipments.routes.js';
 import { customerUsersRouter } from '../modules/customer-users/customer-users.routes.js';
 import { healthRouter } from '../modules/health/health.routes.js';
 import { internalLogisticsRouter } from '../modules/internal-logistics/internal-logistics.routes.js';
@@ -29,6 +30,7 @@ import { salesAuthRouter } from '../modules/sales-auth/sales-auth.routes.js';
 import { salesContractsRouter } from '../modules/sales-contracts/sales-contracts.routes.js';
 import { salesOrdersRouter } from '../modules/sales-orders/sales-orders.routes.js';
 import { salesQuotationsRouter } from '../modules/sales-quotations/sales-quotations.routes.js';
+import { notificationsRouter } from '../modules/notifications/notifications.routes.js';
 
 export const v1Router = Router();
 v1Router.use('/admin/product-prices', adminPricingRouter);
@@ -46,8 +48,10 @@ v1Router.use('/customer/orders', customerOrdersRouter);
 v1Router.use('/customer/products', customerProductsRouter);
 v1Router.use('/customer/profile', customerProfileRouter);
 v1Router.use('/customer/quotations', customerQuotationsRouter);
+v1Router.use('/customer/shipments', customerShipmentsRouter);
 v1Router.use('/customer/users', customerUsersRouter);
 v1Router.use('/health', healthRouter);
+v1Router.use('/notifications', notificationsRouter);
 v1Router.use('/hader/delivery-requests', haderDeliveryRequestsRouter);
 v1Router.use('/hader/shipments', haderShipmentsRouter);
 v1Router.use('/registrations', registrationRouter);

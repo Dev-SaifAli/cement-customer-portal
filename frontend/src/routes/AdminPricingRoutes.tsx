@@ -11,26 +11,15 @@ export function AdminPricingRoutes() {
       <Routes>
         <Route element={<RequireInternalAdmin />}>
           <Route element={<PricingAdminLayout />}>
-            <Route element={<RequireRoles roles={['PRICING_ADMIN']} />}>
-              <Route path="product-prices" element={<AdminProductPrices />} />
-            </Route>
-            <Route element={<RequireRoles roles={['PRICING_ADMIN', 'HADER_MANAGER']} />}>
-              <Route path="transporters" element={<AdminLogisticsPage kind="transporters" />} />
-              <Route
-                path="transporters/costs"
-                element={<AdminLogisticsPage kind="transporter-costs" />}
-              />
-            </Route>
+            <Route path="product-prices" element={<AdminProductPrices />} />
+            <Route path="transporters" element={<AdminLogisticsPage kind="transporters" />} />
             <Route
-              element={
-                <RequireRoles
-                  roles={['PRICING_ADMIN', 'HADER_MANAGER', 'HADER_OPERATIONS', 'DISPATCH_USER']}
-                />
-              }
-            >
-              <Route path="delivery-fleet" element={<AdminLogisticsPage kind="fleet" />} />
-              <Route path="delivery-drivers" element={<AdminLogisticsPage kind="drivers" />} />
-            </Route>
+              path="transporters/costs"
+              element={<AdminLogisticsPage kind="transporter-costs" />}
+            />
+            <Route path="delivery-fleet" element={<AdminLogisticsPage kind="fleet" />} />
+            <Route path="drivers" element={<AdminLogisticsPage kind="drivers" />} />
+            <Route path="delivery-drivers" element={<Navigate to="/admin/drivers" replace />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/sales/login" replace />} />
@@ -55,22 +44,9 @@ function RequireInternalAdmin() {
     return <Navigate to="/sales/login" replace state={{ from: location }} />;
   }
 
-  if (
-    !['PRICING_ADMIN', 'HADER_MANAGER', 'HADER_OPERATIONS', 'DISPATCH_USER'].includes(user.role)
-  ) {
+  if (user.role !== 'PRICING_ADMIN') {
     return <Navigate to={getSalesLandingPath(user.role)} replace />;
   }
 
-  return <Outlet />;
-}
-
-function RequireRoles({
-  roles,
-}: {
-  roles: Array<NonNullable<ReturnType<typeof useSalesAuth>['user']>['role']>;
-}) {
-  const { user } = useSalesAuth();
-  if (!user || !roles.includes(user.role))
-    return <Navigate to={user ? getSalesLandingPath(user.role) : '/sales/login'} replace />;
   return <Outlet />;
 }

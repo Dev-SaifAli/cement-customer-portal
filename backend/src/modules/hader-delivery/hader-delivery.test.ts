@@ -69,6 +69,36 @@ describe('Hader delivery APIs', () => {
     expect(response.status).toBe(403);
     expect(response.body.error.code).toBe('SALES_ROLE_FORBIDDEN');
   });
+  it('lists a delivery request created from a direct order', async () => {
+    const orderId = '33333333-3333-4333-8333-333333333333';
+    auth('HADER_OPERATIONS', (sql) => {
+      if (sql.includes('select count(*)::text as total')) return { rows: [{ total: '1' }] };
+      if (sql.includes('from delivery_requests dr')) {
+        return {
+          rows: [
+            {
+              ...deliveryRequestRow(orderId, 'PENDING'),
+              contract_id: null,
+              contract_reference: null,
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+
+    const response = await request(createApp())
+      .get('/api/v1/hader/delivery-requests')
+      .set({ Cookie: `sales_session=${token()}` });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.items[0]).toMatchObject({
+      requestNumber: 'DR-2026-000001',
+      status: 'PENDING',
+      contract: null,
+      order: { number: 'ORD-2026-000001' },
+    });
+  });
   it('prevents split shipments from exceeding request TON', async () => {
     auth('HADER_MANAGER');
     connect.mockResolvedValue({ query: clientQuery, release });
@@ -114,7 +144,8 @@ describe('Hader delivery APIs', () => {
       if (sql.includes('sum(quantity_ton)')) return Promise.resolve({ rows: [{ total: '0' }] });
       if (sql.includes("nextval('shipment_number_seq')"))
         return Promise.resolve({ rows: [{ sequence: '1' }] });
-      if (sql.includes('insert into shipments')) return Promise.resolve({ rows: [{ id: shipmentId }] });
+      if (sql.includes('insert into shipments'))
+        return Promise.resolve({ rows: [{ id: shipmentId }] });
       if (sql.includes("update orders set status='PROCESSING'"))
         return Promise.resolve({ rows: [{ status: 'PROCESSING' }] });
       return Promise.resolve({ rows: [] });
@@ -136,11 +167,7 @@ describe('Hader delivery APIs', () => {
     );
     expect(clientQuery).toHaveBeenCalledWith(
       expect.stringContaining("'SHIPMENT_CREATED','SUBMITTED','PROCESSING'"),
-      [
-        orderId,
-        userId,
-        JSON.stringify({ shipmentId, shipmentNumber: 'SHP-2026-000001' }),
-      ],
+      [orderId, userId, JSON.stringify({ shipmentId, shipmentNumber: 'SHP-2026-000001' })],
     );
   });
 

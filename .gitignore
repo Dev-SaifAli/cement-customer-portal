@@ -14,3 +14,4 @@ frontend/public/uploads/
 storage/
 claude-reference
 backend/logs/*.log
+CUSTOMER_MY_SHIPMENTS_IMPLEMENTATION.md

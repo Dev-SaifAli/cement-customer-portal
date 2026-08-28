@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { listSalesOrders, type SalesOrder } from '../../services/salesOrdersService';
 import type { OrderStatus } from '../../services/customerOrdersService';
 
@@ -9,8 +10,22 @@ export function SalesOrdersPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<OrderStatus | ''>('');
+  const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') setRefreshKey((value) => value + 1);
+    };
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       let cancelled = false;
@@ -34,13 +49,13 @@ export function SalesOrdersPage() {
       };
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [page, search, status]);
+  }, [page, refreshKey, search, status]);
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold text-[#1a1b23]">Customer Orders</h1>
         <p className="mt-1 text-sm text-[#64748b]">
-          Read-only view of customer orders submitted from active contracts.
+          Review submitted direct and contract orders and start processing.
         </p>
       </div>
       <section className="overflow-hidden rounded-2xl border border-[#e3e1e8] bg-white shadow-sm">
@@ -91,22 +106,34 @@ export function SalesOrdersPage() {
                   <tr>
                     <th className="px-4 py-3">Order Number</th>
                     <th className="px-4 py-3">Customer</th>
+                    <th className="px-4 py-3">Order Type</th>
                     <th className="px-4 py-3">Contract</th>
                     <th className="px-4 py-3">Product</th>
                     <th className="px-4 py-3">Quantity TON</th>
                     <th className="px-4 py-3">Fulfilment</th>
                     <th className="px-4 py-3">Shipment Status</th>
                     <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Created Date</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#eceaf0]">
                   {orders.map((order) => (
                     <tr key={order.id} className="hover:bg-[#faf8fc]">
-                      <td className="px-4 py-3 font-bold text-[#54247a]">{order.orderNumber}</td>
+                      <td className="px-4 py-3 font-bold text-[#54247a]">
+                        <Link
+                          to={`/sales/orders/${order.id}`}
+                          className="hover:text-[#472066] hover:underline"
+                        >
+                          {order.orderNumber}
+                        </Link>
+                      </td>
                       <td className="px-4 py-3 font-semibold text-[#1a1b23]">
                         {order.customer.companyName}
                       </td>
-                      <td className="px-4 py-3">{order.contract.reference}</td>
+                      <td className="px-4 py-3">
+                        {order.orderType === 'DIRECT' ? 'Direct' : 'Contract'}
+                      </td>
+                      <td className="px-4 py-3">{order.contract?.reference ?? 'Direct Order'}</td>
                       <td className="px-4 py-3">
                         <p className="font-semibold">{order.product.name}</p>
                         <p className="text-xs text-[#64748b]">{order.product.code}</p>
@@ -134,10 +161,13 @@ export function SalesOrdersPage() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="inline-flex items-center gap-2 text-xs font-semibold">
-                          <span className="h-2 w-2 rounded-full bg-amber-500" />
+                          <span
+                            className={`h-2 w-2 rounded-full ${order.status === 'PROCESSING' ? 'bg-blue-600' : 'bg-amber-500'}`}
+                          />
                           {label(order.status)}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-[#64748b]">{date(order.createdAt)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -185,4 +215,12 @@ function label(value: string) {
     .split('_')
     .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
     .join(' ');
+}
+
+function date(value: string) {
+  return new Date(value).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
