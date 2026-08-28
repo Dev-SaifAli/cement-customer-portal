@@ -28,7 +28,7 @@ const configs = {
     button: 'Add Cost',
   },
   fleet: {
-    title: 'Hader Delivery Fleet',
+    title: 'Delivery Fleet',
     description: 'Manage AlSafwa-owned delivery trucks.',
     button: 'Add Truck',
   },
@@ -511,7 +511,7 @@ function columns(kind: LogisticsKind) {
       'Assigned Driver',
       'Status',
     ];
-  return ['Driver ID', 'Name', 'Mobile', 'License Number', 'Status'];
+  return ['Driver ID', 'Name', 'Mobile', 'License Number', 'License Expiry', 'Status'];
 }
 function rowValues(kind: LogisticsKind, r: LogisticsRecord): React.ReactNode[] {
   if (kind === 'transporters') {
@@ -548,7 +548,14 @@ function rowValues(kind: LogisticsKind, r: LogisticsRecord): React.ReactNode[] {
     ];
   }
   const x = r as HaderDriver;
-  return [x.driverNumber, x.name, x.mobile, x.licenseNumber, <Status value={x.status} />];
+  return [
+    x.driverNumber,
+    x.name,
+    x.mobile,
+    x.licenseNumber,
+    x.licenseExpiry ? new Date(x.licenseExpiry).toLocaleDateString() : 'Not provided',
+    <Status value={x.status} />,
+  ];
 }
 function Status({ value }: { value: string }) {
   const good = ['ACTIVE', 'AVAILABLE'].includes(value);

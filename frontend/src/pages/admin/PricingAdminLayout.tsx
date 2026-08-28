@@ -85,7 +85,7 @@ export function PricingAdminLayout() {
             collapsed={sidebarCollapsed}
           />
           <AdminNav
-            to="/admin/drivers"
+            to="/admin/delivery-drivers"
             label="Drivers"
             icon={<UserRound size={18} />}
             collapsed={sidebarCollapsed}

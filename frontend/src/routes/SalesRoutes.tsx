@@ -61,6 +61,7 @@ function RequireSalesRoles({
     | 'HADER_MANAGER'
     | 'HADER_OPERATIONS'
     | 'DISPATCH_USER'
+    | 'LOADING_USER'
     | 'PRICE_MANAGER'
     | 'PRICING_ADMIN'
   >;

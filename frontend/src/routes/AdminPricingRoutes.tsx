@@ -27,10 +27,10 @@ export function AdminPricingRoutes() {
               element={<AdminLogisticsPage key="fleet" kind="fleet" />}
             />
             <Route
-              path="drivers"
+              path="delivery-drivers"
               element={<AdminLogisticsPage key="drivers" kind="drivers" />}
             />
-            <Route path="delivery-drivers" element={<Navigate to="/admin/drivers" replace />} />
+            <Route path="drivers" element={<Navigate to="/admin/delivery-drivers" replace />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/sales/login" replace />} />

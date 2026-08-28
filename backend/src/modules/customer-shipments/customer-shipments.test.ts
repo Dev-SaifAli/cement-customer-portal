@@ -133,6 +133,13 @@ describe('customer shipment visibility', () => {
     expect(serialized).not.toContain('cost');
     expect(serialized).not.toContain('notes');
     expect(serialized).not.toContain('password_hash');
+    expect(query).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining(
+        "event_type not in ('DRIVER_NOTIFIED','TRUCK_ARRIVED','TRUCK_AT_GATE','LOADING_POINT_ASSIGNED')",
+      ),
+      [shipmentId],
+    );
   });
 
   it('does not expose another customer shipment', async () => {
@@ -143,9 +150,7 @@ describe('customer shipment visibility', () => {
     expect(response.status).toBe(404);
     expect(query).toHaveBeenNthCalledWith(
       2,
-      expect.stringMatching(
-        /s\.customer_account_id = \$1[\s\S]*o\.customer_account_id = \$1/,
-      ),
+      expect.stringMatching(/s\.customer_account_id = \$1[\s\S]*o\.customer_account_id = \$1/),
       [accountId, shipmentId],
     );
   });

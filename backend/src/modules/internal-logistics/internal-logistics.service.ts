@@ -160,7 +160,8 @@ export class InternalLogisticsService {
     );
   }
 
-  createTruck(input: HaderTruckInput, user: SalesUser) {
+  async createTruck(input: HaderTruckInput, user: SalesUser) {
+    if (input.assignedDriverId) await this.validateAssignableDriver(input.assignedDriverId);
     return this.createEntity(
       'TRUCK',
       user,
@@ -182,7 +183,8 @@ export class InternalLogisticsService {
     );
   }
 
-  updateTruck(id: string, input: Partial<HaderTruckInput>, user: SalesUser) {
+  async updateTruck(id: string, input: Partial<HaderTruckInput>, user: SalesUser) {
+    if (input.assignedDriverId) await this.validateAssignableDriver(input.assignedDriverId);
     return this.updateEntity(
       'TRUCK',
       'hader_trucks',
@@ -198,7 +200,10 @@ export class InternalLogisticsService {
         status: 'status',
       },
       mapTruck,
-      'TRUCK_UPDATED',
+      (before, after) =>
+        before.status !== 'INACTIVE' && after.status === 'INACTIVE'
+          ? 'TRUCK_DEACTIVATED'
+          : 'TRUCK_UPDATED',
     );
   }
 
@@ -247,8 +252,41 @@ export class InternalLogisticsService {
         status: 'status',
       },
       mapDriver,
-      'DRIVER_UPDATED',
+      (before, after) =>
+        before.status !== 'INACTIVE' && after.status === 'INACTIVE'
+          ? 'DRIVER_DEACTIVATED'
+          : 'DRIVER_UPDATED',
     );
+  }
+
+  async availableTrucks() {
+    const result = await pool.query<LogisticsRow>(
+      `select t.*,t.updated_at sort_updated_at,d.name assigned_driver_name
+       from hader_trucks t
+       left join hader_drivers d on d.id=t.assigned_driver_id
+       where t.status='AVAILABLE'
+       order by t.truck_number`,
+    );
+    return result.rows.map(mapTruck);
+  }
+
+  async availableDrivers() {
+    const result = await pool.query<LogisticsRow>(
+      `select d.*,d.updated_at sort_updated_at
+       from hader_drivers d
+       where d.status='ACTIVE'
+         and (d.license_expiry is null or d.license_expiry >= current_date)
+       order by d.name`,
+    );
+    return result.rows.map(mapDriver);
+  }
+
+  async availableTransporters() {
+    const result = await pool.query<LogisticsRow>(
+      `select t.*,t.updated_at sort_updated_at
+       from transporters t where t.status='ACTIVE' order by t.name`,
+    );
+    return result.rows.map(mapTransporter);
   }
 
   async referenceData() {
@@ -260,7 +298,9 @@ export class InternalLogisticsService {
         `select id,name from ksa_cities where is_active=true and is_hader_enabled=true order by name`,
       ),
       pool.query(
-        `select id,driver_number,name from hader_drivers where status='ACTIVE' order by name`,
+        `select id,driver_number,name from hader_drivers
+         where status='ACTIVE' and (license_expiry is null or license_expiry >= current_date)
+         order by name`,
       ),
     ]);
     return { transporters: transporters.rows, cities: cities.rows, drivers: drivers.rows };
@@ -438,6 +478,22 @@ export class InternalLogisticsService {
       throw new AppError('Active transporter was not found.', 400, 'TRANSPORTER_INVALID');
     if (!r.rows[0]?.city)
       throw new AppError('Hader city was not found.', 400, 'HADER_CITY_INVALID');
+  }
+
+  private async validateAssignableDriver(driverId: string) {
+    const result = await pool.query(
+      `select id from hader_drivers
+       where id=$1 and status='ACTIVE'
+         and (license_expiry is null or license_expiry >= current_date)`,
+      [driverId],
+    );
+    if (!result.rows[0]) {
+      throw new AppError(
+        'The selected driver is inactive or has an expired license.',
+        400,
+        'HADER_DRIVER_NOT_ASSIGNABLE',
+      );
+    }
   }
 
   private async ensureEntity(type: Entity, id: string) {

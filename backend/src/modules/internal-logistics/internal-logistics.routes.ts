@@ -19,6 +19,17 @@ internalLogisticsRouter.patch(
 internalLogisticsRouter.get('/transporter-costs', manage, asyncHandler(c.costs.bind(c)));
 internalLogisticsRouter.post('/transporter-costs', manage, asyncHandler(c.createCost.bind(c)));
 internalLogisticsRouter.patch('/transporter-costs/:id', manage, asyncHandler(c.updateCost.bind(c)));
+internalLogisticsRouter.get('/delivery-fleet', viewFleet, asyncHandler(c.trucks.bind(c)));
+internalLogisticsRouter.post('/delivery-fleet', manage, asyncHandler(c.createTruck.bind(c)));
+internalLogisticsRouter.patch('/delivery-fleet/:id', manage, asyncHandler(c.updateTruck.bind(c)));
+internalLogisticsRouter.get('/delivery-drivers', viewFleet, asyncHandler(c.drivers.bind(c)));
+internalLogisticsRouter.post('/delivery-drivers', manage, asyncHandler(c.createDriver.bind(c)));
+internalLogisticsRouter.patch(
+  '/delivery-drivers/:id',
+  manage,
+  asyncHandler(c.updateDriver.bind(c)),
+);
+// Backward-compatible aliases for existing bookmarks and clients.
 internalLogisticsRouter.get('/fleet', viewFleet, asyncHandler(c.trucks.bind(c)));
 internalLogisticsRouter.post('/fleet', manage, asyncHandler(c.createTruck.bind(c)));
 internalLogisticsRouter.patch('/fleet/:id', manage, asyncHandler(c.updateTruck.bind(c)));
@@ -36,4 +47,19 @@ internalLogisticsRouter.get(
   '/:entityType/:id/documents/:documentId',
   viewFleet,
   asyncHandler(c.document.bind(c)),
+);
+
+export const haderFleetReferenceRouter = Router();
+const useFleet = requireSalesRole('HADER_MANAGER', 'HADER_OPERATIONS', 'DISPATCH_USER');
+haderFleetReferenceRouter.use(requireSalesAuth);
+haderFleetReferenceRouter.get(
+  '/transporters',
+  useFleet,
+  asyncHandler(c.availableTransporters.bind(c)),
+);
+haderFleetReferenceRouter.get('/delivery-fleet', useFleet, asyncHandler(c.availableTrucks.bind(c)));
+haderFleetReferenceRouter.get(
+  '/delivery-drivers',
+  useFleet,
+  asyncHandler(c.availableDrivers.bind(c)),
 );
