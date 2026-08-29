@@ -36,6 +36,7 @@ interface DeliveryRequestRow {
   rejection_reason: string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  hader_zone_status: 'WITHIN_HADER_ZONE' | 'OUTSIDE_HADER_ZONE' | null;
   total_count?: string;
   shipped_ton?: string;
 }
@@ -278,14 +279,15 @@ export async function createDeliveryRequestForOrder(
     shipToLocationId: string | null;
     quantityTon: number;
     requestedDate: Date | string;
+    haderZoneStatus: 'WITHIN_HADER_ZONE' | 'OUTSIDE_HADER_ZONE' | null;
     salesUserId: string;
   },
 ) {
   const number = await nextReference(client, 'delivery_request_number_seq', 'DR');
   const result = await client.query<{ id: string; request_number: string; status: string }>(
     `insert into delivery_requests (request_number,order_id,customer_account_id,hader_city_id,
-      ship_to_location_id,quantity_ton,requested_date,status)
-     values ($1,$2,$3,$4,$5,$6,$7,'PENDING') on conflict (order_id) do nothing
+      ship_to_location_id,quantity_ton,requested_date,hader_zone_status,status)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,'PENDING') on conflict (order_id) do nothing
      returning id,request_number,status`,
     [
       number,
@@ -295,6 +297,7 @@ export async function createDeliveryRequestForOrder(
       input.shipToLocationId,
       input.quantityTon,
       input.requestedDate,
+      input.haderZoneStatus,
     ],
   );
   const created = result.rows[0];
@@ -424,6 +427,7 @@ function mapRequest(row: DeliveryRequestRow) {
     rejectionReason: row.rejection_reason,
     createdAt: dateTime(row.created_at),
     updatedAt: dateTime(row.updated_at),
+    haderZoneStatus: row.hader_zone_status,
   };
 }
 function mapShipment(row: ShipmentRow) {

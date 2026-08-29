@@ -102,7 +102,9 @@ describe('Hader Loading Control', () => {
                 name: 'Silo 1',
                 point_type: 'SILO',
                 capacity_ton: '100',
-                status: 'FREE',
+                capacity_ton_per_hour: null,
+                max_trucks: 1,
+                status: 'AVAILABLE',
                 product_id: null,
               },
             ],
@@ -114,6 +116,74 @@ describe('Hader Loading Control', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe('LOADING_POINT_INCOMPATIBLE');
+  });
+
+  it('uses Bagging Line hourly capacity as throughput, not shipment stock', async () => {
+    authenticate();
+    transactionWith(locked('AT_GATE'), (sql) => {
+      if (sql.includes('from hader_loading_points where id=$1')) {
+        return {
+          rows: [
+            {
+              id: pointId,
+              code: 'LINE-01',
+              name: 'Bagging Line 1',
+              point_type: 'BAGGING_LINE',
+              capacity_ton: null,
+              capacity_ton_per_hour: '20',
+              max_trucks: 2,
+              status: 'AVAILABLE',
+              product_id: locked('AT_GATE').product_id,
+            },
+          ],
+        };
+      }
+      if (sql.includes('count(*)::text total from shipments')) return { rows: [{ total: '0' }] };
+      return undefined;
+    });
+    detailQueries('AT_GATE');
+
+    const response = await action('loading-point').send({ loadingPointId: pointId });
+
+    expect(response.status).toBe(200);
+    expect(
+      clientQuery.mock.calls.some(
+        ([sql, values]) =>
+          String(sql).includes('update hader_loading_points set status=$2') &&
+          Array.isArray(values) &&
+          values[1] === 'AVAILABLE',
+      ),
+    ).toBe(true);
+  });
+
+  it('blocks assignment when a Bagging Line reaches its maximum trucks', async () => {
+    authenticate();
+    transactionWith(locked('AT_GATE'), (sql) => {
+      if (sql.includes('from hader_loading_points where id=$1')) {
+        return {
+          rows: [
+            {
+              id: pointId,
+              code: 'LINE-01',
+              name: 'Bagging Line 1',
+              point_type: 'BAGGING_LINE',
+              capacity_ton: null,
+              capacity_ton_per_hour: '20',
+              max_trucks: 2,
+              status: 'BUSY',
+              product_id: locked('AT_GATE').product_id,
+            },
+          ],
+        };
+      }
+      if (sql.includes('count(*)::text total from shipments')) return { rows: [{ total: '2' }] };
+      return undefined;
+    });
+
+    const response = await action('loading-point').send({ loadingPointId: pointId });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe('LOADING_POINT_TRUCK_CAPACITY');
   });
 
   it('does not start loading with inactive assigned resources', async () => {
@@ -141,9 +211,7 @@ describe('Hader Loading Control', () => {
 
     expect(response.status).toBe(200);
     expect(eventWasWritten('LOADING_COMPLETED')).toBe(true);
-    expect(clientQuery).toHaveBeenCalledWith(expect.stringContaining("set status='FREE'"), [
-      pointId,
-    ]);
+    expect(clientQuery).toHaveBeenCalledWith(expect.stringContaining('set status=case'), [pointId]);
   });
 });
 
@@ -190,6 +258,17 @@ function detailQueries(status: string) {
   const previous = poolQuery.getMockImplementation();
   poolQuery.mockImplementation((sql: string, values: unknown[]) => {
     if (sql.includes('from sales_users')) return previous?.(sql, values);
+    if (sql.includes('from shipments') && sql.includes('join lateral')) {
+      return Promise.resolve({
+        rows: [
+          {
+            product_id: '44444444-4444-4444-8444-444444444444',
+            packaging: 'Bag',
+            quantity_ton: '30.000',
+          },
+        ],
+      });
+    }
     if (sql.includes('from shipments s join orders o')) {
       return Promise.resolve({ rows: [{ ...loadingRow(), loading_status: status }] });
     }

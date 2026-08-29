@@ -24,6 +24,7 @@ export interface DeliveryRequest {
   rejectionReason: string | null;
   createdAt: string;
   updatedAt: string;
+  haderZoneStatus: 'WITHIN_HADER_ZONE' | 'OUTSIDE_HADER_ZONE' | null;
 }
 export interface Shipment {
   id: string;
@@ -225,6 +226,8 @@ export type LoadingDetail = DispatchShipment & {
     name: string;
     type: string;
     capacityTon: number | null;
+    capacityTonPerHour: number | null;
+    maxTrucks: number;
     status: string;
   }[];
 };

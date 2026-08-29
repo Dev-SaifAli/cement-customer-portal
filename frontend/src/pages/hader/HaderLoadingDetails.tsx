@@ -132,7 +132,11 @@ export function HaderLoadingDetails() {
                 {item.compatibleLoadingPoints.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.code} — {p.name}
-                    {p.capacityTon ? ` · ${p.capacityTon} TON` : ''}
+                    {p.type === 'BAGGING_LINE' && p.capacityTonPerHour
+                      ? ` · ${p.capacityTonPerHour} TON/hour · ${p.maxTrucks} trucks`
+                      : p.capacityTon
+                        ? ` · ${p.capacityTon} TON`
+                        : ''}
                   </option>
                 ))}
               </select>

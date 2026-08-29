@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import { haderDispatchService } from '../hader-dispatch/hader-dispatch.service.js';
+import { loadingPointsService } from '../loading-points/loading-points.service.js';
 import { notificationsService } from '../notifications/notifications.service.js';
 import type { SalesUser } from '../sales-auth/sales-auth.types.js';
 import type { LoadingListQuery } from './hader-loading.validation.js';
@@ -71,17 +72,14 @@ export class HaderLoadingService {
     ]);
     const row = loading.rows[0];
     if (!row) throw new AppError('Shipment was not found.', 404, 'SHIPMENT_NOT_FOUND');
-    const pointType = row.packaging.toLowerCase() === 'bulk' ? 'SILO' : 'BAGGING_LINE';
-    const points = await pool.query<LoadingPointRow>(
-      `select id,code,name,point_type,capacity_ton,status from hader_loading_points
-       where point_type=$1 and (product_id is null or product_id=$2)
-         and (status='FREE' or id=$3) order by name`,
-      [pointType, row.product_id, row.loading_point_id],
-    );
+    const points = await loadingPointsService.availableForShipment(id);
+    if (row.loading_point_id && !points.some((point) => point.id === row.loading_point_id)) {
+      points.push(await loadingPointsService.get(row.loading_point_id));
+    }
     return {
       ...shipment,
       loading: mapLoading(row),
-      compatibleLoadingPoints: points.rows.map(mapPoint),
+      compatibleLoadingPoints: points,
     };
   }
 
@@ -139,12 +137,13 @@ export class HaderLoadingService {
         invalid('Loading point can only be assigned at the gate.');
       const expected = row.packaging.toLowerCase() === 'bulk' ? 'SILO' : 'BAGGING_LINE';
       const point = await client.query<LoadingPointRow & { product_id: string | null }>(
-        `select id,code,name,point_type,capacity_ton,status,product_id
+        `select id,code,name,point_type,capacity_ton,capacity_ton_per_hour,max_trucks,
+          status,product_id
          from hader_loading_points where id=$1 for update`,
         [pointId],
       );
       const selected = point.rows[0];
-      if (!selected || selected.status !== 'FREE')
+      if (!selected || !['AVAILABLE', 'BUSY'].includes(selected.status))
         throw new AppError('Selected loading point is not free.', 409, 'LOADING_POINT_UNAVAILABLE');
       if (
         selected.point_type !== expected ||
@@ -155,20 +154,37 @@ export class HaderLoadingService {
           400,
           'LOADING_POINT_INCOMPATIBLE',
         );
-      if (selected.capacity_ton && Number(selected.capacity_ton) < Number(row.quantity_ton))
+      if (
+        selected.point_type === 'SILO' &&
+        selected.capacity_ton &&
+        Number(selected.capacity_ton) < Number(row.quantity_ton)
+      )
         throw new AppError(
           'Selected loading point capacity is insufficient.',
           400,
           'LOADING_POINT_CAPACITY',
         );
-      await client.query(
-        "update hader_loading_points set status='BUSY',updated_at=now() where id=$1",
+      const active = await client.query<{ total: string }>(
+        `select count(*)::text total from shipments
+         where loading_point_id=$1 and loading_status in ('AT_GATE','LOADING')`,
         [pointId],
       );
+      const activeTrucks = Number(active.rows[0]?.total ?? 0);
+      if (activeTrucks >= selected.max_trucks) {
+        throw new AppError(
+          'Selected loading point has reached its maximum truck capacity.',
+          409,
+          'LOADING_POINT_TRUCK_CAPACITY',
+        );
+      }
       await client.query(
         'update shipments set loading_point_id=$2,loading_point_type=$3,updated_at=now() where id=$1',
         [id, pointId, selected.point_type],
       );
+      await client.query(`update hader_loading_points set status=$2,updated_at=now() where id=$1`, [
+        pointId,
+        activeTrucks + 1 >= selected.max_trucks ? 'BUSY' : 'AVAILABLE',
+      ]);
       await event(client, id, 'LOADING_POINT_ASSIGNED', 'AT_GATE', 'AT_GATE', actor.id, {
         loadingPointId: pointId,
       });
@@ -230,7 +246,16 @@ export class HaderLoadingService {
       );
       if (row.loading_point_id)
         await client.query(
-          "update hader_loading_points set status='FREE',updated_at=now() where id=$1",
+          `update hader_loading_points points
+           set status=case
+             when points.status='INACTIVE' then 'INACTIVE'
+             when (select count(*) from shipments active_shipments
+                   where active_shipments.loading_point_id=points.id
+                     and active_shipments.loading_status in ('AT_GATE','LOADING')) >= points.max_trucks
+               then 'BUSY'
+             else 'AVAILABLE'
+           end,updated_at=now()
+           where points.id=$1`,
           [row.loading_point_id],
         );
       await event(client, id, 'LOADING_COMPLETED', 'LOADING', 'LOADED', actor.id, {
@@ -304,6 +329,8 @@ interface LoadingPointRow {
   name: string;
   point_type: string;
   capacity_ton: string | null;
+  capacity_ton_per_hour: string | null;
+  max_trucks: number;
   status: string;
 }
 const loadingSelect = `select s.*,o.order_number,ca.company_name,oi.product_id,oi.product_code,oi.product_name,
@@ -337,16 +364,6 @@ function mapLoading(row: LoadingRow) {
     atGateAt: iso(row.at_gate_at),
     loadingStartedAt: iso(row.loading_started_at),
     loadingCompletedAt: iso(row.loading_completed_at),
-  };
-}
-function mapPoint(row: LoadingPointRow) {
-  return {
-    id: row.id,
-    code: row.code,
-    name: row.name,
-    type: row.point_type,
-    capacityTon: row.capacity_ton ? Number(row.capacity_ton) : null,
-    status: row.status,
   };
 }
 async function event(

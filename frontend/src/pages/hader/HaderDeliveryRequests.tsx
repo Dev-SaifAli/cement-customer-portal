@@ -98,6 +98,7 @@ export function HaderDeliveryRequests() {
                     'Product',
                     'Quantity TON',
                     'Hader City',
+                    'Boundary',
                     'Ship-to Location',
                     'Requested Date',
                     'Status',
@@ -127,6 +128,20 @@ export function HaderDeliveryRequests() {
                     </td>
                     <td className="px-4 py-3 font-semibold">{item.quantityTon.toFixed(3)}</td>
                     <td className="px-4 py-3">{item.haderCity.name ?? 'Not configured'}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex items-center gap-2 whitespace-nowrap font-medium ${item.haderZoneStatus === 'WITHIN_HADER_ZONE' ? 'text-emerald-700' : item.haderZoneStatus === 'OUTSIDE_HADER_ZONE' ? 'text-red-700' : 'text-slate-500'}`}
+                      >
+                        <span
+                          className={`h-2 w-2 rounded-full ${item.haderZoneStatus === 'WITHIN_HADER_ZONE' ? 'bg-emerald-500' : item.haderZoneStatus === 'OUTSIDE_HADER_ZONE' ? 'bg-red-500' : 'bg-slate-400'}`}
+                        />
+                        {item.haderZoneStatus === 'WITHIN_HADER_ZONE'
+                          ? 'Within Zone'
+                          : item.haderZoneStatus === 'OUTSIDE_HADER_ZONE'
+                            ? 'Outside Zone'
+                            : 'Not evaluated'}
+                      </span>
+                    </td>
                     <td className="max-w-52 truncate px-4 py-3">
                       {text(item.shipTo, 'name') || 'Not provided'}
                     </td>
