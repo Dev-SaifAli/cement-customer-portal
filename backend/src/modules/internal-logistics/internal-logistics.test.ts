@@ -33,7 +33,7 @@ describe('internal logistics API', () => {
     mocks.release.mockReset();
   });
   it('blocks customer/unauthenticated access', async () => {
-    const res = await request(createApp()).get('/api/v1/admin/fleet');
+    const res = await request(createApp()).get('/api/v1/admin/delivery-fleet');
     expect(res.status).toBe(401);
   });
   it('blocks Sales representatives from internal costs', async () => {
@@ -46,7 +46,9 @@ describe('internal logistics API', () => {
   });
   it('keeps Hader Operations out of Administration master-data APIs', async () => {
     mocks.query.mockResolvedValueOnce({ rows: [user('HADER_OPERATIONS')] });
-    const res = await request(createApp()).get('/api/v1/admin/fleet').set('Authorization', auth());
+    const res = await request(createApp())
+      .get('/api/v1/admin/delivery-fleet')
+      .set('Authorization', auth());
     expect(res.status).toBe(403);
     expect(mocks.query).toHaveBeenCalledTimes(1);
   });
@@ -181,7 +183,7 @@ describe('internal logistics API', () => {
       .mockRejectedValueOnce(Object.assign(new Error('duplicate'), { code: '23505' }))
       .mockResolvedValueOnce({ rows: [] });
     const res = await request(createApp())
-      .post('/api/v1/admin/fleet')
+      .post('/api/v1/admin/delivery-fleet')
       .set('Authorization', auth())
       .send({
         plateNumber: 'ABC-1234',
@@ -195,9 +197,73 @@ describe('internal logistics API', () => {
   it('prevents Hader Operations from creating drivers', async () => {
     mocks.query.mockResolvedValueOnce({ rows: [user('HADER_OPERATIONS')] });
     const res = await request(createApp())
-      .post('/api/v1/admin/drivers')
+      .post('/api/v1/admin/delivery-drivers')
       .set('Authorization', auth())
       .send({ name: 'Ahmed Ali', mobile: '0501234567', licenseNumber: 'LIC-1', status: 'ACTIVE' });
     expect(res.status).toBe(403);
+  });
+  it('allows Hader Operations to view only available assignment trucks', async () => {
+    mocks.query
+      .mockResolvedValueOnce({ rows: [user('HADER_OPERATIONS')] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: entityId,
+            truck_number: 'TRK-000001',
+            plate_number: 'ABC-1234',
+            vehicle_type: 'Trailer',
+            capacity_ton: '30.000',
+            model_year: 2025,
+            assigned_driver_id: null,
+            assigned_driver_name: null,
+            status: 'AVAILABLE',
+            created_at: new Date(),
+            updated_at: new Date(),
+          },
+        ],
+      });
+
+    const res = await request(createApp())
+      .get('/api/v1/hader/delivery-fleet')
+      .set('Authorization', auth());
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.trucks[0]).toMatchObject({
+      truckNumber: 'TRK-000001',
+      capacityTon: 30,
+      status: 'AVAILABLE',
+    });
+    expect(mocks.query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("where t.status='AVAILABLE'"),
+    );
+  });
+  it('blocks an inactive or expired driver from being assigned as the truck default', async () => {
+    mocks.query
+      .mockResolvedValueOnce({ rows: [user('PRICING_ADMIN')] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(createApp())
+      .post('/api/v1/admin/delivery-fleet')
+      .set('Authorization', auth())
+      .send({
+        plateNumber: 'ABC-1234',
+        vehicleType: 'Trailer',
+        capacityTon: 30,
+        assignedDriverId: entityId,
+        status: 'AVAILABLE',
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('HADER_DRIVER_NOT_ASSIGNABLE');
+    expect(mocks.clientQuery).not.toHaveBeenCalled();
+  });
+  it('does not allow a Sales representative to read Hader assignment fleet', async () => {
+    mocks.query.mockResolvedValueOnce({ rows: [user('SALES_REP')] });
+    const res = await request(createApp())
+      .get('/api/v1/hader/delivery-drivers')
+      .set('Authorization', auth());
+    expect(res.status).toBe(403);
+    expect(mocks.query).toHaveBeenCalledTimes(1);
   });
 });

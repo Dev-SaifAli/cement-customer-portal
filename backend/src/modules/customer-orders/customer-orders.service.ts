@@ -9,6 +9,8 @@ import {
   requireProductWeightConfiguration,
 } from '../products/commercial-quantity.js';
 import { pricingLookupService } from '../pricing/pricing-lookup.service.js';
+import { haderZoneService } from '../hader-zones/hader-zone.service.js';
+import type { HaderZoneStatus } from '../hader-zones/hader-zone.types.js';
 import { ordersRepository } from './orders.repository.js';
 import type {
   CreateCustomerOrderPayload,
@@ -51,6 +53,8 @@ interface DeliveryLocationSnapshot {
   streetAddress?: string;
   postalCode?: string;
   country?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 interface PickupTruckRow {
@@ -110,6 +114,7 @@ interface OrderRow {
   customer_driver_id: string | null;
   pickup_truck_snapshot: unknown;
   pickup_driver_snapshot: unknown;
+  hader_zone_status: HaderZoneStatus | null;
 }
 
 interface DirectProductRow {
@@ -141,6 +146,7 @@ interface DirectOrderContext {
   vatRate: number;
   vatAmount: number;
   grandTotal: number;
+  zoneStatus: HaderZoneStatus | null;
 }
 
 type QueryExecutor = Pick<PoolClient, 'query'>;
@@ -214,10 +220,10 @@ export class CustomerOrdersService {
            remaining_contract_quantity_snapshot, approved_customer_rate_per_ton,
            amount, client_request_id, preferred_delivery_date, delivery_notes,
            ship_to_snapshot, pickup_location_name, vat_rate, vat_amount, grand_total,
-           submitted_at
+           hader_zone_status, submitted_at
          ) values (
            $1, null, $2, $3, $4, $5, $6, $7, $8, 'SUBMITTED', $9, null, $10, $11,
-           $12, $13, $14, $15::jsonb, $16, $17, $18, $19, now()
+           $12, $13, $14, $15::jsonb, $16, $17, $18, $19, $20, now()
          ) returning id`,
         [
           orderNumber,
@@ -239,6 +245,7 @@ export class CustomerOrdersService {
           context.vatRate,
           context.vatAmount,
           context.grandTotal,
+          context.zoneStatus,
         ],
       );
       const orderId = orderResult.rows[0]?.id;
@@ -377,6 +384,10 @@ export class CustomerOrdersService {
       const vatAmount = round(amount * (vatRate / 100), 2);
       const grandTotal = round(amount + vatAmount, 2);
       const shipToSnapshot = resolveDeliveryLocation(contract);
+      const zoneStatus =
+        contract.fulfilment === 'DELIVERY'
+          ? await resolveDeliveryZoneStatus(client, contract.pricing_city_id, shipToSnapshot)
+          : null;
       const orderNumber = await nextOrderNumber(client);
 
       const orderResult = await client.query<OrderRow>(
@@ -407,11 +418,12 @@ export class CustomerOrdersService {
            customer_driver_id,
            pickup_truck_snapshot,
            pickup_driver_snapshot,
+           hader_zone_status,
            submitted_at
          )
          values (
            $1, $2, $3, $4, $5, $6, $7, $8, $9, 'SUBMITTED', $10, $11, $12, $13,
-           $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, now()
+           $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, now()
          )
          returning *`,
         [
@@ -442,6 +454,7 @@ export class CustomerOrdersService {
           pickupFleet?.driver.id ?? null,
           pickupFleet ? JSON.stringify(pickupFleet.truck) : null,
           pickupFleet ? JSON.stringify(pickupFleet.driver) : null,
+          zoneStatus,
         ],
       );
       const order = orderResult.rows[0];
@@ -658,6 +671,18 @@ async function resolveDirectOrderContext(
     );
   }
 
+  let zoneStatus: HaderZoneStatus | null = null;
+  if (payload.fulfilmentType === 'DELIVERY') {
+    zoneStatus = await resolveDeliveryZoneStatus(executor, city.id, shipTo);
+    if (zoneStatus === 'OUTSIDE_HADER_ZONE') {
+      throw new AppError(
+        'Selected location is outside the current delivery service boundary.',
+        409,
+        'DIRECT_ORDER_OUTSIDE_HADER_ZONE',
+      );
+    }
+  }
+
   const productPrice = await pricingLookupService.getProductListPrice(
     { productId: product.id, cityId: city.id, packaging: product.packaging_type },
     executor,
@@ -710,6 +735,7 @@ async function resolveDirectOrderContext(
     vatRate,
     vatAmount,
     grandTotal: round(subtotal + vatAmount, 2),
+    zoneStatus,
   };
 }
 
@@ -728,6 +754,7 @@ function mapDirectPricing(context: DirectOrderContext) {
     equivalentPackagingUnits: context.equivalentPackagingUnits,
     fulfilmentType: context.shipTo ? ('DELIVERY' as const) : ('PICKUP' as const),
     haderCity: { id: context.city.id, name: context.city.name },
+    haderZoneStatus: context.zoneStatus,
     shipTo: context.shipTo,
     pickupLocation: context.pickupLocation,
     customerRatePerTon: context.customerRatePerTon,
@@ -951,6 +978,7 @@ function mapOrder(
     remainingContractQuantityTons: Number(order.remaining_contract_quantity_snapshot),
     fulfilmentType: order.fulfilment_type,
     haderCity: order.hader_city_name,
+    haderZoneStatus: order.hader_zone_status,
     deliveryRequest: null,
     preferredDeliveryDate: payload.preferredDeliveryDate ?? null,
     deliveryNotes: payload.deliveryNotes ?? null,
@@ -1007,6 +1035,37 @@ function parseDeliveryLocations(value: unknown): DeliveryLocationSnapshot[] {
     }
   }
   return [];
+}
+
+async function resolveDeliveryZoneStatus(
+  executor: QueryExecutor,
+  cityId: string | null,
+  location: DeliveryLocationSnapshot | null,
+): Promise<HaderZoneStatus> {
+  if (!cityId) {
+    throw new AppError(
+      'Pricing city is not configured for this delivery location.',
+      400,
+      'ORDER_PRICING_CITY_MISSING',
+    );
+  }
+  if (
+    !location ||
+    typeof location.latitude !== 'number' ||
+    typeof location.longitude !== 'number'
+  ) {
+    throw new AppError(
+      'Map coordinates are required to validate the delivery location.',
+      409,
+      'DELIVERY_LOCATION_COORDINATES_REQUIRED',
+    );
+  }
+  const result = await haderZoneService.validatePoint(
+    cityId,
+    { latitude: location.latitude, longitude: location.longitude },
+    executor,
+  );
+  return result.status;
 }
 
 function round(value: number, decimals: number) {

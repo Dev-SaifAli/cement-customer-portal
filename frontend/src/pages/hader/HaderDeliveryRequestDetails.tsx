@@ -139,6 +139,16 @@ export function HaderDeliveryRequestDetails() {
           />
           <Info label="Fulfilment" value="Delivery" />
           <Info label="Hader City" value={item.haderCity.name} />
+          <Info
+            label="Delivery Boundary"
+            value={
+              item.haderZoneStatus === 'WITHIN_HADER_ZONE'
+                ? 'Within Hader Zone'
+                : item.haderZoneStatus === 'OUTSIDE_HADER_ZONE'
+                  ? 'Outside Hader Zone'
+                  : 'Not evaluated'
+            }
+          />
         </Card>
         <Card title="Delivery Information">
           <Info label="Ship-to" value={text(item.shipTo, 'name')} />

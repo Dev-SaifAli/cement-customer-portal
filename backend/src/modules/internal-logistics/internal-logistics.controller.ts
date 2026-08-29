@@ -30,17 +30,15 @@ export class InternalLogisticsController {
     });
   }
   async createTransporter(req: SalesAuthenticatedRequest, res: Response) {
-    res
-      .status(201)
-      .json({
-        success: true,
-        data: {
-          transporter: await internalLogisticsService.createTransporter(
-            transporterSchema.parse(req.body),
-            user(req),
-          ),
-        },
-      });
+    res.status(201).json({
+      success: true,
+      data: {
+        transporter: await internalLogisticsService.createTransporter(
+          transporterSchema.parse(req.body),
+          user(req),
+        ),
+      },
+    });
   }
   async updateTransporter(req: SalesAuthenticatedRequest, res: Response) {
     res.json({
@@ -63,17 +61,15 @@ export class InternalLogisticsController {
     });
   }
   async createCost(req: SalesAuthenticatedRequest, res: Response) {
-    res
-      .status(201)
-      .json({
-        success: true,
-        data: {
-          cost: await internalLogisticsService.createCost(
-            transporterCostSchema.parse(req.body),
-            user(req),
-          ),
-        },
-      });
+    res.status(201).json({
+      success: true,
+      data: {
+        cost: await internalLogisticsService.createCost(
+          transporterCostSchema.parse(req.body),
+          user(req),
+        ),
+      },
+    });
   }
   async updateCost(req: SalesAuthenticatedRequest, res: Response) {
     res.json({
@@ -96,17 +92,15 @@ export class InternalLogisticsController {
     });
   }
   async createTruck(req: SalesAuthenticatedRequest, res: Response) {
-    res
-      .status(201)
-      .json({
-        success: true,
-        data: {
-          truck: await internalLogisticsService.createTruck(
-            haderTruckSchema.parse(req.body),
-            user(req),
-          ),
-        },
-      });
+    res.status(201).json({
+      success: true,
+      data: {
+        truck: await internalLogisticsService.createTruck(
+          haderTruckSchema.parse(req.body),
+          user(req),
+        ),
+      },
+    });
   }
   async updateTruck(req: SalesAuthenticatedRequest, res: Response) {
     res.json({
@@ -129,17 +123,15 @@ export class InternalLogisticsController {
     });
   }
   async createDriver(req: SalesAuthenticatedRequest, res: Response) {
-    res
-      .status(201)
-      .json({
-        success: true,
-        data: {
-          driver: await internalLogisticsService.createDriver(
-            haderDriverSchema.parse(req.body),
-            user(req),
-          ),
-        },
-      });
+    res.status(201).json({
+      success: true,
+      data: {
+        driver: await internalLogisticsService.createDriver(
+          haderDriverSchema.parse(req.body),
+          user(req),
+        ),
+      },
+    });
   }
   async updateDriver(req: SalesAuthenticatedRequest, res: Response) {
     res.json({
@@ -151,6 +143,21 @@ export class InternalLogisticsController {
           user(req),
         ),
       },
+    });
+  }
+  async availableTrucks(_req: SalesAuthenticatedRequest, res: Response) {
+    res.json({ success: true, data: { trucks: await internalLogisticsService.availableTrucks() } });
+  }
+  async availableDrivers(_req: SalesAuthenticatedRequest, res: Response) {
+    res.json({
+      success: true,
+      data: { drivers: await internalLogisticsService.availableDrivers() },
+    });
+  }
+  async availableTransporters(_req: SalesAuthenticatedRequest, res: Response) {
+    res.json({
+      success: true,
+      data: { transporters: await internalLogisticsService.availableTransporters() },
     });
   }
   async reference(_req: SalesAuthenticatedRequest, res: Response) {

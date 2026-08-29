@@ -36,6 +36,7 @@ interface DeliveryRequestRow {
   rejection_reason: string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  hader_zone_status: 'WITHIN_HADER_ZONE' | 'OUTSIDE_HADER_ZONE' | null;
   total_count?: string;
   shipped_ton?: string;
 }
@@ -48,6 +49,20 @@ interface ShipmentRow extends DeliveryRequestRow {
   scheduled_date: Date | string | null;
   delivered_at: Date | string | null;
   shipment_created_at: Date | string;
+  scheduled_time: string | null;
+  assigned_at: Date | string | null;
+  dispatched_at: Date | string | null;
+  transporter_id: string | null;
+  transporter_name: string | null;
+  hader_truck_id: string | null;
+  truck_number: string | null;
+  plate_number: string | null;
+  vehicle_type: string | null;
+  truck_capacity_ton: string | null;
+  hader_driver_id: string | null;
+  driver_name: string | null;
+  driver_mobile: string | null;
+  driver_license_number: string | null;
 }
 
 export class HaderDeliveryService {
@@ -264,14 +279,15 @@ export async function createDeliveryRequestForOrder(
     shipToLocationId: string | null;
     quantityTon: number;
     requestedDate: Date | string;
+    haderZoneStatus: 'WITHIN_HADER_ZONE' | 'OUTSIDE_HADER_ZONE' | null;
     salesUserId: string;
   },
 ) {
   const number = await nextReference(client, 'delivery_request_number_seq', 'DR');
   const result = await client.query<{ id: string; request_number: string; status: string }>(
     `insert into delivery_requests (request_number,order_id,customer_account_id,hader_city_id,
-      ship_to_location_id,quantity_ton,requested_date,status)
-     values ($1,$2,$3,$4,$5,$6,$7,'PENDING') on conflict (order_id) do nothing
+      ship_to_location_id,quantity_ton,requested_date,hader_zone_status,status)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,'PENDING') on conflict (order_id) do nothing
      returning id,request_number,status`,
     [
       number,
@@ -281,6 +297,7 @@ export async function createDeliveryRequestForOrder(
       input.shipToLocationId,
       input.quantityTon,
       input.requestedDate,
+      input.haderZoneStatus,
     ],
   );
   const created = result.rows[0];
@@ -330,6 +347,18 @@ function buildFilters(query: HaderListQuery, statusColumn: string, searchColumns
     clauses.push(
       `(${searchColumns.map((c) => `lower(coalesce(${c},'')) like $${values.length}`).join(' or ')})`,
     );
+  }
+  if (query.haderCityId) {
+    values.push(query.haderCityId);
+    clauses.push(`dr.hader_city_id=$${values.length}`);
+  }
+  if (query.requestedDate) {
+    values.push(query.requestedDate);
+    clauses.push(`dr.requested_date=$${values.length}`);
+  }
+  if (query.productId) {
+    values.push(query.productId);
+    clauses.push(`oi.product_id=$${values.length}`);
   }
   return { values, where: clauses.length ? `where ${clauses.join(' and ')}` : '' };
 }
@@ -398,6 +427,7 @@ function mapRequest(row: DeliveryRequestRow) {
     rejectionReason: row.rejection_reason,
     createdAt: dateTime(row.created_at),
     updatedAt: dateTime(row.updated_at),
+    haderZoneStatus: row.hader_zone_status,
   };
 }
 function mapShipment(row: ShipmentRow) {
@@ -407,6 +437,31 @@ function mapShipment(row: ShipmentRow) {
     status: row.shipment_status,
     quantityTon: Number(row.shipment_quantity_ton),
     scheduledDate: dateOnly(row.scheduled_date),
+    scheduledTime: row.scheduled_time ? String(row.scheduled_time).slice(0, 5) : null,
+    assignedAt: dateTime(row.assigned_at),
+    dispatchedAt: dateTime(row.dispatched_at),
+    assignment: row.transporter_id
+      ? {
+          transporter: { id: row.transporter_id, name: row.transporter_name },
+          truck: row.hader_truck_id
+            ? {
+                id: row.hader_truck_id,
+                number: row.truck_number,
+                plateNumber: row.plate_number,
+                vehicleType: row.vehicle_type,
+                capacityTon: Number(row.truck_capacity_ton ?? 0),
+              }
+            : null,
+          driver: row.hader_driver_id
+            ? {
+                id: row.hader_driver_id,
+                name: row.driver_name,
+                mobile: row.driver_mobile,
+                licenseNumber: row.driver_license_number,
+              }
+            : null,
+        }
+      : null,
     deliveredAt: dateTime(row.delivered_at),
     createdAt: dateTime(row.shipment_created_at),
     deliveryRequest: mapRequest(row),
@@ -447,5 +502,12 @@ const deliveryRequestColumns = `dr.*,o.order_number,o.contract_id,c.reference as
  (select coalesce(sum(sx.quantity_ton),0)::text from shipments sx where sx.delivery_request_id=dr.id) as shipped_ton`;
 const deliveryRequestSelect = `select ${deliveryRequestColumns} ${commonJoin}`;
 const shipmentSelect = `select ${deliveryRequestColumns},s.id as shipment_id,s.shipment_number,
- s.quantity_ton as shipment_quantity_ton,s.status as shipment_status,s.scheduled_date,s.delivered_at,
- s.created_at as shipment_created_at ${commonJoin} inner join shipments s on s.delivery_request_id=dr.id`;
+ s.quantity_ton as shipment_quantity_ton,s.status as shipment_status,s.scheduled_date,s.scheduled_time,
+ s.assigned_at,s.dispatched_at,s.transporter_id,t.name as transporter_name,
+ s.hader_truck_id,ht.truck_number,ht.plate_number,ht.vehicle_type,ht.capacity_ton as truck_capacity_ton,
+ s.hader_driver_id,hd.name as driver_name,hd.mobile as driver_mobile,
+ hd.license_number as driver_license_number,s.delivered_at,s.created_at as shipment_created_at
+ ${commonJoin} inner join shipments s on s.delivery_request_id=dr.id
+ left join transporters t on t.id=s.transporter_id
+ left join hader_trucks ht on ht.id=s.hader_truck_id
+ left join hader_drivers hd on hd.id=s.hader_driver_id`;

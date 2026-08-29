@@ -68,27 +68,35 @@ export async function listLogistics<T>(
   if (search) q.set('search', search);
   if (status) q.set('status', status);
   const data = await request<{ success: true; data: Record<string, Page<T>> }>(
-    `/admin/${kind}?${q}`,
+    `/admin/${logisticsPath(kind)}?${q}`,
   );
   const key = kind === 'transporter-costs' ? 'costs' : kind === 'fleet' ? 'trucks' : kind;
   return data.data[key] as Page<T>;
 }
 export async function createLogistics<T>(kind: LogisticsKind, payload: unknown) {
-  const data = await request<{ success: true; data: Record<string, T> }>(`/admin/${kind}`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  const data = await request<{ success: true; data: Record<string, T> }>(
+    `/admin/${logisticsPath(kind)}`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
   return Object.values(data.data)[0] as T;
 }
 export async function updateLogistics<T>(kind: LogisticsKind, id: string, payload: unknown) {
   const data = await request<{ success: true; data: Record<string, T> }>(
-    `/admin/${kind}/${encodeURIComponent(id)}`,
+    `/admin/${logisticsPath(kind)}/${encodeURIComponent(id)}`,
     {
       method: 'PATCH',
       body: JSON.stringify(payload),
     },
   );
   return Object.values(data.data)[0] as T;
+}
+function logisticsPath(kind: LogisticsKind) {
+  if (kind === 'fleet') return 'delivery-fleet';
+  if (kind === 'drivers') return 'delivery-drivers';
+  return kind;
 }
 export async function getLogisticsReferences() {
   return (await request<{ success: true; data: LogisticsReferences }>('/admin/logistics-reference'))

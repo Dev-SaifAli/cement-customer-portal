@@ -80,7 +80,14 @@ const activeContractRow = {
   delivery_city: 'Jeddah',
   pricing_city_id: cityId,
   registration_delivery_locations: [
-    { id: 'SHIP-TO-01', name: 'Main Site', city: 'Jeddah', region: 'Makkah' },
+    {
+      id: 'SHIP-TO-01',
+      name: 'Main Site',
+      city: 'Jeddah',
+      region: 'Makkah',
+      latitude: 21.5,
+      longitude: 39.5,
+    },
   ],
   total_quantity_tons: '100.000',
   remaining_quantity_tons: '80.000',
@@ -124,6 +131,18 @@ function configureTransaction(
     truck?: typeof activeTruckRow | null;
     driver?: typeof activeDriverRow | null;
   } = {},
+  boundary = {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [39, 21],
+        [40, 21],
+        [40, 22],
+        [39, 22],
+        [39, 21],
+      ],
+    ],
+  },
 ) {
   connect.mockResolvedValue({ query: clientQuery, release });
   clientQuery.mockImplementation((sql: string) => {
@@ -136,6 +155,21 @@ function configureTransaction(
     if (sql.includes('from customer_drivers')) {
       return Promise.resolve({
         rows: fleet.driver === null ? [] : [fleet.driver ?? activeDriverRow],
+      });
+    }
+    if (sql.includes('from ksa_cities')) {
+      return Promise.resolve({
+        rows: [
+          {
+            id: cityId,
+            name: 'Jeddah',
+            is_hader_enabled: true,
+            is_active: true,
+            delivery_boundary: boundary,
+            boundary_updated_at: null,
+            boundary_updated_by: null,
+          },
+        ],
       });
     }
     if (sql.includes("nextval('order_reference_seq')")) {
@@ -196,14 +230,44 @@ function directOrderQuery(sql: string) {
       rows: [
         {
           delivery_locations: [
-            { id: 'SHIP-TO-01', name: 'Main Site', city: 'Jeddah', region: 'Makkah' },
+            {
+              id: 'SHIP-TO-01',
+              name: 'Main Site',
+              city: 'Jeddah',
+              region: 'Makkah',
+              latitude: 21.5,
+              longitude: 39.5,
+            },
           ],
         },
       ],
     });
   }
   if (sql.includes('from ksa_cities')) {
-    return Promise.resolve({ rows: [{ id: cityId, name: 'Jeddah', is_hader_enabled: true }] });
+    return Promise.resolve({
+      rows: [
+        {
+          id: cityId,
+          name: 'Jeddah',
+          is_hader_enabled: true,
+          is_active: true,
+          delivery_boundary: {
+            type: 'Polygon',
+            coordinates: [
+              [
+                [39, 21],
+                [40, 21],
+                [40, 22],
+                [39, 22],
+                [39, 21],
+              ],
+            ],
+          },
+          boundary_updated_at: null,
+          boundary_updated_by: null,
+        },
+      ],
+    });
   }
   if (sql.includes('from product_list_prices')) {
     return Promise.resolve({ rows: [{ list_price: '195.00' }] });
@@ -233,7 +297,13 @@ function directOrderReadRow() {
     grand_total: '5405.00',
     preferred_delivery_date: '2026-09-01',
     delivery_notes: 'Call before arrival',
-    ship_to_snapshot: { id: 'SHIP-TO-01', name: 'Main Site', city: 'Jeddah' },
+    ship_to_snapshot: {
+      id: 'SHIP-TO-01',
+      name: 'Main Site',
+      city: 'Jeddah',
+      latitude: 21.5,
+      longitude: 39.5,
+    },
     pickup_location_id: null,
     pickup_location_name: null,
     customer_truck_id: null,
@@ -307,6 +377,34 @@ describe('customer order from contract API', () => {
     );
     expect(clientQuery).toHaveBeenCalledWith('commit');
     expect(release).toHaveBeenCalledOnce();
+  });
+
+  it('allows a contract delivery order outside the boundary and stores the zone flag', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
+    configureTransaction(
+      activeContractRow,
+      {},
+      {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [40, 23],
+            [41, 23],
+            [41, 24],
+            [40, 24],
+            [40, 23],
+          ],
+        ],
+      },
+    );
+
+    const response = await createOrderRequest(10);
+
+    expect(response.status).toBe(201);
+    const insertCall = clientQuery.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into orders'),
+    );
+    expect(insertCall?.[1]).toContain('OUTSIDE_HADER_ZONE');
   });
 
   it('does not create a Hader delivery request for a pick-up order', async () => {
@@ -608,6 +706,49 @@ describe('customer direct order API', () => {
     });
     expect(response.body.data.pricing).not.toHaveProperty('productPrice');
     expect(response.body.data.pricing).not.toHaveProperty('deliveryPrice');
+  });
+
+  it('blocks a direct delivery order when its ship-to point is outside the configured boundary', async () => {
+    poolQuery.mockImplementation((sql: string) => {
+      if (sql.includes('from customer_users'))
+        return Promise.resolve({ rows: [authenticatedCustomerUserRow] });
+      if (sql.includes('registration_drafts.delivery_locations')) {
+        return Promise.resolve({
+          rows: [
+            {
+              delivery_locations: [
+                {
+                  id: 'SHIP-TO-01',
+                  name: 'Outside Site',
+                  city: 'Jeddah',
+                  region: 'Makkah',
+                  latitude: 25,
+                  longitude: 45,
+                },
+              ],
+            },
+          ],
+        });
+      }
+      return directOrderQuery(sql) ?? Promise.resolve({ rows: [] });
+    });
+
+    const response = await request(createApp())
+      .post('/api/v1/customer/orders/price')
+      .set({ Cookie: `customer_session=${createValidCustomerToken()}` })
+      .send({
+        productId,
+        quantityTons: 20,
+        fulfilmentType: 'DELIVERY',
+        shipToLocationId: 'SHIP-TO-01',
+        pickupLocationId: null,
+      });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe('DIRECT_ORDER_OUTSIDE_HADER_ZONE');
+    expect(response.body.message).toBe(
+      'Selected location is outside the current delivery service boundary.',
+    );
   });
 
   it('creates a submitted direct order with a null contract and recalculated totals', async () => {

@@ -18,12 +18,23 @@ import { customerQuotationsRouter } from '../modules/customer-quotations/custome
 import { customerShipmentsRouter } from '../modules/customer-shipments/customer-shipments.routes.js';
 import { customerUsersRouter } from '../modules/customer-users/customer-users.routes.js';
 import { healthRouter } from '../modules/health/health.routes.js';
-import { internalLogisticsRouter } from '../modules/internal-logistics/internal-logistics.routes.js';
+import {
+  haderFleetReferenceRouter,
+  internalLogisticsRouter,
+} from '../modules/internal-logistics/internal-logistics.routes.js';
 import {
   haderDeliveryRequestsRouter,
   haderShipmentsRouter,
   salesShipmentsRouter,
 } from '../modules/hader-delivery/hader-delivery.routes.js';
+import {
+  haderDispatchActionsRouter,
+  haderDispatchRouter,
+} from '../modules/hader-dispatch/hader-dispatch.routes.js';
+import {
+  haderLoadingActionsRouter,
+  haderLoadingRouter,
+} from '../modules/hader-loading/hader-loading.routes.js';
 import { registrationRouter } from '../modules/registrations/registration.routes.js';
 import { salesApplicationRouter } from '../modules/sales-applications/sales-application.routes.js';
 import { salesAuthRouter } from '../modules/sales-auth/sales-auth.routes.js';
@@ -31,9 +42,19 @@ import { salesContractsRouter } from '../modules/sales-contracts/sales-contracts
 import { salesOrdersRouter } from '../modules/sales-orders/sales-orders.routes.js';
 import { salesQuotationsRouter } from '../modules/sales-quotations/sales-quotations.routes.js';
 import { notificationsRouter } from '../modules/notifications/notifications.routes.js';
+import {
+  adminHaderCitiesRouter,
+  customerLocationValidationRouter,
+} from '../modules/hader-zones/hader-zone.routes.js';
+import {
+  adminLoadingPointsRouter,
+  haderAvailableLoadingPointsRouter,
+} from '../modules/loading-points/loading-points.routes.js';
 
 export const v1Router = Router();
 v1Router.use('/admin/product-prices', adminPricingRouter);
+v1Router.use('/admin/hader-cities', adminHaderCitiesRouter);
+v1Router.use('/admin/loading-points', adminLoadingPointsRouter);
 v1Router.use('/admin', internalLogisticsRouter);
 v1Router.use('/applications', applicationRouter);
 v1Router.use('/auth', authRouter);
@@ -52,8 +73,15 @@ v1Router.use('/customer/shipments', customerShipmentsRouter);
 v1Router.use('/customer/users', customerUsersRouter);
 v1Router.use('/health', healthRouter);
 v1Router.use('/notifications', notificationsRouter);
+v1Router.use('/location', customerLocationValidationRouter);
 v1Router.use('/hader/delivery-requests', haderDeliveryRequestsRouter);
+v1Router.use('/hader/dispatch', haderDispatchRouter);
+v1Router.use('/hader/loading-control', haderLoadingRouter);
+v1Router.use('/hader/loading-points', haderAvailableLoadingPointsRouter);
+v1Router.use('/hader/shipments', haderLoadingActionsRouter);
+v1Router.use('/hader/shipments', haderDispatchActionsRouter);
 v1Router.use('/hader/shipments', haderShipmentsRouter);
+v1Router.use('/hader', haderFleetReferenceRouter);
 v1Router.use('/registrations', registrationRouter);
 v1Router.use('/sales/applications', salesApplicationRouter);
 v1Router.use('/sales/auth', salesAuthRouter);

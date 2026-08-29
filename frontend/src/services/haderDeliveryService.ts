@@ -24,6 +24,7 @@ export interface DeliveryRequest {
   rejectionReason: string | null;
   createdAt: string;
   updatedAt: string;
+  haderZoneStatus: 'WITHIN_HADER_ZONE' | 'OUTSIDE_HADER_ZONE' | null;
 }
 export interface Shipment {
   id: string;
@@ -31,9 +32,49 @@ export interface Shipment {
   status: ShipmentStatus;
   quantityTon: number;
   scheduledDate: string | null;
+  scheduledTime: string | null;
+  assignedAt: string | null;
+  dispatchedAt: string | null;
+  assignment: {
+    transporter: { id: string; name: string | null };
+    truck: {
+      id: string;
+      number: string | null;
+      plateNumber: string | null;
+      vehicleType: string | null;
+      capacityTon: number;
+    } | null;
+    driver: {
+      id: string;
+      name: string | null;
+      mobile: string | null;
+      licenseNumber: string | null;
+    } | null;
+  } | null;
   deliveredAt: string | null;
   createdAt: string;
   deliveryRequest: DeliveryRequest;
+}
+export interface DispatchEvent {
+  eventType: string;
+  previousStatus: string | null;
+  newStatus: string | null;
+  notes: string | null;
+  actor: string;
+  createdAt: string;
+}
+export type DispatchShipment = Shipment & { history: DispatchEvent[] };
+export interface DispatchResource {
+  id: string;
+  name?: string;
+  companyName?: string;
+  truckNumber?: string;
+  plateNumber?: string;
+  vehicleType?: string;
+  capacityTon?: number;
+  driverNumber?: string;
+  mobile?: string;
+  licenseNumber?: string;
 }
 export interface InternalPagination {
   page: number;
@@ -88,6 +129,150 @@ export async function getShipment(id: string, audience: 'hader' | 'sales' = 'had
   );
   return r.data.shipment;
 }
+export async function listDispatch(params: {
+  page: number;
+  status?: string | undefined;
+  haderCityId?: string | undefined;
+  requestedDate?: string | undefined;
+  productId?: string | undefined;
+}) {
+  const q = new URLSearchParams({ page: String(params.page) });
+  for (const [key, value] of Object.entries(params))
+    if (key !== 'page' && value) q.set(key, String(value));
+  const r = await request<{
+    success: true;
+    data: { items: Shipment[]; pagination: InternalPagination };
+  }>(`/hader/dispatch?${q}`);
+  return r.data;
+}
+export async function getDispatchShipment(id: string) {
+  const r = await request<{ success: true; data: { shipment: DispatchShipment } }>(
+    `/hader/dispatch/${id}`,
+  );
+  return r.data.shipment;
+}
+export async function getDispatchFilters() {
+  const r = await request<{
+    success: true;
+    data: {
+      cities: { id: string; name: string }[];
+      products: { id: string; code: string; name: string }[];
+    };
+  }>('/hader/dispatch/filters');
+  return r.data;
+}
+export async function getDispatchResources() {
+  const [transporters, trucks, drivers] = await Promise.all([
+    request<{ success: true; data: { transporters: DispatchResource[] } }>('/hader/transporters'),
+    request<{ success: true; data: { trucks: DispatchResource[] } }>('/hader/delivery-fleet'),
+    request<{ success: true; data: { drivers: DispatchResource[] } }>('/hader/delivery-drivers'),
+  ]);
+  return {
+    transporters: transporters.data.transporters,
+    trucks: trucks.data.trucks,
+    drivers: drivers.data.drivers,
+  };
+}
+export async function assignShipment(
+  id: string,
+  payload: { transporterId: string; truckId: string; driverId: string },
+) {
+  const r = await request<{ success: true; data: { shipment: DispatchShipment } }>(
+    `/hader/shipments/${id}/assign`,
+    json('POST', payload),
+  );
+  return r.data.shipment;
+}
+export async function scheduleShipment(
+  id: string,
+  payload: { scheduledDate: string; scheduledTime: string },
+) {
+  const r = await request<{ success: true; data: { shipment: DispatchShipment } }>(
+    `/hader/shipments/${id}/schedule`,
+    json('POST', payload),
+  );
+  return r.data.shipment;
+}
+export async function dispatchShipment(id: string) {
+  const r = await request<{ success: true; data: { shipment: DispatchShipment } }>(
+    `/hader/shipments/${id}/dispatch`,
+    { method: 'POST' },
+  );
+  return r.data.shipment;
+}
+export interface LoadingBoardItem {
+  id: string;
+  shipmentNumber: string;
+  orderNumber: string;
+  customer: string;
+  product: { id: string; code: string; name: string; packaging: string };
+  quantityTon: number;
+  truck: string | null;
+  driver: string | null;
+  loadingStatus: 'WAITING' | 'NOTIFIED' | 'AT_GATE' | 'LOADING' | 'LOADED';
+  queuePosition: number | null;
+  loadingPoint: { id: string; name: string | null; type: string | null } | null;
+  notifiedAt: string | null;
+  arrivedAt: string | null;
+  atGateAt: string | null;
+  loadingStartedAt: string | null;
+  loadingCompletedAt: string | null;
+}
+export type LoadingDetail = DispatchShipment & {
+  loading: LoadingBoardItem;
+  compatibleLoadingPoints: {
+    id: string;
+    code: string;
+    name: string;
+    type: string;
+    capacityTon: number | null;
+    capacityTonPerHour: number | null;
+    maxTrucks: number;
+    status: string;
+  }[];
+};
+export async function listLoadingControl(page: number, status = '', productId = '') {
+  const q = new URLSearchParams({ page: String(page) });
+  if (status) q.set('status', status);
+  if (productId) q.set('productId', productId);
+  const r = await request<{
+    success: true;
+    data: {
+      items: LoadingBoardItem[];
+      counters: {
+        waiting: number;
+        notified: number;
+        atGate: number;
+        loading: number;
+        completed: number;
+      };
+      products: { id: string; code: string; name: string }[];
+      pagination: InternalPagination;
+    };
+  }>(`/hader/loading-control?${q}`);
+  return r.data;
+}
+export async function getLoadingShipment(id: string) {
+  const r = await request<{ success: true; data: { shipment: LoadingDetail } }>(
+    `/hader/loading-control/${id}`,
+  );
+  return r.data.shipment;
+}
+async function loadingAction(id: string, action: string, body?: unknown) {
+  const r = await request<{ success: true; data: { shipment: LoadingDetail } }>(
+    `/hader/shipments/${id}/${action}`,
+    body === undefined ? { method: 'POST' } : json('POST', body),
+  );
+  return r.data.shipment;
+}
+export const notifyLoadingDriver = (id: string, remind = false) =>
+  loadingAction(id, 'notify', { remind });
+export const recordLoadingArrival = (id: string, stage: 'PARKING' | 'GATE') =>
+  loadingAction(id, 'arrival', { stage });
+export const assignLoadingPoint = (id: string, loadingPointId: string) =>
+  loadingAction(id, 'loading-point', { loadingPointId });
+export const startShipmentLoading = (id: string) => loadingAction(id, 'start-loading');
+export const completeShipmentLoading = (id: string) => loadingAction(id, 'complete-loading');
 async function list<T>(path: string, page: number, search: string, status: string) {
   const q = new URLSearchParams({ page: String(page) });
   if (search) q.set('search', search);

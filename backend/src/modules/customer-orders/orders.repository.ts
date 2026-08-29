@@ -52,6 +52,7 @@ interface OrderReadRow {
   delivery_request_id: string | null;
   delivery_request_number: string | null;
   delivery_request_status: string | null;
+  hader_zone_status: 'WITHIN_HADER_ZONE' | 'OUTSIDE_HADER_ZONE' | null;
 }
 
 export interface OrderProcessingCandidate {
@@ -70,6 +71,7 @@ export interface OrderProcessingCandidate {
   ship_to_snapshot: unknown;
   pickup_location_id: string | null;
   pickup_location_name: string | null;
+  hader_zone_status: 'WITHIN_HADER_ZONE' | 'OUTSIDE_HADER_ZONE' | null;
 }
 
 const pageSize = 10;
@@ -163,6 +165,7 @@ export class OrdersRepository {
               product_catalog.is_active as product_active,
               orders.requested_quantity_tons, orders.fulfilment_type, orders.preferred_delivery_date,
               orders.hader_city_id, orders.hader_city_name,
+              orders.hader_zone_status,
               orders.ship_to_location_id, orders.ship_to_snapshot,
               orders.pickup_location_id, orders.pickup_location_name
        from orders
@@ -285,6 +288,7 @@ function mapOrderReadRow(row: OrderReadRow) {
     pickupTruck: objectValue(row.pickup_truck_snapshot),
     pickupDriver: objectValue(row.pickup_driver_snapshot),
     haderCity: row.hader_city_name,
+    haderZoneStatus: row.hader_zone_status,
     product: {
       id: row.product_id,
       code: row.product_code,

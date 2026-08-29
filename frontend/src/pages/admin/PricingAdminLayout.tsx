@@ -3,6 +3,8 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  Factory,
+  MapPinned,
   Menu,
   Truck,
   UserRound,
@@ -20,6 +22,13 @@ export function PricingAdminLayout() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const pricingAdmin = user?.role === 'PRICING_ADMIN';
+  const loadingOnly = user?.role === 'LOADING_USER';
+  const homePath = pricingAdmin
+    ? '/admin/product-prices'
+    : loadingOnly
+      ? '/admin/loading-points'
+      : '/admin/hader-cities';
 
   const handleLogout = async () => {
     await logout();
@@ -38,7 +47,7 @@ export function PricingAdminLayout() {
             sidebarCollapsed ? 'justify-center px-3' : 'justify-between px-4'
           }`}
         >
-          <Link to="/admin/product-prices" className={sidebarCollapsed ? 'lg:hidden' : ''}>
+          <Link to={homePath} className={sidebarCollapsed ? 'lg:hidden' : ''}>
             <Logo size="sm" />
           </Link>
           <button
@@ -60,36 +69,54 @@ export function PricingAdminLayout() {
         </div>
 
         <nav className={`space-y-1 ${sidebarCollapsed ? 'p-3' : 'p-4'}`}>
+          {!loadingOnly && (
+            <AdminNav
+              to="/admin/hader-cities"
+              label="Hader Cities"
+              icon={<MapPinned size={18} />}
+              collapsed={sidebarCollapsed}
+            />
+          )}
           <AdminNav
-            to="/admin/product-prices"
-            label="Pricing"
-            icon={<BadgeDollarSign size={18} />}
+            to="/admin/loading-points"
+            label="Loading Points"
+            icon={<Factory size={18} />}
             collapsed={sidebarCollapsed}
           />
-          <AdminNav
-            to="/admin/transporters"
-            label="Transporters"
-            icon={<Warehouse size={18} />}
-            collapsed={sidebarCollapsed}
-          />
-          <AdminNav
-            to="/admin/transporters/costs"
-            label="Transporter Costs"
-            icon={<WalletCards size={18} />}
-            collapsed={sidebarCollapsed}
-          />
-          <AdminNav
-            to="/admin/delivery-fleet"
-            label="Delivery Fleet"
-            icon={<Truck size={18} />}
-            collapsed={sidebarCollapsed}
-          />
-          <AdminNav
-            to="/admin/drivers"
-            label="Drivers"
-            icon={<UserRound size={18} />}
-            collapsed={sidebarCollapsed}
-          />
+          {pricingAdmin && (
+            <>
+              <AdminNav
+                to="/admin/product-prices"
+                label="Pricing"
+                icon={<BadgeDollarSign size={18} />}
+                collapsed={sidebarCollapsed}
+              />
+              <AdminNav
+                to="/admin/transporters"
+                label="Transporters"
+                icon={<Warehouse size={18} />}
+                collapsed={sidebarCollapsed}
+              />
+              <AdminNav
+                to="/admin/transporters/costs"
+                label="Transporter Costs"
+                icon={<WalletCards size={18} />}
+                collapsed={sidebarCollapsed}
+              />
+              <AdminNav
+                to="/admin/delivery-fleet"
+                label="Delivery Fleet"
+                icon={<Truck size={18} />}
+                collapsed={sidebarCollapsed}
+              />
+              <AdminNav
+                to="/admin/delivery-drivers"
+                label="Drivers"
+                icon={<UserRound size={18} />}
+                collapsed={sidebarCollapsed}
+              />
+            </>
+          )}
         </nav>
 
         <div className="absolute inset-x-0 bottom-0 border-t border-[#e3e1e8] p-3">

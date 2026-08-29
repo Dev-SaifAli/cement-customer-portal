@@ -5,6 +5,7 @@ export function getSalesLandingPath(role: SalesUser['role']) {
   if (role === 'HADER_MANAGER' || role === 'HADER_OPERATIONS' || role === 'DISPATCH_USER') {
     return '/hader/delivery-requests';
   }
+  if (role === 'LOADING_USER') return '/hader/loading-control';
   if (role === 'PRICE_MANAGER') return '/sales/quotations';
   return '/sales/dashboard';
 }
@@ -15,6 +16,7 @@ export function getSalesRoleLabel(role: SalesUser['role']) {
     HADER_MANAGER: 'Hader Manager',
     HADER_OPERATIONS: 'Hader Operations',
     DISPATCH_USER: 'Dispatch User',
+    LOADING_USER: 'Loading Controller',
     PRICE_MANAGER: 'Price Manager',
     PRICING_ADMIN: 'Pricing Administrator',
   };

@@ -5,6 +5,8 @@ import {
   LogOut,
   Menu,
   PackageCheck,
+  Route,
+  Factory,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -19,6 +21,7 @@ export function HaderLayout() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const loadingOnly = user?.role === 'LOADING_USER';
   const signOut = async () => {
     await logout();
     navigate('/sales/login', { replace: true });
@@ -43,16 +46,34 @@ export function HaderLayout() {
           </button>
         </div>
         <nav className="space-y-2 p-3">
+          {!loadingOnly && (
+            <Nav
+              to="/hader/delivery-requests"
+              icon={<ClipboardList size={18} />}
+              label="Delivery Requests"
+              collapsed={collapsed}
+            />
+          )}
+          {!loadingOnly && (
+            <Nav
+              to="/hader/dispatch"
+              icon={<Route size={18} />}
+              label="Dispatch Board"
+              collapsed={collapsed}
+            />
+          )}
+          {!loadingOnly && (
+            <Nav
+              to="/hader/shipments"
+              icon={<PackageCheck size={18} />}
+              label="Shipments"
+              collapsed={collapsed}
+            />
+          )}
           <Nav
-            to="/hader/delivery-requests"
-            icon={<ClipboardList size={18} />}
-            label="Delivery Requests"
-            collapsed={collapsed}
-          />
-          <Nav
-            to="/hader/shipments"
-            icon={<PackageCheck size={18} />}
-            label="Shipments"
+            to="/hader/loading-control"
+            icon={<Factory size={18} />}
+            label="Loading Control"
             collapsed={collapsed}
           />
         </nav>

@@ -35,6 +35,7 @@ export class SalesOrdersService {
           shipToLocationId: order.ship_to_location_id,
           quantityTon: Number(order.requested_quantity_tons),
           requestedDate: order.preferred_delivery_date as Date | string,
+          haderZoneStatus: order.hader_zone_status,
           salesUserId: salesUser.id,
         });
       }

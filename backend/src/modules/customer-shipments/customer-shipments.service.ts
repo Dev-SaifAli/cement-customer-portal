@@ -42,10 +42,7 @@ interface CustomerShipmentEventRow {
 export class CustomerShipmentsService {
   async list(customerUser: CustomerUser, query: ListCustomerShipmentsQuery) {
     const values: unknown[] = [customerUser.account.id];
-    const conditions = [
-      's.customer_account_id = $1',
-      'o.customer_account_id = $1',
-    ];
+    const conditions = ['s.customer_account_id = $1', 'o.customer_account_id = $1'];
 
     if (query.search) {
       values.push(`%${query.search}%`);
@@ -102,6 +99,7 @@ export class CustomerShipmentsService {
       `select id, event_type, previous_status, new_status, created_at
        from shipment_events
        where shipment_id = $1
+         and event_type not in ('DRIVER_NOTIFIED','TRUCK_ARRIVED','TRUCK_AT_GATE','LOADING_POINT_ASSIGNED')
        order by created_at asc, id asc`,
       [id],
     );

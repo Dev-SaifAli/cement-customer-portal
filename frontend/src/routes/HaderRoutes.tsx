@@ -7,8 +7,12 @@ import { HaderLayout } from '../pages/hader/HaderLayout';
 import { HaderShipmentCreate } from '../pages/hader/HaderShipmentCreate';
 import { HaderShipmentDetails } from '../pages/hader/HaderShipmentDetails';
 import { HaderShipments } from '../pages/hader/HaderShipments';
+import { HaderDispatchBoard } from '../pages/hader/HaderDispatchBoard';
+import { HaderDispatchDetails } from '../pages/hader/HaderDispatchDetails';
+import { HaderLoadingControl } from '../pages/hader/HaderLoadingControl';
+import { HaderLoadingDetails } from '../pages/hader/HaderLoadingDetails';
 
-const roles = ['HADER_MANAGER', 'HADER_OPERATIONS', 'DISPATCH_USER'];
+const roles = ['HADER_MANAGER', 'HADER_OPERATIONS', 'DISPATCH_USER', 'LOADING_USER'];
 export function HaderRoutes() {
   return (
     <CustomerThemeProvider>
@@ -22,6 +26,10 @@ export function HaderRoutes() {
               <Route path="shipments" element={<HaderShipments />} />
               <Route path="shipments/create" element={<HaderShipmentCreate />} />
               <Route path="shipments/:id" element={<HaderShipmentDetails />} />
+              <Route path="dispatch" element={<HaderDispatchBoard />} />
+              <Route path="dispatch/:id" element={<HaderDispatchDetails />} />
+              <Route path="loading-control" element={<HaderLoadingControl />} />
+              <Route path="loading-control/:id" element={<HaderLoadingDetails />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/hader/delivery-requests" replace />} />
