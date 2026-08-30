@@ -24,6 +24,8 @@ export const errorHandler: ErrorRequestHandler = (error: unknown, request, respo
   const appError =
     error instanceof AppError
       ? error
+      : isPayloadTooLargeError(error)
+        ? new AppError('Uploaded data is too large.', 413, 'PAYLOAD_TOO_LARGE')
       : request.originalUrl.startsWith('/api/v1/registrations')
         ? new AppError(
             'Registration service is temporarily unavailable.',
@@ -62,5 +64,14 @@ function isValidationErrorMap(value: unknown): value is Record<string, string> {
     value !== null &&
     !Array.isArray(value) &&
     Object.values(value).every((entry) => typeof entry === 'string')
+  );
+}
+
+function isPayloadTooLargeError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'type' in error &&
+    error.type === 'entity.too.large'
   );
 }

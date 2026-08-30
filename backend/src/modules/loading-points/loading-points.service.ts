@@ -16,6 +16,7 @@ interface LoadingPointRow extends QueryResultRow {
   product_code: string | null;
   product_name: string | null;
   packaging_type: string | null;
+  uom: string | null;
   capacity_ton: string | null;
   capacity_ton_per_hour: string | null;
   max_trucks: number;
@@ -30,6 +31,7 @@ interface ProductRow extends QueryResultRow {
   product_code: string;
   product_name: string;
   packaging_type: string;
+  uom: string;
 }
 
 export class LoadingPointsService {
@@ -85,10 +87,15 @@ export class LoadingPointsService {
         `insert into hader_loading_points
          (code,name,point_type,product_id,capacity_ton,capacity_ton_per_hour,max_trucks,
           status,created_by_sales_user_id)
-         values (upper($1),upper($1),$2,$3,$4,$5,$6,$7,$8)
+         select generated.code,generated.code,$1,$2,$3,$4,$5,$6,$7
+         from (
+           select case
+             when $1='SILO' then 'SILO-' || lpad(nextval('hader_silo_number_seq')::text, 6, '0')
+             else 'BL-' || lpad(nextval('hader_bagging_line_number_seq')::text, 6, '0')
+           end as code
+         ) generated
          returning *,null::text product_code,null::text product_name,null::text packaging_type`,
         [
-          input.pointNumber,
           input.pointType,
           input.productId,
           input.pointType === 'SILO' ? input.capacityTon : null,
@@ -138,10 +145,6 @@ export class LoadingPointsService {
       values.push(value);
       fields.push(`${column}=$${values.length}`);
     };
-    if (input.pointNumber !== undefined) {
-      set('code', input.pointNumber.toUpperCase());
-      set('name', input.pointNumber.toUpperCase());
-    }
     if (input.pointType !== undefined) set('point_type', input.pointType);
     if (input.productId !== undefined) set('product_id', input.productId);
     if (input.capacityTon !== undefined) set('capacity_ton', input.capacityTon);
@@ -233,7 +236,7 @@ export class LoadingPointsService {
 
   async products() {
     const result = await pool.query<ProductRow>(
-      `select id,product_code,product_name,packaging_type
+      `select id,product_code,product_name,packaging_type,uom
        from product_catalog where is_active=true
          and lower(packaging_type) in ('bulk','bag')
        order by product_name,product_code`,
@@ -243,13 +246,14 @@ export class LoadingPointsService {
       code: row.product_code,
       name: row.product_name,
       packagingType: row.packaging_type,
+      uom: row.uom,
       compatiblePointType: pointTypeForPackaging(row.packaging_type),
     }));
   }
 
   private async validateProduct(pointType: string, productId: string) {
     const result = await pool.query<ProductRow>(
-      `select id,product_code,product_name,packaging_type
+      `select id,product_code,product_name,packaging_type,uom
        from product_catalog where id=$1 and is_active=true`,
       [productId],
     );
@@ -283,7 +287,7 @@ export function pointTypeForPackaging(packaging: string): 'SILO' | 'BAGGING_LINE
 }
 
 const pointSelect = `select points.id,points.code,points.name,points.point_type,points.product_id,
- products.product_code,products.product_name,products.packaging_type,
+ products.product_code,products.product_name,products.packaging_type,products.uom,
  points.capacity_ton,points.capacity_ton_per_hour,points.max_trucks,
  points.status,points.created_at,points.updated_at`;
 
@@ -302,6 +306,7 @@ function mapPoint(row: LoadingPointRow) {
             code: row.product_code,
             name: row.product_name,
             packagingType: row.packaging_type,
+            uom: row.uom ?? undefined,
           }
         : null,
     capacityTon: row.capacity_ton ? Number(row.capacity_ton) : 0,

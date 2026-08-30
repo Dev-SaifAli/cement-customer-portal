@@ -8,7 +8,6 @@ export const loadingPointListSchema = z.object({
   status: z.enum(['AVAILABLE', 'BUSY', 'FULL', 'INACTIVE']).optional(),
 });
 const loadingPointFields = z.object({
-  pointNumber: z.string().trim().min(1).max(50),
   pointType: z.enum(['SILO', 'BAGGING_LINE']),
   productId: z.uuid(),
   capacityTon: z.number().finite().positive().max(999_999.999).optional(),

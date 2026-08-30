@@ -5,14 +5,11 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
-  Ellipsis,
-  Eye,
   MapPinned,
-  Pencil,
   RefreshCw,
   RotateCcw,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { HaderBoundaryMap } from '../../components/admin/HaderBoundaryMap';
 import { useSalesAuth } from '../../context/SalesAuthContext';
 import {
@@ -245,7 +242,7 @@ export function AdminHaderCities() {
 
         <div className="divide-y divide-[#e3e1e8] md:hidden">
           {!loading &&
-            rows.map((city) => (
+            rows.map((city, index) => (
               <article key={city.id} className="space-y-3 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <button
@@ -255,7 +252,9 @@ export function AdminHaderCities() {
                   >
                     {city.name}
                   </button>
-                  <Actions city={city} canEdit={canEdit} onOpen={setSelected} />
+                  <span className="text-xs font-semibold text-[#64748b]">
+                    #{(currentPage - 1) * PAGE_SIZE + index + 1}
+                  </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
                   <Dot
@@ -284,22 +283,25 @@ export function AdminHaderCities() {
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="bg-[#f8fafc] text-xs font-semibold uppercase tracking-wide text-[#64748b]">
               <tr>
+                <th className="w-16 px-4 py-3">S.No.</th>
                 <SortHeader label="City" field="city" active={sort} onSort={changeSort} />
                 <th className="px-4 py-3">Standard Delivery</th>
                 <th className="px-4 py-3">White Cement</th>
                 <SortHeader label="Boundary" field="boundary" active={sort} onSort={changeSort} />
                 <th className="px-4 py-3">Status</th>
                 <SortHeader label="Updated" field="updated" active={sort} onSort={changeSort} />
-                <th className="w-16 px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e3e1e8]">
               {loading
                 ? Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} />)
-                : rows.map((city) => {
+                : rows.map((city, index) => {
                     const price = priceByCity.get(city.id);
                     return (
                       <tr key={city.id} className="hover:bg-[#faf8fc]">
+                        <td className="px-4 py-3 text-[#64748b]">
+                          {(currentPage - 1) * PAGE_SIZE + index + 1}
+                        </td>
                         <td className="px-4 py-3">
                           <button
                             type="button"
@@ -335,9 +337,6 @@ export function AdminHaderCities() {
                           ) : (
                             'Not configured'
                           )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <Actions city={city} canEdit={canEdit} onOpen={setSelected} />
                         </td>
                       </tr>
                     );
@@ -530,66 +529,6 @@ function Dot({
       />
       {active ? yes : no}
     </span>
-  );
-}
-
-function Actions({
-  city,
-  canEdit,
-  onOpen,
-}: {
-  city: HaderBoundaryCity;
-  canEdit: boolean;
-  onOpen: (city: HaderBoundaryCity) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: MouseEvent) =>
-      !ref.current?.contains(event.target as Node) && setOpen(false);
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [open]);
-  const select = () => {
-    setOpen(false);
-    onOpen(city);
-  };
-  return (
-    <div ref={ref} className="relative inline-block text-left">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-label={`Actions for ${city.name}`}
-        aria-expanded={open}
-        title={`Actions for ${city.name}`}
-        className="inline-grid h-9 w-9 place-items-center rounded-lg border border-[#e3e1e8] text-[#64748b] hover:border-[#d7cbe0] hover:bg-[#f6f2fa] hover:text-[#54247a]"
-      >
-        <Ellipsis size={18} />
-      </button>
-      {open && (
-        <div className="absolute right-0 z-20 mt-1 w-48 rounded-lg border border-[#e3e1e8] bg-white p-1.5 text-left shadow-lg">
-          <button
-            type="button"
-            onClick={select}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-[#f6f2fa] hover:text-[#54247a]"
-          >
-            {canEdit ? <Pencil size={15} /> : <Eye size={15} />}
-            {canEdit ? 'Manage Boundary' : 'View Boundary'}
-          </button>
-          {city.boundary && canEdit && (
-            <button
-              type="button"
-              onClick={select}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-[#475569] hover:bg-[#f6f2fa] hover:text-[#54247a]"
-            >
-              <Eye size={15} />
-              View Boundary
-            </button>
-          )}
-        </div>
-      )}
-    </div>
   );
 }
 

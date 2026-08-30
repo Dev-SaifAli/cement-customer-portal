@@ -64,6 +64,60 @@ export interface DispatchEvent {
   createdAt: string;
 }
 export type DispatchShipment = Shipment & { history: DispatchEvent[] };
+export type DeliveryExecutionStatus =
+  'LOADED' | 'DISPATCHED' | 'IN_TRANSIT' | 'DELIVERED' | 'CLOSED';
+export interface DeliveryTeamShipment {
+  id: string;
+  shipmentNumber: string;
+  status: DeliveryExecutionStatus;
+  quantityTon: number;
+  equivalentBags: number | null;
+  scheduledDate: string | null;
+  scheduledTime: string | null;
+  requestedDate: string | null;
+  dispatchedAt: string | null;
+  inTransitAt: string | null;
+  deliveredAt: string | null;
+  closedAt: string | null;
+  order: { id: string; number: string };
+  contract: { id: string; reference: string | null } | null;
+  customer: { companyName: string };
+  product: { id: string; code: string; name: string; packaging: string; uom: string };
+  haderCity: { id: string | null; name: string | null };
+  shipTo: Record<string, unknown> | null;
+  assignment: Shipment['assignment'];
+  history?: DispatchEvent[];
+}
+export type ShipmentPodDocumentType = 'DELIVERY_PHOTO' | 'SIGNED_POD';
+export interface ShipmentPodDocument {
+  id: string;
+  documentType: ShipmentPodDocumentType;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  uploadedAt: string;
+}
+export interface ShipmentPod {
+  id: string;
+  shipment: { id: string; number: string };
+  receiver: string;
+  deliveredQuantityTon: number;
+  deliveryTime: string;
+  location: { latitude: number; longitude: number } | null;
+  evidence: string | null;
+  documents: ShipmentPodDocument[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface CreateShipmentPodPayload {
+  receiver: string;
+  deliveredQuantityTon: number;
+  deliveryTime: string;
+  latitude?: number;
+  longitude?: number;
+  evidence?: string;
+}
 export interface DispatchResource {
   id: string;
   name?: string;
@@ -200,6 +254,115 @@ export async function dispatchShipment(id: string) {
   );
   return r.data.shipment;
 }
+
+export async function listDeliveryTeam(params: {
+  page: number;
+  search?: string;
+  status?: DeliveryExecutionStatus | '';
+  haderCityId?: string;
+  deliveryDate?: string;
+  driverId?: string;
+  truckId?: string;
+}) {
+  const query = new URLSearchParams({ page: String(params.page) });
+  Object.entries(params).forEach(([key, value]) => {
+    if (key !== 'page' && value) query.set(key, String(value));
+  });
+  const response = await request<{
+    success: true;
+    data: { items: DeliveryTeamShipment[]; pagination: InternalPagination };
+  }>(`/hader/delivery-team?${query}`);
+  return response.data;
+}
+
+export async function getDeliveryTeamShipment(id: string) {
+  const response = await request<{
+    success: true;
+    data: { shipment: DeliveryTeamShipment };
+  }>(`/hader/delivery-team/${id}`);
+  return response.data.shipment;
+}
+
+export async function getShipmentPod(shipmentId: string): Promise<ShipmentPod | null> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}/hader/shipments/${shipmentId}/pod`, {
+      credentials: 'include',
+    });
+  } catch {
+    throw new Error('Unable to connect to the proof of delivery service.');
+  }
+  if (response.status === 404) return null;
+  const result = (await response.json().catch(() => ({}))) as {
+    success?: boolean;
+    data?: { pod?: ShipmentPod };
+    message?: string;
+    error?: { message?: string };
+  };
+  if (!response.ok || !result.data?.pod) {
+    throw new Error(result.error?.message ?? result.message ?? 'Unable to load proof of delivery.');
+  }
+  return result.data.pod;
+}
+
+export async function createShipmentPod(shipmentId: string, payload: CreateShipmentPodPayload) {
+  const response = await request<{ success: true; data: { pod: ShipmentPod } }>(
+    `/hader/shipments/${shipmentId}/pod`,
+    json('POST', payload),
+  );
+  return response.data.pod;
+}
+
+export async function uploadShipmentPodDocument(
+  shipmentId: string,
+  documentType: ShipmentPodDocumentType,
+  file: File,
+) {
+  const response = await request<{
+    success: true;
+    data: { document: ShipmentPodDocument };
+  }>(`/hader/shipments/${shipmentId}/pod/documents/${documentType}`, {
+    method: 'PUT',
+    headers: {
+      'content-type': file.type || 'application/octet-stream',
+      'x-file-name': file.name,
+    },
+    body: file,
+  });
+  return response.data.document;
+}
+
+export async function getShipmentPodDocumentBlob(shipmentId: string, documentId: string) {
+  let response: Response;
+  try {
+    response = await fetch(
+      `${apiBaseUrl}/hader/shipments/${shipmentId}/pod/documents/${documentId}`,
+      { credentials: 'include' },
+    );
+  } catch {
+    throw new Error('Unable to connect to the proof of delivery service.');
+  }
+  if (!response.ok) {
+    const result = (await response.json().catch(() => ({}))) as {
+      message?: string;
+      error?: { message?: string };
+    };
+    throw new Error(result.error?.message ?? result.message ?? 'Unable to open POD document.');
+  }
+  return response.blob();
+}
+
+async function deliveryTeamAction(id: string, action: string) {
+  const response = await request<{
+    success: true;
+    data: { shipment: DeliveryTeamShipment };
+  }>(`/hader/shipments/${id}/${action}`, { method: 'POST' });
+  return response.data.shipment;
+}
+
+export const startShipmentDelivery = (id: string) => deliveryTeamAction(id, 'start-delivery');
+export const markShipmentDelivered = (id: string) => deliveryTeamAction(id, 'deliver');
+export const closeDeliveryShipment = (id: string) => deliveryTeamAction(id, 'close');
 export interface LoadingBoardItem {
   id: string;
   shipmentNumber: string;

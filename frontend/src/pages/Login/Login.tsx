@@ -1,6 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { AlertCircle, ArrowRight, Mail, RefreshCw } from 'lucide-react';
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import Alert from '../../components/Alert/Alert';
 import AuthLayout, { visualPresets } from '../../components/AuthLayout/AuthLayout';
 import Button from '../../components/Button/Button';
@@ -36,7 +36,6 @@ function createDifferentCaptchaChallenge(current: CaptchaChallenge): CaptchaChal
 
 export default function Login() {
   const { user, loading, login } = useCustomerAuth();
-  const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -48,20 +47,14 @@ export default function Login() {
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (user) {
-      navigate('/customer/dashboard', { replace: true });
-    }
-  }, [navigate, user]);
+  const from = (location.state as { from?: Location } | null)?.from;
+  const requestedDestination =
+    from?.pathname && from.pathname !== '/login'
+      ? `${from.pathname}${from.search}${from.hash}`
+      : '/customer/dashboard';
 
   if (!loading && user) {
-    const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
-    return (
-      <Navigate
-        to={from && from !== '/login' ? from : '/customer/dashboard'}
-        replace
-      />
-    );
+    return <Navigate to={requestedDestination} replace />;
   }
 
   const validate = () => {
@@ -96,7 +89,6 @@ export default function Login() {
     setSubmitting(true);
     try {
       await login({ email: email.trim(), password });
-      navigate('/customer/dashboard', { replace: true });
     } catch (error) {
       if (error instanceof CustomerAuthApiError && error.status === 401) {
         setNotice('Invalid email or password.');

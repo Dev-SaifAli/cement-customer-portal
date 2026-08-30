@@ -102,7 +102,8 @@ export function CustomerCreateOrder() {
   const remainingAfter = Math.max(0, remaining - requestedTons);
   const rate = contract?.customerRate ?? 0;
   const subtotal = round(requestedTons * rate);
-  const vat = round(subtotal * 0.15);
+  const vatRate = contract?.vatRate ?? 0.15;
+  const vat = round(subtotal * vatRate);
   const grandTotal = round(subtotal + vat);
   const item = contract?.items[0];
   const selectedTruck = trucks.find((truck) => truck.id === truckId);
@@ -524,6 +525,7 @@ export function CustomerCreateOrder() {
           quantity={requestedTons}
           subtotal={subtotal}
           vat={vat}
+          vatRate={vatRate}
           grandTotal={grandTotal}
         />
       </div>
@@ -600,6 +602,7 @@ function OrderSummary({
   quantity,
   subtotal,
   vat,
+  vatRate,
   grandTotal,
 }: {
   contract: CustomerContractDetails;
@@ -607,6 +610,7 @@ function OrderSummary({
   quantity: number;
   subtotal: number;
   vat: number;
+  vatRate: number;
   grandTotal: number;
 }) {
   return (
@@ -625,7 +629,7 @@ function OrderSummary({
         <SummaryRow label="Requested Quantity" value={`${formatNumber(quantity)} TON`} />
         <SummaryRow label="Rate (SAR / TON)" value={formatMoney(contract.customerRate)} />
         <SummaryRow label="Subtotal" value={formatMoney(subtotal)} />
-        <SummaryRow label="VAT (15%)" value={formatMoney(vat)} />
+        <SummaryRow label={`VAT (${(vatRate * 100).toFixed(2).replace(/\.00$/, '')}%)`} value={formatMoney(vat)} />
         <div className="customer-border-soft border-t pt-3">
           <SummaryRow label="Grand Total" value={formatMoney(grandTotal)} strong />
         </div>

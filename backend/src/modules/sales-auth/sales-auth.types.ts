@@ -14,6 +14,7 @@ export type SalesRole =
   | 'HADER_OPERATIONS'
   | 'DISPATCH_USER'
   | 'LOADING_USER'
+  | 'DELIVERY_TEAM_USER'
   | 'PRICE_MANAGER'
   | 'PRICING_ADMIN';
 

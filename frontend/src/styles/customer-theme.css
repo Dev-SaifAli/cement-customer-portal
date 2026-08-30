@@ -90,8 +90,176 @@ html[data-customer-theme='dark'] .customer-portal {
 .customer-input {
   background: var(--customer-input);
 }
+.customer-portal .ts-wrapper {
+  width: 100%;
+}
+.customer-portal .ts-control {
+  min-height: 2.5rem;
+  border: 1px solid var(--customer-border);
+  border-radius: 0.5rem;
+  background-color: var(--customer-input) !important;
+  background-image: none !important;
+  color: var(--customer-text);
+  padding: 0.55rem 2.25rem 0.55rem 0.75rem;
+  font-size: 0.875rem;
+  box-shadow: none;
+}
+.customer-portal .ts-wrapper.focus .ts-control {
+  border-color: var(--customer-primary);
+  box-shadow: 0 0 0 2px var(--customer-primary-soft);
+}
+.customer-portal .ts-wrapper.disabled .ts-control {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.customer-portal .ts-dropdown,
+.customer-tom-select-dropdown {
+  z-index: 50;
+  margin-top: 0.25rem;
+  overflow: hidden;
+  border: 1px solid var(--customer-border);
+  border-radius: 0.5rem;
+  background-color: var(--customer-card) !important;
+  color: var(--customer-text);
+  box-shadow: var(--customer-shadow);
+}
+.customer-tom-select-dropdown {
+  z-index: 60;
+}
+.customer-portal .ts-dropdown .option,
+.customer-tom-select-dropdown .option {
+  padding: 0.625rem 0.75rem;
+}
+.customer-portal .ts-dropdown .active,
+.customer-tom-select-dropdown .active {
+  background: var(--customer-primary-soft);
+  color: var(--customer-primary);
+}
+.customer-portal .ts-dropdown .create,
+.customer-tom-select-dropdown .create {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-top: 1px solid var(--customer-border-soft);
+  color: var(--customer-primary);
+  font-weight: 600;
+}
+.customer-portal .ts-create-icon {
+  display: inline-grid;
+  height: 1.25rem;
+  width: 1.25rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--customer-primary-soft);
+  font-size: 1rem;
+  line-height: 1;
+}
+.customer-portal .ts-dropdown .no-results,
+.customer-tom-select-dropdown .no-results {
+  padding: 0.75rem;
+  color: var(--customer-text-muted);
+  font-size: 0.8125rem;
+}
+.customer-portal .ts-loading-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  color: var(--customer-text-muted);
+  font-size: 0.8125rem;
+}
+.customer-portal .ts-loading-spinner {
+  display: inline-block;
+  height: 0.875rem;
+  width: 0.875rem;
+  flex: none;
+  border: 2px solid var(--customer-border);
+  border-top-color: var(--customer-primary);
+  border-radius: 999px;
+  animation: customer-select-spin 0.7s linear infinite;
+}
+@keyframes customer-select-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.customer-portal .ts-control > input {
+  display: inline-block !important;
+  flex: 1 1 7rem !important;
+  min-width: 7rem !important;
+  width: auto !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--customer-text) !important;
+  caret-color: var(--customer-primary) !important;
+  opacity: 1 !important;
+  box-shadow: none !important;
+}
+.customer-portal .ts-control > input::placeholder {
+  color: var(--customer-text-muted) !important;
+  opacity: 1;
+}
 .customer-row-hover:hover {
   background: var(--customer-surface-secondary);
+}
+
+/* Shared UI primitives inherit the active Customer/Sales/Hader portal theme. */
+.customer-portal .ui-modal {
+  border-color: var(--customer-border);
+  background: var(--customer-card);
+  color: var(--customer-text);
+  box-shadow: var(--customer-shadow);
+}
+.customer-portal .ui-modal__header,
+.customer-portal .ui-modal__footer {
+  border-color: var(--customer-border-soft);
+  background: var(--customer-card);
+}
+.customer-portal .ui-control {
+  border-color: var(--customer-border);
+  background: var(--customer-input);
+  color: var(--customer-text);
+}
+.customer-portal .ui-field label {
+  color: var(--customer-text);
+}
+.customer-portal .ui-button--primary {
+  background: var(--customer-primary);
+  color: #ffffff;
+}
+.customer-portal .ui-button--primary:hover {
+  background: var(--customer-primary-hover);
+}
+.customer-portal .ui-button--secondary {
+  border-color: var(--customer-border);
+  background: var(--customer-surface);
+  color: var(--customer-text-secondary);
+}
+.customer-portal .ui-button--secondary:hover {
+  background: var(--customer-surface-secondary);
+  color: var(--customer-primary);
+}
+.customer-portal .ui-upload {
+  border-color: var(--customer-border);
+  background: var(--customer-input);
+  color: var(--customer-text);
+}
+.customer-portal .ui-upload:hover {
+  border-color: var(--customer-primary);
+  background: var(--customer-primary-soft);
+}
+.customer-portal .ui-upload__file {
+  border-color: var(--customer-border-soft);
+}
+.customer-portal .ui-upload__file small {
+  color: var(--customer-text-muted);
+}
+.customer-portal .ui-upload__file button {
+  color: var(--customer-text-muted);
+}
+.customer-portal .ui-upload__file button:hover {
+  background: var(--customer-surface-secondary);
+  color: var(--customer-danger);
 }
 .customer-portal .customer-always-light {
   background: #ffffff !important;

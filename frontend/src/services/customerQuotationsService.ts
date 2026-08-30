@@ -162,7 +162,7 @@ export class CustomerQuotationsApiError extends Error {
 
 export const getPickupLocations = async () => {
   const response = await requestCustomerQuotations<PickupLocationsResponse>(
-    '/customer/quotations/pickup-locations',
+    '/customer/pickup-locations',
   );
 
   return response.data.locations;

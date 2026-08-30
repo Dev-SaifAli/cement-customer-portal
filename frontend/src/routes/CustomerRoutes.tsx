@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
-import { CustomerAuthProvider, useCustomerAuth } from '../context/CustomerAuthContext';
+import { useCustomerAuth } from '../context/CustomerAuthContext';
+import { SessionRestoreError } from '../components/auth/SessionRestoreError';
 import { CustomerThemeProvider } from '../context/CustomerThemeContext';
 import { CustomerContractDetailsPage } from '../pages/customer/CustomerContractDetails';
 import { CustomerContracts } from '../pages/customer/CustomerContracts';
@@ -24,40 +25,38 @@ import { CustomerShipments } from '../pages/customer/CustomerShipments';
 export function CustomerRoutes() {
   return (
     <CustomerThemeProvider>
-      <CustomerAuthProvider>
-        <Routes>
-          <Route element={<RequireCustomerAuth />}>
-            <Route element={<CustomerLayout />}>
-              <Route index element={<Navigate to="dashboard" replace />} />
-              <Route path="dashboard" element={<CustomerLanding />} />
-              <Route path="profile" element={<CustomerProfile />} />
-              <Route path="locations" element={<CustomerLocations />} />
-              <Route path="products" element={<CustomerProducts />} />
-              <Route path="products/:id" element={<CustomerProductDetails />} />
-              <Route path="quotations" element={<CustomerQuotations />} />
-              <Route path="quotations/new" element={<CustomerQuotationNew />} />
-              <Route path="quotations/:id" element={<CustomerQuotationRoute />} />
-              <Route path="contracts" element={<CustomerContracts />} />
-              <Route path="contracts/:id" element={<CustomerContractDetailsPage />} />
-              <Route path="contracts/:id/order" element={<CustomerCreateOrder />} />
-              <Route path="orders" element={<CustomerOrders />} />
-              <Route path="orders/new" element={<CustomerDirectOrder />} />
-              <Route path="orders/:id" element={<CustomerOrderDetails />} />
-              <Route path="fleet" element={<CustomerFleet />} />
-              <Route path="shipments" element={<CustomerShipments />} />
-              <Route path="shipments/:id" element={<CustomerShipmentDetails />} />
-              <Route path="users" element={<CustomerUsers />} />
-            </Route>
+      <Routes>
+        <Route element={<RequireCustomerAuth />}>
+          <Route element={<CustomerLayout />}>
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<CustomerLanding />} />
+            <Route path="profile" element={<CustomerProfile />} />
+            <Route path="locations" element={<CustomerLocations />} />
+            <Route path="products" element={<CustomerProducts />} />
+            <Route path="products/:id" element={<CustomerProductDetails />} />
+            <Route path="quotations" element={<CustomerQuotations />} />
+            <Route path="quotations/new" element={<CustomerQuotationNew />} />
+            <Route path="quotations/:id" element={<CustomerQuotationRoute />} />
+            <Route path="contracts" element={<CustomerContracts />} />
+            <Route path="contracts/:id" element={<CustomerContractDetailsPage />} />
+            <Route path="contracts/:id/order" element={<CustomerCreateOrder />} />
+            <Route path="orders" element={<CustomerOrders />} />
+            <Route path="orders/new" element={<CustomerDirectOrder />} />
+            <Route path="orders/:id" element={<CustomerOrderDetails />} />
+            <Route path="fleet" element={<CustomerFleet />} />
+            <Route path="shipments" element={<CustomerShipments />} />
+            <Route path="shipments/:id" element={<CustomerShipmentDetails />} />
+            <Route path="users" element={<CustomerUsers />} />
           </Route>
-          <Route path="*" element={<Navigate to="/customer/dashboard" replace />} />
-        </Routes>
-      </CustomerAuthProvider>
+        </Route>
+        <Route path="*" element={<Navigate to="/customer/dashboard" replace />} />
+      </Routes>
     </CustomerThemeProvider>
   );
 }
 
 function RequireCustomerAuth() {
-  const { loading, user } = useCustomerAuth();
+  const { loading, refresh, restoreError, user } = useCustomerAuth();
   const location = useLocation();
 
   if (loading) {
@@ -66,6 +65,10 @@ function RequireCustomerAuth() {
         Restoring Customer session...
       </div>
     );
+  }
+
+  if (restoreError && !user) {
+    return <SessionRestoreError onRetry={() => void refresh()} />;
   }
 
   if (!user) {

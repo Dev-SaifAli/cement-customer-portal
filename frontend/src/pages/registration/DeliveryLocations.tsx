@@ -29,6 +29,7 @@ import {
   type DeliveryLocation,
 } from '../../context/RegistrationContext';
 import { createClientId } from '../../utils/createClientId';
+import { getRegistrationCities, type RegistrationCity } from '../../services/registrationService';
 
 type DeliveryLocationForm = {
   name: string;
@@ -92,8 +93,14 @@ export default function DeliveryLocations() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [mapTarget, setMapTarget] = useState<MapTarget>(null);
   const [locationToDelete, setLocationToDelete] = useState<DeliveryLocation | null>(null);
+  const [cities, setCities] = useState<RegistrationCity[]>([]);
 
   useEffect(() => setCurrentStep(4), [setCurrentStep]);
+  useEffect(() => {
+    void getRegistrationCities()
+      .then(setCities)
+      .catch(() => setCities([]));
+  }, []);
 
   const updateField = (field: keyof DeliveryLocationForm, value: string) => {
     setForm((prev) => ({
@@ -116,6 +123,9 @@ export default function DeliveryLocations() {
     if (!form.streetAddress.trim()) newErrors.streetAddress = 'Street address is required.';
     if (!form.city.trim()) newErrors.city = 'City is required.';
     if (!form.region.trim()) newErrors.region = 'Region is required.';
+    if (form.postalCode && !/^\d{5}$/.test(form.postalCode)) {
+      newErrors.postalCode = 'Enter a valid 5-digit postal code.';
+    }
     if (!form.contactPerson.trim()) newErrors.contactPerson = 'Contact person is required.';
     if (!form.contactPhone.trim()) newErrors.contactPhone = 'Contact phone is required.';
     else if (!isSaudiPhoneNumber(form.contactPhone)) {
@@ -167,9 +177,7 @@ export default function DeliveryLocations() {
       const newLocation: DeliveryLocation = {
         id: createClientId(),
         name: form.name,
-        siteId: `LOC-${Math.floor(100 + Math.random() * 900)}-${form.city
-          .slice(0, 3)
-          .toUpperCase()}`,
+        siteId: '',
         streetAddress: form.streetAddress,
         city: form.city,
         region: form.region,
@@ -293,14 +301,17 @@ export default function DeliveryLocations() {
                 />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormInput
+                  <FormSelect
                     label="City"
                     required
-                    placeholder="e.g. Jeddah"
                     value={form.city}
                     error={errors.city}
                     autoComplete="shipping address-level2"
                     onChange={(value) => updateField('city', value)}
+                    options={Array.from(
+                      new Set([form.city, ...cities.map((city) => city.name)].filter(Boolean)),
+                    )}
+                    placeholder="Select City"
                   />
 
                   <FormSelect
@@ -327,8 +338,13 @@ export default function DeliveryLocations() {
                     label="Postal Code"
                     placeholder="e.g. 21442"
                     value={form.postalCode}
+                    error={errors.postalCode}
+                    inputMode="numeric"
+                    maxLength={5}
                     autoComplete="shipping postal-code"
-                    onChange={(value) => updateField('postalCode', value)}
+                    onChange={(value) =>
+                      updateField('postalCode', value.replace(/\D/g, '').slice(0, 5))
+                    }
                   />
                 </div>
 
@@ -722,7 +738,9 @@ function LocationCard({
               )}
             </div>
 
-            <p className="text-sm text-[#777177] mt-0.5">ID: {location.siteId}</p>
+            <p className="text-sm text-[#777177] mt-0.5">
+              ID: {location.siteId || 'Assigned when saved'}
+            </p>
           </div>
         </div>
 
@@ -862,6 +880,8 @@ function FormInput({
   error,
   disabled,
   isPhone,
+  inputMode,
+  maxLength,
   autoComplete,
   onChange,
 }: {
@@ -872,6 +892,8 @@ function FormInput({
   error?: string | undefined;
   disabled?: boolean | undefined;
   isPhone?: boolean | undefined;
+  inputMode?: 'text' | 'numeric' | undefined;
+  maxLength?: number | undefined;
   autoComplete?: string | undefined;
   onChange: (value: string) => void;
 }) {
@@ -902,8 +924,8 @@ function FormInput({
 
         <input
           type={isPhone ? 'tel' : 'text'}
-          inputMode={isPhone ? 'numeric' : undefined}
-          maxLength={isPhone ? 11 : undefined}
+          inputMode={isPhone ? 'numeric' : inputMode}
+          maxLength={isPhone ? 11 : maxLength}
           value={isPhone ? formatSaudiPhoneNumber(value) : value}
           disabled={disabled}
           placeholder={placeholder}
@@ -951,6 +973,7 @@ function FormSelect({
   value,
   error,
   options,
+  placeholder,
   autoComplete,
   onChange,
 }: {
@@ -959,6 +982,7 @@ function FormSelect({
   value: string;
   error?: string | undefined;
   options: string[];
+  placeholder?: string | undefined;
   autoComplete?: string | undefined;
   onChange: (value: string) => void;
 }) {
@@ -983,7 +1007,7 @@ function FormSelect({
           }
         `}
       >
-        <option value="">Select Region</option>
+        <option value="">{placeholder ?? 'Select Region'}</option>
 
         {options.map((option) => (
           <option key={option} value={option}>

@@ -1,5 +1,4 @@
 import type { PoolClient } from 'pg';
-import { env } from '../../config/env.js';
 import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import type { CustomerUser } from '../customer-auth/customer-auth.types.js';
@@ -11,7 +10,9 @@ import {
 import { pricingLookupService } from '../pricing/pricing-lookup.service.js';
 import { haderZoneService } from '../hader-zones/hader-zone.service.js';
 import type { HaderZoneStatus } from '../hader-zones/hader-zone.types.js';
+import { pickupLocationsService } from '../pickup-locations/pickup-locations.service.js';
 import { ordersRepository } from './orders.repository.js';
+import { taxRateService } from '../tax-configurations/tax-rate.service.js';
 import type {
   CreateCustomerOrderPayload,
   CreateDirectOrderPayload,
@@ -42,6 +43,7 @@ interface LockedContractRow {
   quantity: string;
   product_price: string;
   delivery_price: string | null;
+  vat_rate: string | null;
   contract_item_id: string | null;
 }
 
@@ -150,10 +152,6 @@ interface DirectOrderContext {
 }
 
 type QueryExecutor = Pick<PoolClient, 'query'>;
-
-const directOrderPickupLocations = [
-  { id: 'ALSAFWA_PLANT_MAIN', name: 'AlSafwa Cement Plant', city: 'Jeddah' },
-] as const;
 
 export class CustomerOrdersService {
   async list(customerUser: CustomerUser, query: ListCustomerOrdersQuery) {
@@ -380,7 +378,7 @@ export class CustomerOrdersService {
         2,
       );
       const amount = round(requestedQuantityTons * customerRatePerTon, 2);
-      const vatRate = 15;
+      const vatRate = round(Number(contract.vat_rate ?? 0) * 100, 2);
       const vatAmount = round(amount * (vatRate / 100), 2);
       const grandTotal = round(amount + vatAmount, 2);
       const shipToSnapshot = resolveDeliveryLocation(contract);
@@ -642,8 +640,9 @@ async function resolveDirectOrderContext(
       );
     }
     pickupLocation =
-      directOrderPickupLocations.find((location) => location.id === payload.pickupLocationId) ??
-      null;
+      (await pickupLocationsService.listActive()).find(
+        (location) => location.id === payload.pickupLocationId,
+      ) ?? null;
     if (!pickupLocation) {
       throw new AppError(
         'The selected pickup location is not available.',
@@ -720,8 +719,9 @@ async function resolveDirectOrderContext(
 
   const customerRatePerTon = round(productPrice + deliveryPrice, 2);
   const subtotal = round(quantityTons * customerRatePerTon, 2);
-  const vatRate = round(env.QUOTATION_VAT_RATE * 100, 2);
-  const vatAmount = round(subtotal * env.QUOTATION_VAT_RATE, 2);
+  const configuredVatRate = await taxRateService.getRate(executor);
+  const vatRate = round(configuredVatRate * 100, 2);
+  const vatAmount = round(subtotal * configuredVatRate, 2);
 
   return {
     product,
@@ -794,6 +794,7 @@ async function getLockedCustomerContract(
        contracts.quantity,
        contracts.product_price,
        contracts.delivery_price,
+       contracts.vat_rate,
        (
          select contract_items.id
          from contract_items

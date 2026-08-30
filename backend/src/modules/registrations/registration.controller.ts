@@ -4,6 +4,12 @@ import { registrationService } from './registration.service.js';
 import { createRegistrationSchema, updateRegistrationSchema } from './registration.validation.js';
 
 export class RegistrationController {
+  async listCities(_request: Request, response: Response) {
+    response
+      .status(200)
+      .json({ success: true, data: { cities: await registrationService.listCities() } });
+  }
+
   async create(request: Request, response: Response) {
     const payload = createRegistrationSchema.parse(request.body ?? {});
     const registration = await registrationService.createDraft(payload);

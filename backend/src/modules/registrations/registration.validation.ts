@@ -54,12 +54,16 @@ const deliveryLocationSchema = z
   .object({
     id: z.string(),
     name: z.string().trim().min(1, 'Location name is required'),
-    siteId: z.string(),
+    siteId: z.string().optional(),
     streetAddress: z.string().trim().min(1, 'Street address is required'),
     city: z.string().trim().min(1, 'City is required'),
     region: z.string().trim().min(1, 'Region is required'),
     country: z.string().trim().min(1, 'Country is required'),
-    postalCode: z.string().optional(),
+    postalCode: z
+      .string()
+      .regex(/^\d{5}$/, 'Postal code must contain exactly 5 digits')
+      .optional()
+      .or(z.literal('')),
     contactPerson: z.string().trim().min(1, 'Contact person is required'),
     contactPhone: z.string().regex(/^\+9665\d{8}$/, 'Phone number must use +9665XXXXXXXX format'),
     latitude: z.number().min(-90).max(90).optional(),

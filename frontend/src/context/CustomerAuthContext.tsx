@@ -20,6 +20,7 @@ interface CustomerAuthContextValue {
   user: CustomerAuthUser | null;
   account: CustomerAuthAccount | null;
   loading: boolean;
+  restoreError: boolean;
   login: (payload: { email: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -31,6 +32,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<CustomerAuthUser | null>(null);
   const [account, setAccount] = useState<CustomerAuthAccount | null>(null);
   const [loading, setLoading] = useState(true);
+  const [restoreError, setRestoreError] = useState(false);
 
   const clearSession = () => {
     setUser(null);
@@ -39,15 +41,16 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    setRestoreError(false);
     try {
       const session = await getCustomerMe();
       setUser(session.user);
       setAccount(session.account);
     } catch (error) {
-      if (error instanceof CustomerAuthApiError) {
+      if (error instanceof CustomerAuthApiError && error.status === 401) {
         clearSession();
       } else {
-        clearSession();
+        setRestoreError(true);
       }
     } finally {
       setLoading(false);
@@ -62,6 +65,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     const session = await customerLogin(payload);
     setUser(session.user);
     setAccount(session.account);
+    setRestoreError(false);
   }, []);
 
   const logout = useCallback(async () => {
@@ -69,6 +73,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       await customerLogout();
     } finally {
       clearSession();
+      setRestoreError(false);
     }
   }, []);
 
@@ -77,11 +82,12 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       user,
       account,
       loading,
+      restoreError,
       login,
       logout,
       refresh,
     }),
-    [account, loading, login, logout, refresh, user],
+    [account, loading, login, logout, refresh, restoreError, user],
   );
 
   return <CustomerAuthContext.Provider value={value}>{children}</CustomerAuthContext.Provider>;

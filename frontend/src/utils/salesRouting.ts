@@ -1,11 +1,12 @@
 import type { SalesUser } from '../services/salesService';
 
 export function getSalesLandingPath(role: SalesUser['role']) {
-  if (role === 'PRICING_ADMIN') return '/admin/product-prices';
+  if (role === 'PRICING_ADMIN') return '/admin/products';
   if (role === 'HADER_MANAGER' || role === 'HADER_OPERATIONS' || role === 'DISPATCH_USER') {
     return '/hader/delivery-requests';
   }
   if (role === 'LOADING_USER') return '/hader/loading-control';
+  if (role === 'DELIVERY_TEAM_USER') return '/hader/delivery-team';
   if (role === 'PRICE_MANAGER') return '/sales/quotations';
   return '/sales/dashboard';
 }
@@ -17,6 +18,7 @@ export function getSalesRoleLabel(role: SalesUser['role']) {
     HADER_OPERATIONS: 'Hader Operations',
     DISPATCH_USER: 'Dispatch User',
     LOADING_USER: 'Loading Controller',
+    DELIVERY_TEAM_USER: 'Delivery Team User',
     PRICE_MANAGER: 'Price Manager',
     PRICING_ADMIN: 'Pricing Administrator',
   };

@@ -7,6 +7,8 @@ import {
   PackageCheck,
   Route,
   Factory,
+  MapPinned,
+  Navigation,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -22,6 +24,14 @@ export function HaderLayout() {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const loadingOnly = user?.role === 'LOADING_USER';
+  const deliveryOnly = user?.role === 'DELIVERY_TEAM_USER';
+  const haderManager = user?.role === 'HADER_MANAGER';
+  const canViewLoadingPoints = [
+    'HADER_MANAGER',
+    'HADER_OPERATIONS',
+    'DISPATCH_USER',
+    'LOADING_USER',
+  ].includes(user?.role ?? '');
   const signOut = async () => {
     await logout();
     navigate('/sales/login', { replace: true });
@@ -46,7 +56,12 @@ export function HaderLayout() {
           </button>
         </div>
         <nav className="space-y-2 p-3">
-          {!loadingOnly && (
+          {haderManager && !collapsed && (
+            <p className="px-4 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Operations
+            </p>
+          )}
+          {!loadingOnly && !deliveryOnly && (
             <Nav
               to="/hader/delivery-requests"
               icon={<ClipboardList size={18} />}
@@ -54,15 +69,7 @@ export function HaderLayout() {
               collapsed={collapsed}
             />
           )}
-          {!loadingOnly && (
-            <Nav
-              to="/hader/dispatch"
-              icon={<Route size={18} />}
-              label="Dispatch Board"
-              collapsed={collapsed}
-            />
-          )}
-          {!loadingOnly && (
+          {!loadingOnly && !deliveryOnly && (
             <Nav
               to="/hader/shipments"
               icon={<PackageCheck size={18} />}
@@ -70,12 +77,55 @@ export function HaderLayout() {
               collapsed={collapsed}
             />
           )}
-          <Nav
-            to="/hader/loading-control"
-            icon={<Factory size={18} />}
-            label="Loading Control"
-            collapsed={collapsed}
-          />
+          {!loadingOnly && !deliveryOnly && (
+            <Nav
+              to="/hader/dispatch"
+              icon={<Route size={18} />}
+              label="Dispatch Board"
+              collapsed={collapsed}
+            />
+          )}
+          {!deliveryOnly && (
+            <Nav
+              to="/hader/loading-control"
+              icon={<Factory size={18} />}
+              label="Loading Control"
+              collapsed={collapsed}
+            />
+          )}
+          {canViewLoadingPoints && (
+            <Nav
+              to="/hader/loading-points"
+              icon={<Factory size={18} />}
+              label="Silos & Bagging Lines"
+              collapsed={collapsed}
+            />
+          )}
+          {(deliveryOnly ||
+            user?.role === 'HADER_MANAGER' ||
+            user?.role === 'HADER_OPERATIONS') && (
+            <Nav
+              to="/hader/delivery-team"
+              icon={<Navigation size={18} />}
+              label="Delivery Team"
+              collapsed={collapsed}
+            />
+          )}
+          {haderManager && (
+            <>
+              {!collapsed && (
+                <p className="px-4 pb-1 pt-5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Master Data / Configuration
+                </p>
+              )}
+              <Nav
+                to="/admin/hader-cities"
+                icon={<MapPinned size={18} />}
+                label="Hader Cities"
+                collapsed={collapsed}
+              />
+            </>
+          )}
         </nav>
       </aside>
       {open && (

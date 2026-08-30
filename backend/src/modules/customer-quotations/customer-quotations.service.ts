@@ -13,16 +13,27 @@ import type {
   ListCustomerQuotationsQuery,
 } from './customer-quotations.validation.js';
 import type pg from 'pg';
+import { pickupLocationsService } from '../pickup-locations/pickup-locations.service.js';
 
 const writableRoles = new Set<CustomerUser['role']>(['CUSTOMER_ADMIN', 'PURCHASER']);
 const customerQuotationPageSize = 10;
 
-const pickupLocations = [
+const legacyPickupLocations = [
   {
     id: 'ALSAFWA_PLANT_MAIN',
+    locationNumber: 'LEGACY',
     name: 'AlSafwa Cement Plant',
+    cityId: '',
     city: 'Jeddah',
     region: 'Makkah',
+    address: 'AlSafwa Cement Plant',
+    postalCode: null,
+    latitude: null,
+    longitude: null,
+    status: 'INACTIVE' as const,
+    updatedBy: null,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
   },
 ];
 
@@ -103,13 +114,14 @@ type QuotationStatus =
   | 'CLARIFICATION_REQUESTED';
 
 export class CustomerQuotationsService {
-  getPickupLocations() {
-    return pickupLocations;
+  async getPickupLocations() {
+    return pickupLocationsService.listActive();
   }
 
   async list(customerUser: CustomerUser, query: ListCustomerQuotationsQuery) {
     const offset = (query.page - 1) * customerQuotationPageSize;
     const locations = await customerLocationsService.listLocations(customerUser);
+    const pickupLocations = await pickupLocationsService.listActive();
     const values: unknown[] = [customerUser.account.id];
     const conditions = ['customer_quotations.customer_account_id = $1'];
 
@@ -182,7 +194,7 @@ export class CustomerQuotationsService {
     const total = Number(countResult.rows[0]?.total ?? 0);
 
     return {
-      items: result.rows.map((quotation) => mapQuotationSummary(quotation, locations)),
+      items: result.rows.map((quotation) => mapQuotationSummary(quotation, locations, pickupLocations)),
       pagination: {
         page: query.page,
         pageSize: customerQuotationPageSize,
@@ -409,12 +421,14 @@ export class CustomerQuotationsService {
 
     const items = await this.getItems(quotation.id);
     const locations = await customerLocationsService.listLocations(customerUser);
+    const pickupLocations = await pickupLocationsForQuotation(quotation.pickup_location_id);
 
-    return mapQuotation(quotation, items, locations);
+    return mapQuotation(quotation, items, locations, pickupLocations);
   }
 
   private async validateRelatedData(customerUser: CustomerUser, payload: CustomerQuotationPayload) {
     let pricingCity: string;
+    const pickupLocations = await pickupLocationsService.listActive();
     if (
       payload.fulfilmentType === 'PICKUP' &&
       !pickupLocations.some((location) => location.id === payload.pickupLocationId)
@@ -677,6 +691,7 @@ function mapQuotation(
   quotation: QuotationRow,
   items: QuotationItemRow[],
   locations: Awaited<ReturnType<typeof customerLocationsService.listLocations>>,
+  pickupLocations: Awaited<ReturnType<typeof pickupLocationsService.listActive>>,
 ) {
   const commercialTermsVisible = [
     'READY_FOR_CUSTOMER',
@@ -752,6 +767,7 @@ function mapQuotation(
 function mapQuotationSummary(
   quotation: QuotationRow,
   locations: Awaited<ReturnType<typeof customerLocationsService.listLocations>>,
+  pickupLocations: Awaited<ReturnType<typeof pickupLocationsService.listActive>>,
 ) {
   const shipToLocation = locations.find(
     (location) => location.id === quotation.ship_to_location_id,
@@ -772,6 +788,13 @@ function mapQuotationSummary(
     createdAt: dateTime(quotation.created_at),
     updatedAt: dateTime(quotation.updated_at),
   };
+}
+
+async function pickupLocationsForQuotation(id: string | null) {
+  if (!id) return [];
+  const legacy = legacyPickupLocations.find((location) => location.id === id);
+  if (legacy) return [legacy];
+  try { return [await pickupLocationsService.get(id)]; } catch { return []; }
 }
 
 function dateTime(value: Date | string) {

@@ -18,6 +18,7 @@ import {
 interface SalesAuthContextValue {
   user: SalesUser | null;
   loading: boolean;
+  restoreError: boolean;
   login: (payload: { email: string; password: string }) => Promise<SalesUser>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -28,9 +29,11 @@ const SalesAuthContext = createContext<SalesAuthContextValue | undefined>(undefi
 export function SalesAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SalesUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [restoreError, setRestoreError] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    setRestoreError(false);
     try {
       const currentUser = await getSalesMe();
       setUser(currentUser);
@@ -38,7 +41,7 @@ export function SalesAuthProvider({ children }: { children: ReactNode }) {
       if (error instanceof SalesApiError && error.status === 401) {
         setUser(null);
       } else {
-        setUser(null);
+        setRestoreError(true);
       }
     } finally {
       setLoading(false);
@@ -52,6 +55,7 @@ export function SalesAuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (payload: { email: string; password: string }) => {
     const loggedInUser = await salesLogin(payload);
     setUser(loggedInUser);
+    setRestoreError(false);
     return loggedInUser;
   }, []);
 
@@ -60,6 +64,7 @@ export function SalesAuthProvider({ children }: { children: ReactNode }) {
       await salesLogout();
     } finally {
       setUser(null);
+      setRestoreError(false);
     }
   }, []);
 
@@ -67,11 +72,12 @@ export function SalesAuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       loading,
+      restoreError,
       login,
       logout,
       refresh,
     }),
-    [loading, login, logout, refresh, user],
+    [loading, login, logout, refresh, restoreError, user],
   );
 
   return <SalesAuthContext.Provider value={value}>{children}</SalesAuthContext.Provider>;
