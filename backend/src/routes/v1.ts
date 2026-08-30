@@ -58,6 +58,12 @@ import {
 } from '../modules/loading-points/loading-points.routes.js';
 import { adminPickupLocationsRouter, customerPickupLocationsRouter } from '../modules/pickup-locations/pickup-locations.routes.js';
 import { adminTaxConfigurationsRouter } from '../modules/tax-configurations/tax-configurations.routes.js';
+import { adminUsersRouter } from '../modules/admin-users/admin-users.routes.js';
+import { adminNotificationsRouter } from '../modules/admin-notifications/admin-notifications.routes.js';
+import {
+  commercialDirectorVarianceRouter,
+  shipToVarianceRouter,
+} from '../modules/ship-to-variance/ship-to-variance.routes.js';
 
 export const v1Router = Router();
 v1Router.use('/admin/product-prices', adminPricingRouter);
@@ -67,6 +73,8 @@ v1Router.use('/admin/hader-cities', adminHaderCitiesRouter);
 v1Router.use('/admin/loading-points', adminLoadingPointsRouter);
 v1Router.use('/admin/pickup-locations', adminPickupLocationsRouter);
 v1Router.use('/admin/tax-configurations', adminTaxConfigurationsRouter);
+v1Router.use('/admin/users', adminUsersRouter);
+v1Router.use('/portal-admin/notifications', adminNotificationsRouter);
 v1Router.use('/admin', internalLogisticsRouter);
 v1Router.use('/applications', applicationRouter);
 v1Router.use('/auth', authRouter);
@@ -105,3 +113,5 @@ v1Router.use('/sales/contracts', salesContractsRouter);
 v1Router.use('/sales/orders', salesOrdersRouter);
 v1Router.use('/sales/shipments', salesShipmentsRouter);
 v1Router.use('/sales/quotations', salesQuotationsRouter);
+v1Router.use('/price-manager/ship-to-variances', shipToVarianceRouter);
+v1Router.use('/commercial-director/ship-to-variance-charges', commercialDirectorVarianceRouter);

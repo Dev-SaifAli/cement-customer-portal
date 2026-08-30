@@ -11,6 +11,9 @@ import { AdminPricingRoutes } from './AdminPricingRoutes';
 import { RegistrationRoutes } from './RegistrationRoutes';
 import { SalesRoutes } from './SalesRoutes';
 import { HaderRoutes } from './HaderRoutes';
+import { PortalAdminRoutes } from './PortalAdminRoutes';
+import { CustomerThemeProvider } from '../context/CustomerThemeContext';
+import { PortalAdminLogin } from '../pages/portal-admin/PortalAdminLogin';
 
 export function AppRoutes() {
   return (
@@ -28,7 +31,16 @@ export function AppRoutes() {
       <Route element={<InternalSessionRoutes />}>
         <Route path="/sales/*" element={<SalesRoutes />} />
         <Route path="/hader/*" element={<HaderRoutes />} />
+        <Route
+          path="/admin/login"
+          element={
+            <CustomerThemeProvider>
+              <PortalAdminLogin />
+            </CustomerThemeProvider>
+          }
+        />
         <Route path="/admin/*" element={<AdminPricingRoutes />} />
+        <Route path="/portal-admin/*" element={<PortalAdminRoutes />} />
       </Route>
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>

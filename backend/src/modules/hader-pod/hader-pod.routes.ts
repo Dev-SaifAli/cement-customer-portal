@@ -16,6 +16,10 @@ haderPodRouter.get(
   '/:shipmentId/pod',
   asyncHandler(controller.show.bind(controller)),
 );
+haderPodRouter.patch(
+  '/:shipmentId/pod',
+  asyncHandler(controller.update.bind(controller)),
+);
 haderPodRouter.put(
   '/:shipmentId/pod/documents/:documentType',
   express.raw({ limit: maxRegistrationDocumentSizeBytes, type: '*/*' }),

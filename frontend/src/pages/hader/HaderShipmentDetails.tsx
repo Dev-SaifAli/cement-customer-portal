@@ -57,12 +57,6 @@ export function HaderShipmentDetails({ audience = 'hader' }: { audience?: 'hader
           <Info label="Requested Date" value={date(request.requestedDate)} />
         </Card>
       </div>
-      <section className="rounded-xl border border-slate-200 bg-white p-5">
-        <h2 className="font-bold text-[#54247a]">Status Foundation</h2>
-        <p className="mt-2 text-sm text-slate-500">
-          Dispatch, loading and live tracking actions will be implemented in a later module.
-        </p>
-      </section>
     </div>
   );
 }

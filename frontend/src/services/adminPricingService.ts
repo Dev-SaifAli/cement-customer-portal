@@ -65,9 +65,14 @@ export class AdminPricingApiError extends Error {
 }
 
 export async function getPricingConfiguration() {
-  const response = await request<{ success: boolean; data: PricingConfiguration }>(
+  const response = await request<{ success: boolean; data?: unknown }>(
     '/admin/product-prices',
   );
+
+  if (!isPricingConfiguration(response.data)) {
+    throw new AdminPricingApiError('Unable to load pricing configuration.');
+  }
+
   return response.data;
 }
 
@@ -121,4 +126,17 @@ async function request<T>(path: string, options: RequestInit = {}) {
     );
   }
   return data;
+}
+
+function isPricingConfiguration(value: unknown): value is PricingConfiguration {
+  if (typeof value !== 'object' || value === null) return false;
+
+  const configuration = value as Record<string, unknown>;
+  return (
+    Array.isArray(configuration.cities) &&
+    Array.isArray(configuration.haderCities) &&
+    Array.isArray(configuration.products) &&
+    Array.isArray(configuration.productPrices) &&
+    Array.isArray(configuration.deliveryPrices)
+  );
 }

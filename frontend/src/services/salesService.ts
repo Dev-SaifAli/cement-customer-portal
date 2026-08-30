@@ -22,7 +22,9 @@ export interface SalesUser {
     | 'LOADING_USER'
     | 'DELIVERY_TEAM_USER'
     | 'PRICE_MANAGER'
-    | 'PRICING_ADMIN';
+    | 'PRICING_ADMIN'
+    | 'COMMERCIAL_DIRECTOR'
+    | 'PORTAL_ADMINISTRATOR';
 }
 
 export type SalesQuotationStatus =

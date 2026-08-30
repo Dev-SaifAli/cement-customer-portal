@@ -10,6 +10,7 @@ import {
   LocateFixed,
   MapPin,
   PackageCheck,
+  Pencil,
   Plus,
   Route,
   Truck,
@@ -29,6 +30,7 @@ import {
   getShipmentPodDocumentBlob,
   markShipmentDelivered,
   startShipmentDelivery,
+  updateShipmentPod,
   uploadShipmentPodDocument,
   type DeliveryTeamShipment,
   type ShipmentPod,
@@ -177,6 +179,7 @@ export function HaderDeliveryTeamDetails() {
           loading={podLoading}
           error={podError}
           onAdd={() => setPodModalOpen(true)}
+          onEdit={() => setPodModalOpen(true)}
           onRefresh={async () => {
             setPodError('');
             try {
@@ -217,6 +220,7 @@ export function HaderDeliveryTeamDetails() {
         open={podModalOpen}
         shipmentId={shipment.id}
         recordedBy={user?.name ?? 'Authenticated Hader user'}
+        existingPod={pod}
         onClose={() => setPodModalOpen(false)}
         onSaved={(savedPod, warning) => {
           setPod(savedPod);
@@ -234,6 +238,7 @@ function ProofOfDeliverySection({
   loading,
   error,
   onAdd,
+  onEdit,
   onRefresh,
   onError,
 }: {
@@ -242,6 +247,7 @@ function ProofOfDeliverySection({
   loading: boolean;
   error: string;
   onAdd: () => void;
+  onEdit: () => void;
   onRefresh: () => Promise<void>;
   onError: (message: string) => void;
 }) {
@@ -282,12 +288,20 @@ function ProofOfDeliverySection({
             </p>
           )}
         </div>
-        {!pod && !error && (
-          <Button type="button" onClick={onAdd}>
+        {pod ? (
+          <Button type="button" variant="secondary" onClick={onEdit}>
             <span className="inline-flex items-center gap-2">
-              <Plus size={16} /> Add Proof of Delivery
+              <Pencil size={16} /> Edit POD
             </span>
           </Button>
+        ) : (
+          !error && (
+            <Button type="button" onClick={onAdd}>
+              <span className="inline-flex items-center gap-2">
+                <Plus size={16} /> Add Proof of Delivery
+              </span>
+            </Button>
+          )
         )}
       </div>
 
@@ -437,12 +451,14 @@ function PodFormModal({
   open,
   shipmentId,
   recordedBy,
+  existingPod,
   onClose,
   onSaved,
 }: {
   open: boolean;
   shipmentId: string;
   recordedBy: string;
+  existingPod: ShipmentPod | null;
   onClose: () => void;
   onSaved: (pod: ShipmentPod, warning?: string) => void;
 }) {
@@ -459,6 +475,27 @@ function PodFormModal({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const editing = existingPod !== null;
+  const existingDeliveryPhoto = existingPod?.documents.find(
+    (document) => document.documentType === 'DELIVERY_PHOTO',
+  );
+  const existingSignedPod = existingPod?.documents.find(
+    (document) => document.documentType === 'SIGNED_POD',
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    setReceiver(existingPod?.receiver ?? '');
+    setQuantity(existingPod ? String(existingPod.deliveredQuantityTon) : '');
+    setDeliveryTime(existingPod ? toDateTimeLocalValue(existingPod.deliveryTime) : '');
+    setCoordinates(existingPod?.location ?? null);
+    setEvidence(existingPod?.evidence ?? '');
+    setDeliveryPhoto(undefined);
+    setSignedPod(undefined);
+    setErrors({});
+    setSubmitError('');
+    setLocationError('');
+  }, [existingPod, open]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -473,34 +510,48 @@ function PodFormModal({
     setSubmitting(true);
     setSubmitError('');
     try {
-      await createShipmentPod(shipmentId, {
+      const payload = {
         receiver: receiver.trim(),
         deliveredQuantityTon: Number(quantity),
         deliveryTime: new Date(deliveryTime).toISOString(),
         ...(coordinates ?? {}),
         ...(evidence.trim() ? { evidence: evidence.trim() } : {}),
-      });
+      };
+      if (editing) {
+        await updateShipmentPod(shipmentId, payload);
+      } else {
+        await createShipmentPod(shipmentId, payload);
+      }
+
+      const documentErrors: string[] = [];
       if (deliveryPhoto) {
-        await uploadShipmentPodDocument(shipmentId, 'DELIVERY_PHOTO', deliveryPhoto);
+        try {
+          await uploadShipmentPodDocument(shipmentId, 'DELIVERY_PHOTO', deliveryPhoto);
+        } catch (cause) {
+          documentErrors.push(
+            cause instanceof Error ? cause.message : 'Unable to upload the delivery photo.',
+          );
+        }
       }
       if (signedPod) {
-        await uploadShipmentPodDocument(shipmentId, 'SIGNED_POD', signedPod);
+        try {
+          await uploadShipmentPodDocument(shipmentId, 'SIGNED_POD', signedPod);
+        } catch (cause) {
+          documentErrors.push(
+            cause instanceof Error ? cause.message : 'Unable to upload the signed POD.',
+          );
+        }
       }
       const savedPod = await getShipmentPod(shipmentId);
-      if (!savedPod) throw new Error('Proof of delivery was created but could not be reloaded.');
-      onSaved(savedPod);
+      if (!savedPod) throw new Error('Proof of delivery was saved but could not be reloaded.');
+      onSaved(
+        savedPod,
+        documentErrors.length
+          ? `Proof of delivery was saved, but a document could not be uploaded: ${documentErrors.join(' ')}`
+          : undefined,
+      );
     } catch (cause) {
-      const existingPod = await getShipmentPod(shipmentId).catch(() => null);
-      if (existingPod) {
-        onSaved(
-          existingPod,
-          cause instanceof Error
-            ? `Proof of delivery was recorded, but a document could not be uploaded: ${cause.message}`
-            : 'Proof of delivery was recorded, but a document could not be uploaded.',
-        );
-      } else {
-        setSubmitError(cause instanceof Error ? cause.message : 'Unable to save proof of delivery.');
-      }
+      setSubmitError(cause instanceof Error ? cause.message : 'Unable to save proof of delivery.');
     } finally {
       setSubmitting(false);
     }
@@ -537,7 +588,7 @@ function PodFormModal({
   return (
     <Modal
       open={open}
-      title="Add Proof of Delivery"
+      title={editing ? 'Edit Proof of Delivery' : 'Add Proof of Delivery'}
       onClose={submitting ? () => undefined : onClose}
       footer={
         <>
@@ -545,7 +596,7 @@ function PodFormModal({
             Cancel
           </Button>
           <Button type="submit" form="pod-form" loading={submitting}>
-            Save Proof of Delivery
+            {editing ? 'Save Changes' : 'Save Proof of Delivery'}
           </Button>
         </>
       }
@@ -558,7 +609,9 @@ function PodFormModal({
         )}
         <div className="customer-surface-secondary customer-border rounded-xl border px-4 py-3">
           <p className="customer-muted text-xs font-semibold uppercase tracking-wide">Recorded By</p>
-          <p className="customer-text mt-1 text-sm font-bold">{recordedBy}</p>
+          <p className="customer-text mt-1 text-sm font-bold">
+            {existingPod?.createdBy ?? recordedBy}
+          </p>
           <p className="customer-secondary mt-1 text-xs">
             Current authenticated Hader user
           </p>
@@ -640,8 +693,13 @@ function PodFormModal({
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <p className="customer-text mb-2 text-sm font-semibold">Delivery Photo</p>
+            {existingDeliveryPhoto && (
+              <p className="customer-secondary mb-2 truncate text-xs">
+                Current: {existingDeliveryPhoto.fileName}
+              </p>
+            )}
             <FileUpload
-              label="Choose delivery photo"
+              label={existingDeliveryPhoto ? 'Replace delivery photo' : 'Choose delivery photo'}
               {...(deliveryPhoto ? { file: deliveryPhoto } : {})}
               onRemove={() => setDeliveryPhoto(undefined)}
               accept=".jpg,.jpeg,.png,image/jpeg,image/png"
@@ -650,8 +708,13 @@ function PodFormModal({
           </div>
           <div>
             <p className="customer-text mb-2 text-sm font-semibold">Signed POD</p>
+            {existingSignedPod && (
+              <p className="customer-secondary mb-2 truncate text-xs">
+                Current: {existingSignedPod.fileName}
+              </p>
+            )}
             <FileUpload
-              label="Choose signed POD"
+              label={existingSignedPod ? 'Replace signed POD' : 'Choose signed POD'}
               {...(signedPod ? { file: signedPod } : {})}
               onRemove={() => setSignedPod(undefined)}
               accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
@@ -691,6 +754,12 @@ function validatePodForm(values: {
     errors.deliveryTime = 'A valid delivery time is required.';
   }
   return errors;
+}
+
+function toDateTimeLocalValue(value: string) {
+  const dateValue = new Date(value);
+  const localValue = new Date(dateValue.getTime() - dateValue.getTimezoneOffset() * 60_000);
+  return localValue.toISOString().slice(0, 16);
 }
 
 function formatFileSize(bytes: number) {

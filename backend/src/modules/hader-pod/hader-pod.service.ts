@@ -127,6 +127,69 @@ export class HaderPodService {
     return mapPod(pod, documents.rows);
   }
 
+  async update(shipmentId: string, input: CreateShipmentPodInput, actor: SalesUser) {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      const shipment = await client.query<{ id: string; status: string }>(
+        'select id,status from shipments where id=$1 for update',
+        [shipmentId],
+      );
+      if (!shipment.rows[0]) {
+        throw new AppError('Shipment was not found.', 404, 'SHIPMENT_NOT_FOUND');
+      }
+      if (shipment.rows[0].status !== 'DELIVERED') {
+        throw new AppError(
+          'Proof of delivery can only be updated for a delivered shipment.',
+          409,
+          'SHIPMENT_POD_STATUS_INVALID',
+        );
+      }
+
+      const existing = await client.query<{ id: string }>(
+        'select id from shipment_pods where shipment_id=$1 for update',
+        [shipmentId],
+      );
+      const podId = existing.rows[0]?.id;
+      if (!podId) {
+        throw new AppError(
+          'Proof of delivery was not found.',
+          404,
+          'SHIPMENT_POD_NOT_FOUND',
+        );
+      }
+
+      await client.query(
+        `update shipment_pods set
+           receiver_name=$2,delivered_quantity_ton=$3,delivery_time=$4,
+           latitude=$5,longitude=$6,evidence_notes=$7,updated_at=now()
+         where id=$1`,
+        [
+          podId,
+          input.receiver,
+          input.deliveredQuantityTon,
+          input.deliveryTime,
+          input.latitude ?? null,
+          input.longitude ?? null,
+          input.evidence?.trim() || null,
+        ],
+      );
+      await addShipmentEvent(client, shipmentId, 'POD_UPDATED', actor.id, {
+        podId,
+        deliveredQuantityTon: input.deliveredQuantityTon,
+        deliveryTime: input.deliveryTime,
+        locationUpdated: input.latitude != null && input.longitude != null,
+      });
+      await client.query('commit');
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
+    }
+    return this.get(shipmentId);
+  }
+
   async uploadDocument(
     shipmentId: string,
     documentType: ShipmentPodDocumentType,

@@ -313,6 +313,14 @@ export async function createShipmentPod(shipmentId: string, payload: CreateShipm
   return response.data.pod;
 }
 
+export async function updateShipmentPod(shipmentId: string, payload: CreateShipmentPodPayload) {
+  const response = await request<{ success: true; data: { pod: ShipmentPod } }>(
+    `/hader/shipments/${shipmentId}/pod`,
+    json('PATCH', payload),
+  );
+  return response.data.pod;
+}
+
 export async function uploadShipmentPodDocument(
   shipmentId: string,
   documentType: ShipmentPodDocumentType,

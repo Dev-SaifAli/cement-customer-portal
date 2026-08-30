@@ -20,7 +20,8 @@ export type NotificationType =
   | 'SHIPMENT_DELIVERED'
   | 'DRIVER_NOTIFIED'
   | 'PRICE_APPROVAL_REQUIRED'
-  | 'HADER_APPROVAL_REQUIRED';
+  | 'HADER_APPROVAL_REQUIRED'
+  | 'GLOBAL_ANNOUNCEMENT';
 
 export type NotificationRecipients =
   | { kind: 'SALES_ROLES'; roles: SalesRole[] }
