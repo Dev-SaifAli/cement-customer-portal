@@ -291,6 +291,8 @@ function LoadingPointForm({
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const selectedProduct = compatibleProducts.find((product) => product.id === form.productId);
+  const capacityError =
+    pointType === 'SILO' ? fieldErrors.capacityTon : fieldErrors.capacityTonPerHour;
   const updateField = (field: keyof LoadingPointInput, value: LoadingPointInput[typeof field]) => {
     setForm((current) => ({ ...current, [field]: value }));
     setFieldErrors((current) => {
@@ -398,7 +400,7 @@ function LoadingPointForm({
             </div>
           )}
           <div className="sm:col-span-5">
-            <Field label="Status" error={fieldErrors.status}>
+            <Field label="Status" {...(fieldErrors.status ? { error: fieldErrors.status } : {})}>
               <SearchableTomSelect
                 ariaLabel="Loading point status"
                 placeholder="Select status"
@@ -410,7 +412,10 @@ function LoadingPointForm({
             </Field>
           </div>
           <div className="sm:col-span-12">
-            <Field label="Product" error={fieldErrors.productId}>
+            <Field
+              label="Product"
+              {...(fieldErrors.productId ? { error: fieldErrors.productId } : {})}
+            >
               <SearchableTomSelect
                 ariaLabel="Compatible product"
                 placeholder="Select compatible product"
@@ -446,9 +451,7 @@ function LoadingPointForm({
           <div className={pointType === 'BAGGING_LINE' ? 'sm:col-span-4' : 'sm:col-span-5'}>
             <Field
               label={pointType === 'SILO' ? 'Capacity (TON)' : 'Capacity (TON/hour)'}
-              error={
-                pointType === 'SILO' ? fieldErrors.capacityTon : fieldErrors.capacityTonPerHour
-              }
+              {...(capacityError ? { error: capacityError } : {})}
             >
               <input
                 required
@@ -473,7 +476,10 @@ function LoadingPointForm({
           </div>
           {pointType === 'BAGGING_LINE' && (
             <div className="sm:col-span-4">
-              <Field label="Maximum Trucks" error={fieldErrors.maxTrucks}>
+              <Field
+                label="Maximum Trucks"
+                {...(fieldErrors.maxTrucks ? { error: fieldErrors.maxTrucks } : {})}
+              >
                 <input
                   required
                   min="1"

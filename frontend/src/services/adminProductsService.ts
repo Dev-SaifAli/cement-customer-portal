@@ -82,7 +82,7 @@ export async function listAdminBagSizes(search: string, signal?: AbortSignal) {
   if (search.trim()) params.set('search', search.trim());
   return request<{ success: boolean; data: { bagSizes: ProductBagSize[] } }>(
     `/admin/product-options/bag-sizes?${params}`,
-    { signal },
+    signal ? { signal } : {},
   ).then((result) => result.data.bagSizes);
 }
 export async function createAdminBagSize(unitWeightKg: number) {

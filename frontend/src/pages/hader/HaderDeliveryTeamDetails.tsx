@@ -246,6 +246,10 @@ function ProofOfDeliverySection({
   onError: (message: string) => void;
 }) {
   const [uploading, setUploading] = useState<ShipmentPodDocumentType | null>(null);
+  const deliveryPhotoDocument = pod?.documents.find(
+    (item) => item.documentType === 'DELIVERY_PHOTO',
+  );
+  const signedPodDocument = pod?.documents.find((item) => item.documentType === 'SIGNED_POD');
 
   const upload = async (type: ShipmentPodDocumentType, file: File | undefined) => {
     if (!file) return;
@@ -321,7 +325,7 @@ function ProofOfDeliverySection({
                 type="DELIVERY_PHOTO"
                 label="Delivery Photo"
                 icon={<Camera size={17} />}
-                document={pod.documents.find((item) => item.documentType === 'DELIVERY_PHOTO')}
+                {...(deliveryPhotoDocument ? { document: deliveryPhotoDocument } : {})}
                 uploading={uploading === 'DELIVERY_PHOTO'}
                 onUpload={(file) => void upload('DELIVERY_PHOTO', file)}
                 onError={onError}
@@ -331,7 +335,7 @@ function ProofOfDeliverySection({
                 type="SIGNED_POD"
                 label="Signed POD"
                 icon={<FileText size={17} />}
-                document={pod.documents.find((item) => item.documentType === 'SIGNED_POD')}
+                {...(signedPodDocument ? { document: signedPodDocument } : {})}
                 uploading={uploading === 'SIGNED_POD'}
                 onUpload={(file) => void upload('SIGNED_POD', file)}
                 onError={onError}
@@ -560,7 +564,11 @@ function PodFormModal({
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Receiver *" htmlFor="pod-receiver" error={errors.receiver}>
+          <FormField
+            label="Receiver *"
+            htmlFor="pod-receiver"
+            {...(errors.receiver ? { error: errors.receiver } : {})}
+          >
             <Input
               id="pod-receiver"
               value={receiver}
@@ -570,7 +578,7 @@ function PodFormModal({
           <FormField
             label="Delivered Quantity (TON) *"
             htmlFor="pod-quantity"
-            error={errors.quantity}
+            {...(errors.quantity ? { error: errors.quantity } : {})}
           >
             <Input
               id="pod-quantity"
@@ -585,7 +593,7 @@ function PodFormModal({
             <FormField
               label="Delivery Time *"
               htmlFor="pod-delivery-time"
-              error={errors.deliveryTime}
+              {...(errors.deliveryTime ? { error: errors.deliveryTime } : {})}
             >
               <Input
                 id="pod-delivery-time"
@@ -634,7 +642,7 @@ function PodFormModal({
             <p className="customer-text mb-2 text-sm font-semibold">Delivery Photo</p>
             <FileUpload
               label="Choose delivery photo"
-              file={deliveryPhoto}
+              {...(deliveryPhoto ? { file: deliveryPhoto } : {})}
               onRemove={() => setDeliveryPhoto(undefined)}
               accept=".jpg,.jpeg,.png,image/jpeg,image/png"
               onChange={(event) => setDeliveryPhoto(event.target.files?.[0])}
@@ -644,7 +652,7 @@ function PodFormModal({
             <p className="customer-text mb-2 text-sm font-semibold">Signed POD</p>
             <FileUpload
               label="Choose signed POD"
-              file={signedPod}
+              {...(signedPod ? { file: signedPod } : {})}
               onRemove={() => setSignedPod(undefined)}
               accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
               onChange={(event) => setSignedPod(event.target.files?.[0])}

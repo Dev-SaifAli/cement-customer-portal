@@ -631,7 +631,7 @@ function FilterDrawer({ filters, setFilters, addFilter, clear, apply, close }: {
                 <FilterRow
                   filter={filter}
                   update={(patch) => update(filter.id, patch)}
-                  remove={filters.length > 1 ? () => remove(filter.id) : undefined}
+                  {...(filters.length > 1 ? { remove: () => remove(filter.id) } : {})}
                 />
               </div>
             ))}
@@ -705,13 +705,18 @@ function FilterRow({ filter, update, remove }: {
         <div className="min-w-0">
           <span className="customer-secondary mb-1.5 block text-xs font-semibold">Value</span>
           <div className={between ? 'grid gap-2 sm:grid-cols-2' : ''}>
-            <FilterValue filter={filter} definition={definition} update={update} valueKey="value" />
+            <FilterValue
+              filter={filter}
+              update={update}
+              valueKey="value"
+              {...(definition ? { definition } : {})}
+            />
             {between && (
               <FilterValue
                 filter={filter}
-                definition={definition}
                 update={update}
                 valueKey="secondValue"
+                {...(definition ? { definition } : {})}
               />
             )}
           </div>

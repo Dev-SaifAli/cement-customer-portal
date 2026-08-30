@@ -47,17 +47,17 @@ export function SearchableTomSelect({
       create: false,
       options: optionsRef.current,
       placeholder,
-      dropdownParent,
+      ...(dropdownParent ? { dropdownParent } : {}),
       dropdownClass: 'ts-dropdown customer-tom-select-dropdown',
       render: {
         no_results() {
           return '<div class="no-results">No matching fields</div>';
         },
       },
-      onChange(nextValue) {
+      onChange(nextValue: string | number) {
         onChangeRef.current(String(nextValue));
       },
-      onDropdownOpen(dropdown) {
+      onDropdownOpen(dropdown: HTMLDivElement) {
         const control = instanceRef.current?.control;
         if (!control || dropdownParent !== 'body') return;
 

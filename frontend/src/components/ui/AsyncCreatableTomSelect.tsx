@@ -1,6 +1,9 @@
 import TomSelect from 'tom-select';
 import { useEffect, useRef, useState } from 'react';
 
+type TomLoadCallback = TomSelect['loadCallback'];
+type CreateOptionTemplateData = { input?: string | number };
+
 export interface AsyncSelectOption {
   value: string;
   label: string;
@@ -48,7 +51,7 @@ export function AsyncCreatableTomSelect({
         return propsRef.current.normalizeCreate(input) !== null;
       },
       render: {
-        option_create(data, escape) {
+        option_create(data: CreateOptionTemplateData, escape: (value: string) => string) {
           const normalized = propsRef.current.normalizeCreate(String(data.input ?? ''));
           return `<div class="create"><span class="ts-create-icon">+</span><span>Create <strong>${escape(normalized?.label ?? '')}</strong></span></div>`;
         },
@@ -59,17 +62,17 @@ export function AsyncCreatableTomSelect({
           return '<div class="ts-loading-row"><span class="ts-loading-spinner"></span><span>Loading bag sizes…</span></div>';
         },
       },
-      load(query, callback) {
+      load(query: string, callback: TomLoadCallback) {
         abortRef.current?.abort();
         const controller = new AbortController();
         abortRef.current = controller;
         void propsRef.current
           .loadOptions(query, controller.signal)
-          .then((options) => callback(options))
+          .then((options) => callback(options, []))
           .catch((error: unknown) => {
             if (error instanceof DOMException && error.name === 'AbortError') return;
             setMessage('Unable to load bag sizes.');
-            callback();
+            callback([], []);
           });
       },
       create(input, callback) {
@@ -96,14 +99,14 @@ export function AsyncCreatableTomSelect({
           });
         return true;
       },
-      onType(input) {
+      onType(input: string) {
         setMessage(
           input.trim() && !propsRef.current.normalizeCreate(input)
             ? 'Enter a numeric bag weight, for example 40 or 50 KG.'
             : '',
         );
       },
-      onChange(nextValue) {
+      onChange(nextValue: string | number) {
         propsRef.current.onChange(String(nextValue));
       },
     });
