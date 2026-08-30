@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import {
   formatSaudiPhoneNumber,
   getSaudiPhoneLocalDigits,
@@ -175,7 +175,6 @@ export function CustomerProfile() {
                     disabled={saving}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#54247a] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#472066] disabled:opacity-60"
                   >
-                    <Save size={16} />
                     {saving ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>

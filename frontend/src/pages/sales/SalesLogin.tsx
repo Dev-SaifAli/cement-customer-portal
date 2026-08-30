@@ -1,6 +1,6 @@
 import { AlertCircle, ArrowRight, BriefcaseBusiness, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import Logo from '../../components/Logo/Logo';
 import { useSalesAuth } from '../../context/SalesAuthContext';
 import { SalesApiError } from '../../services/salesService';
@@ -8,7 +8,6 @@ import { getSalesLandingPath } from '../../utils/salesRouting';
 
 export function SalesLogin() {
   const { user, loading, login } = useSalesAuth();
-  const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,7 +22,13 @@ export function SalesLogin() {
       : null;
 
   if (!loading && user) {
-    return <Navigate to={requestedDestination ?? getSalesLandingPath(user.role)} replace />;
+    const landingPath = getSalesLandingPath(user.role);
+    return (
+      <Navigate
+        to={user.role === 'HADER_MANAGER' ? landingPath : requestedDestination ?? landingPath}
+        replace
+      />
+    );
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -39,8 +44,7 @@ export function SalesLogin() {
 
     setSubmitting(true);
     try {
-      const loggedInUser = await login({ email, password });
-      navigate(requestedDestination ?? getSalesLandingPath(loggedInUser.role), { replace: true });
+      await login({ email, password });
     } catch (loginError) {
       setError(
         loginError instanceof SalesApiError

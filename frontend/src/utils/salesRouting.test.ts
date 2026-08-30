@@ -4,9 +4,13 @@ import { getSalesLandingPath, getSalesRoleLabel } from './salesRouting';
 describe('Sales role landing routes', () => {
   it.each([
     ['SALES_REP', '/sales/dashboard'],
-    ['HADER_MANAGER', '/sales/quotations'],
+    ['HADER_MANAGER', '/hader/delivery-requests'],
+    ['HADER_OPERATIONS', '/hader/delivery-requests'],
+    ['DISPATCH_USER', '/hader/delivery-requests'],
+    ['LOADING_USER', '/hader/loading-control'],
+    ['DELIVERY_TEAM_USER', '/hader/delivery-team'],
     ['PRICE_MANAGER', '/sales/quotations'],
-    ['PRICING_ADMIN', '/admin/product-prices'],
+    ['PRICING_ADMIN', '/admin/products'],
   ] as const)('routes %s to %s', (role, path) => {
     expect(getSalesLandingPath(role)).toBe(path);
   });

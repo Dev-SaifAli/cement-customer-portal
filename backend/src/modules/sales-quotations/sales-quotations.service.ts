@@ -12,6 +12,8 @@ import {
   pricingLookupService,
   type QuotationPricingItemRow,
 } from '../pricing/pricing-lookup.service.js';
+import { pickupLocationsService } from '../pickup-locations/pickup-locations.service.js';
+import { taxRateService } from '../tax-configurations/tax-rate.service.js';
 
 const pageSize = 10;
 const pickupLocations = [
@@ -164,7 +166,7 @@ export class SalesQuotationsService {
       this.getItems(id, quotation.pricing_city_id),
       this.getEvents(id),
     ]);
-    return this.mapDetails(quotation, items, events, user);
+    return this.mapDetails(quotation, items, events, user, await resolveDestination(quotation));
   }
 
   async startReview(id: string, user: SalesUser) {
@@ -362,7 +364,7 @@ export class SalesQuotationsService {
         );
       }
 
-      const vatRate = env.QUOTATION_VAT_RATE;
+      const vatRate = await taxRateService.getRate(client);
       const vatAmount = money(subtotal * vatRate);
       const grandTotal = money(subtotal + vatAmount);
       valuesChanged ||=
@@ -662,9 +664,9 @@ export class SalesQuotationsService {
     items: QuotationPricingItemRow[],
     events: EventRow[],
     user: SalesUser,
+    destination: Record<string, unknown> | null,
   ) {
     const contact = quotation.contact ?? {};
-    const destination = resolveDestination(quotation);
     const submittedBy = events.find((event) => event.action === 'CUSTOMER_SUBMITTED');
     const pricingComplete = Boolean(
       quotation.pricing_city_id &&
@@ -874,9 +876,12 @@ function approvalReason(quotation: QuotationRow) {
   return 'Delivery price was modified.';
 }
 
-function resolveDestination(quotation: QuotationRow) {
+async function resolveDestination(quotation: QuotationRow): Promise<Record<string, unknown> | null> {
   if (quotation.fulfilment_type === 'PICKUP') {
-    return pickupLocations.find((location) => location.id === quotation.pickup_location_id) ?? null;
+    const legacy = pickupLocations.find((location) => location.id === quotation.pickup_location_id);
+    if (legacy) return legacy;
+    if (!quotation.pickup_location_id) return null;
+    try { return await pickupLocationsService.get(quotation.pickup_location_id); } catch { return null; }
   }
   return (
     (quotation.delivery_locations ?? []).find(

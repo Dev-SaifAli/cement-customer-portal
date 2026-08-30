@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
-import { SalesAuthProvider, useSalesAuth } from '../context/SalesAuthContext';
+import { useSalesAuth } from '../context/SalesAuthContext';
+import { SessionRestoreError } from '../components/auth/SessionRestoreError';
 import { CustomerThemeProvider } from '../context/CustomerThemeContext';
 import { SalesLayout } from '../pages/sales/SalesLayout';
 import { SalesApplicationDetailsPage } from '../pages/sales/SalesApplicationDetails';
@@ -19,36 +20,34 @@ import { getSalesLandingPath } from '../utils/salesRouting';
 export function SalesRoutes() {
   return (
     <CustomerThemeProvider>
-      <SalesAuthProvider>
-        <Routes>
-          <Route path="login" element={<SalesLogin />} />
-          <Route element={<RequireSalesAuth />}>
-            <Route element={<SalesLayout />}>
-              <Route index element={<SalesRoleLanding />} />
-              <Route element={<RequireSalesRoles roles={['SALES_REP']} />}>
-                <Route path="dashboard" element={<SalesDashboard />} />
-                <Route path="applications" element={<SalesApplicationsPage />} />
-                <Route path="applications/:id" element={<SalesApplicationDetailsPage />} />
-                <Route path="contracts" element={<SalesContractsPage />} />
-                <Route path="contracts/:id" element={<SalesContractDetailsPage />} />
-                <Route path="orders" element={<SalesOrdersPage />} />
-                <Route path="orders/:id" element={<SalesOrderDetailsPage />} />
-                <Route path="shipments" element={<HaderShipments audience="sales" />} />
-                <Route path="shipments/:id" element={<HaderShipmentDetails audience="sales" />} />
-              </Route>
-              <Route
-                element={
-                  <RequireSalesRoles roles={['SALES_REP', 'HADER_MANAGER', 'PRICE_MANAGER']} />
-                }
-              >
-                <Route path="quotations" element={<SalesQuotationsPage />} />
-                <Route path="quotations/:id" element={<SalesQuotationDetailsPage />} />
-              </Route>
+      <Routes>
+        <Route path="login" element={<SalesLogin />} />
+        <Route element={<RequireSalesAuth />}>
+          <Route element={<SalesLayout />}>
+            <Route index element={<SalesRoleLanding />} />
+            <Route element={<RequireSalesRoles roles={['SALES_REP']} />}>
+              <Route path="dashboard" element={<SalesDashboard />} />
+              <Route path="applications" element={<SalesApplicationsPage />} />
+              <Route path="applications/:id" element={<SalesApplicationDetailsPage />} />
+              <Route path="contracts" element={<SalesContractsPage />} />
+              <Route path="contracts/:id" element={<SalesContractDetailsPage />} />
+              <Route path="orders" element={<SalesOrdersPage />} />
+              <Route path="orders/:id" element={<SalesOrderDetailsPage />} />
+              <Route path="shipments" element={<HaderShipments audience="sales" />} />
+              <Route path="shipments/:id" element={<HaderShipmentDetails audience="sales" />} />
+            </Route>
+            <Route
+              element={
+                <RequireSalesRoles roles={['SALES_REP', 'HADER_MANAGER', 'PRICE_MANAGER']} />
+              }
+            >
+              <Route path="quotations" element={<SalesQuotationsPage />} />
+              <Route path="quotations/:id" element={<SalesQuotationDetailsPage />} />
             </Route>
           </Route>
-          <Route path="*" element={<SalesRoleLanding />} />
-        </Routes>
-      </SalesAuthProvider>
+        </Route>
+        <Route path="*" element={<SalesRoleLanding />} />
+      </Routes>
     </CustomerThemeProvider>
   );
 }
@@ -62,27 +61,30 @@ function RequireSalesRoles({
     | 'HADER_OPERATIONS'
     | 'DISPATCH_USER'
     | 'LOADING_USER'
+    | 'DELIVERY_TEAM_USER'
     | 'PRICE_MANAGER'
     | 'PRICING_ADMIN'
   >;
 }) {
-  const { user, loading } = useSalesAuth();
+  const { user, loading, restoreError, refresh } = useSalesAuth();
 
   if (loading) return null;
+  if (restoreError && !user) return <SessionRestoreError onRetry={() => void refresh()} />;
   if (!user) return <Navigate to="/sales/login" replace />;
   if (!roles.includes(user.role)) return <Navigate to={getSalesLandingPath(user.role)} replace />;
   return <Outlet />;
 }
 
 function SalesRoleLanding() {
-  const { user, loading } = useSalesAuth();
+  const { user, loading, restoreError, refresh } = useSalesAuth();
 
   if (loading) return null;
+  if (restoreError && !user) return <SessionRestoreError onRetry={() => void refresh()} />;
   return <Navigate to={user ? getSalesLandingPath(user.role) : '/sales/login'} replace />;
 }
 
 function RequireSalesAuth() {
-  const { user, loading } = useSalesAuth();
+  const { user, loading, restoreError, refresh } = useSalesAuth();
   const location = useLocation();
 
   if (loading) {
@@ -91,6 +93,10 @@ function RequireSalesAuth() {
         Restoring Sales session...
       </div>
     );
+  }
+
+  if (restoreError && !user) {
+    return <SessionRestoreError onRetry={() => void refresh()} />;
   }
 
   if (!user) {

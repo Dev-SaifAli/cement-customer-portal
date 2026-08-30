@@ -148,7 +148,7 @@ export function CustomerQuotationNew() {
         let nextForm: FormState = {
           ...createInitialForm(),
           pickupLocationId: pickup[0]?.id ?? '',
-          shipToLocationId: locations.find((location) => location.isPrimary)?.id ?? '',
+          shipToLocationId: '',
         };
 
         const quotationToLoad = routeQuotationId ?? localStorage.getItem(draftStorageKey);

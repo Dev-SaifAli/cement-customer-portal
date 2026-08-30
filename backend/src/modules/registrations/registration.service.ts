@@ -53,10 +53,20 @@ const isValidOptionalLongitude = (value: unknown) =>
   value === undefined || (typeof value === 'number' && value >= -180 && value <= 180);
 
 export class RegistrationService {
+  async listCities() {
+    const result = await pool.query<{ id: string; name: string }>(
+      'select id, name from ksa_cities where is_active = true order by name',
+    );
+    return result.rows;
+  }
+
   async createDraft(input: UpdateRegistrationInput = {}) {
     const administrator = safeAdministrator(input.administrator);
     const password = input.administrator?.password;
     const passwordHash = password ? await bcrypt.hash(password, 12) : undefined;
+    const deliveryLocations = input.deliveryLocations
+      ? await ensureDeliveryLocationIds(input.deliveryLocations, [])
+      : [];
 
     const result = await pool.query(
       `insert into registration_drafts (
@@ -75,12 +85,13 @@ export class RegistrationService {
         JSON.stringify(input.company ?? {}),
         JSON.stringify(input.contact ?? {}),
         JSON.stringify(input.documents ?? {}),
-        input.deliveryLocations ? JSON.stringify(input.deliveryLocations) : JSON.stringify([]),
+        JSON.stringify(deliveryLocations),
         JSON.stringify(administrator ?? {}),
         passwordHash,
       ],
     );
 
+    await registerDeliveryLocationIds(String(result.rows[0]?.id), deliveryLocations);
     return mapRegistration(result.rows[0]);
   }
 
@@ -119,6 +130,9 @@ export class RegistrationService {
     const administrator = safeAdministrator(input.administrator);
     const password = input.administrator?.password;
     const passwordHash = password ? await bcrypt.hash(password, 12) : undefined;
+    const deliveryLocations = input.deliveryLocations
+      ? await ensureDeliveryLocationIds(input.deliveryLocations, current.deliveryLocations)
+      : undefined;
 
     const result = await pool.query(
       `update registration_drafts
@@ -138,12 +152,13 @@ export class RegistrationService {
         JSON.stringify(input.company ?? {}),
         JSON.stringify(input.contact ?? {}),
         JSON.stringify(mergedDocuments),
-        input.deliveryLocations ? JSON.stringify(input.deliveryLocations) : null,
+        deliveryLocations ? JSON.stringify(deliveryLocations) : null,
         JSON.stringify(administrator ?? {}),
         passwordHash,
       ],
     );
 
+    if (deliveryLocations) await registerDeliveryLocationIds(id, deliveryLocations);
     return mapRegistration(result.rows[0]);
   }
 
@@ -266,6 +281,10 @@ export class RegistrationService {
         if (!isNonEmptyString(item.country)) {
           errors[`deliveryLocations.${index}.country`] = 'Country is required.';
         }
+        if (item.postalCode && !/^\d{5}$/.test(String(item.postalCode))) {
+          errors[`deliveryLocations.${index}.postalCode`] =
+            'Postal code must contain exactly 5 digits.';
+        }
         if (!isNonEmptyString(item.contactPerson)) {
           errors[`deliveryLocations.${index}.contactPerson`] = 'Contact person is required.';
         }
@@ -314,6 +333,55 @@ export class RegistrationService {
 }
 
 export const registrationService = new RegistrationService();
+
+async function ensureDeliveryLocationIds(
+  locations: UpdateRegistrationInput['deliveryLocations'],
+  existingLocations: unknown[],
+) {
+  if (!locations) return [];
+
+  const existingSiteIds = new Map(
+    existingLocations.flatMap((value) => {
+      const location = toRecord(value);
+      return typeof location.id === 'string' && typeof location.siteId === 'string'
+        ? [[location.id, location.siteId] as const]
+        : [];
+    }),
+  );
+  const normalized = [];
+  for (const location of locations) {
+    const existingSiteId = existingSiteIds.get(location.id);
+    if (existingSiteId) {
+      normalized.push({ ...location, siteId: existingSiteId });
+      continue;
+    }
+
+    const result = await pool.query<{ site_id: string }>(
+      `select 'LOC-' || lpad(nextval('customer_location_site_id_seq')::text, 6, '0') as site_id`,
+    );
+    const siteId = result.rows[0]?.site_id;
+    if (!siteId) {
+      throw new AppError('Site ID could not be generated.', 503, 'SITE_ID_GENERATION_FAILED');
+    }
+    normalized.push({ ...location, siteId });
+  }
+  return normalized;
+}
+
+async function registerDeliveryLocationIds(
+  registrationId: string,
+  locations: NonNullable<UpdateRegistrationInput['deliveryLocations']>,
+) {
+  for (const location of locations) {
+    if (!location.id || !location.siteId) continue;
+    await pool.query(
+      `insert into customer_location_site_ids (location_id, site_id, registration_id)
+       values ($1, $2, $3)
+       on conflict (location_id) do nothing`,
+      [location.id, location.siteId, registrationId],
+    );
+  }
+}
 
 function isDocumentMetadataComplete(document: Record<string, unknown> | undefined) {
   return Boolean(

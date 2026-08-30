@@ -166,6 +166,33 @@ describe('authentication routes', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /dashboard/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /account/i })).toBeInTheDocument();
+
+    const restoreCalls = vi
+      .mocked(fetch)
+      .mock.calls.filter(([input]) => String(input).endsWith('/customer/auth/me'));
+    expect(restoreCalls).toHaveLength(1);
+  });
+
+  it('returns to the originally requested customer route after login', async () => {
+    render(
+      <MemoryRouter initialEntries={['/customer/products']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('heading', { name: 'Welcome Back', level: 1 });
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'admin@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText(/password/i, { selector: 'input' }), {
+      target: { value: 'correct-password' },
+    });
+    fillCaptchaAnswer();
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Product Catalog', level: 1 }),
+    ).toBeInTheDocument();
   });
 
   it('keeps customer login show/hide password working', async () => {
@@ -191,6 +218,36 @@ describe('authentication routes', () => {
       </MemoryRouter>,
     );
 
+    expect(
+      await screen.findByRole('heading', { name: 'Welcome Back', level: 1 }),
+    ).toBeInTheDocument();
+  });
+
+  it('does not treat a temporary session-restore failure as a logout redirect', async () => {
+    vi.mocked(fetch).mockImplementationOnce(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            success: false,
+            error: { code: 'SERVICE_UNAVAILABLE', message: 'Service unavailable.' },
+          }),
+          { status: 503, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/customer/dashboard']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Unable to restore your session')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Welcome Back', level: 1 }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }));
     expect(
       await screen.findByRole('heading', { name: 'Welcome Back', level: 1 }),
     ).toBeInTheDocument();

@@ -13,9 +13,33 @@ haderLoadingRouter.use(requireSalesAuth, access);
 haderLoadingRouter.get('/', asyncHandler(c.list.bind(c)));
 haderLoadingRouter.get('/:id', asyncHandler(c.detail.bind(c)));
 export const haderLoadingActionsRouter = Router();
-haderLoadingActionsRouter.use(requireSalesAuth, access);
-haderLoadingActionsRouter.post('/:shipmentId/notify', asyncHandler(c.notify.bind(c)));
-haderLoadingActionsRouter.post('/:shipmentId/arrival', asyncHandler(c.arrival.bind(c)));
-haderLoadingActionsRouter.post('/:shipmentId/loading-point', asyncHandler(c.point.bind(c)));
-haderLoadingActionsRouter.post('/:shipmentId/start-loading', asyncHandler(c.start.bind(c)));
-haderLoadingActionsRouter.post('/:shipmentId/complete-loading', asyncHandler(c.complete.bind(c)));
+haderLoadingActionsRouter.post(
+  '/:shipmentId/notify',
+  requireSalesAuth,
+  access,
+  asyncHandler(c.notify.bind(c)),
+);
+haderLoadingActionsRouter.post(
+  '/:shipmentId/arrival',
+  requireSalesAuth,
+  access,
+  asyncHandler(c.arrival.bind(c)),
+);
+haderLoadingActionsRouter.post(
+  '/:shipmentId/loading-point',
+  requireSalesAuth,
+  access,
+  asyncHandler(c.point.bind(c)),
+);
+haderLoadingActionsRouter.post(
+  '/:shipmentId/start-loading',
+  requireSalesAuth,
+  access,
+  asyncHandler(c.start.bind(c)),
+);
+haderLoadingActionsRouter.post(
+  '/:shipmentId/complete-loading',
+  requireSalesAuth,
+  access,
+  asyncHandler(c.complete.bind(c)),
+);

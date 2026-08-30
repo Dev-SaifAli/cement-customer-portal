@@ -8,6 +8,7 @@ export interface LoadingPointProduct {
   code: string;
   name: string;
   packagingType: string;
+  uom?: string;
   compatiblePointType?: LoadingPointType;
 }
 
@@ -25,13 +26,23 @@ export interface LoadingPoint {
 }
 
 export interface LoadingPointInput {
-  pointNumber: string;
   pointType: LoadingPointType;
   productId: string;
   capacityTon?: number;
   capacityTonPerHour?: number;
   maxTrucks?: number;
   status: LoadingPointStatus;
+}
+
+export class LoadingPointRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly fieldErrors: Record<string, string> = {},
+    public readonly code?: string,
+  ) {
+    super(message);
+    this.name = 'LoadingPointRequestError';
+  }
 }
 
 export async function listLoadingPoints(query: {
@@ -86,10 +97,15 @@ async function request<T>(path: string, options: RequestInit = {}) {
   }
   const body = (await response.json().catch(() => ({}))) as T & {
     message?: string;
-    error?: { message?: string };
+    errors?: Record<string, string>;
+    error?: { code?: string; message?: string; errors?: Record<string, string> };
   };
   if (!response.ok) {
-    throw new Error(body.error?.message ?? body.message ?? 'Unable to complete the request.');
+    throw new LoadingPointRequestError(
+      body.error?.message ?? body.message ?? 'Unable to complete the request.',
+      body.errors ?? body.error?.errors ?? {},
+      body.error?.code,
+    );
   }
   return body as T;
 }

@@ -11,6 +11,10 @@ customerLocationsRouter.get(
   '/',
   asyncHandler(customerLocationsController.list.bind(customerLocationsController)),
 );
+customerLocationsRouter.get(
+  '/cities',
+  asyncHandler(customerLocationsController.listCities.bind(customerLocationsController)),
+);
 customerLocationsRouter.post(
   '/',
   asyncHandler(customerLocationsController.create.bind(customerLocationsController)),

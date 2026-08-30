@@ -7,7 +7,6 @@ import {
   Info,
   Pencil,
   Pentagon,
-  Save,
   Trash2,
   X,
 } from 'lucide-react';
@@ -249,7 +248,6 @@ export function HaderBoundaryMap({
                   onClick={save}
                   className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#54247a] px-4 text-sm font-semibold text-white hover:bg-[#472066] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <Save size={16} />
                   {busy ? 'Saving…' : 'Save Boundary'}
                 </button>
               )}

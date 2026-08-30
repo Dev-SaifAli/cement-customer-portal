@@ -41,6 +41,23 @@ export class RegistrationServiceError extends Error {
   }
 }
 
+export interface RegistrationCity {
+  id: string;
+  name: string;
+}
+
+export const getRegistrationCities = async () => {
+  const response = await fetch(`${apiBaseUrl}/registrations/cities`);
+  const data = (await response.json().catch(() => ({}))) as {
+    success?: boolean;
+    data?: { cities?: RegistrationCity[] };
+  };
+  if (!response.ok || !data.data?.cities) {
+    throw new RegistrationServiceError('Unable to load the city list.', response.status);
+  }
+  return data.data.cities;
+};
+
 const requestRegistration = async (
   path: string,
   options?: RequestInit,

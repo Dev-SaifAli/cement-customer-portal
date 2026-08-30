@@ -60,6 +60,11 @@ describe('Silos and bagging lines management', () => {
       status: 'AVAILABLE',
     });
     expect(
+      poolQuery.mock.calls.some(([sql]) =>
+        String(sql).includes("nextval('hader_silo_number_seq')"),
+      ),
+    ).toBe(true);
+    expect(
       poolQuery.mock.calls.some(
         ([sql, values]) =>
           String(sql).includes('insert into internal_logistics_events') &&
@@ -100,6 +105,11 @@ describe('Silos and bagging lines management', () => {
       capacityTonPerHour: 20,
       maxTrucks: 2,
     });
+    expect(
+      poolQuery.mock.calls.some(([sql]) =>
+        String(sql).includes("nextval('hader_bagging_line_number_seq')"),
+      ),
+    ).toBe(true);
   });
 
   it('returns a safe conflict for a duplicate point number', async () => {

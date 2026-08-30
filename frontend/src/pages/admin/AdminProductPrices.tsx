@@ -1,41 +1,71 @@
-import { AlertCircle, Loader2, MapPin, Save, Truck } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import {
+  AlertCircle,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsUpDown,
+  Ellipsis,
+  Loader2,
+  MapPin,
+  PackagePlus,
+  RotateCcw,
+  Search,
+  X,
+} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   AdminPricingApiError,
   getPricingConfiguration,
   saveHaderDeliveryPrice,
   saveProductListPrice,
   setHaderCity,
+  type HaderDeliveryPrice,
   type PricingConfiguration,
+  type ProductListPrice,
 } from '../../services/adminPricingService';
 
-export function AdminProductPrices() {
+type Tab = 'product' | 'delivery';
+type SortKey = 'product' | 'city' | 'price' | 'updated';
+type Filters = { search: string; packaging: string; cityId: string; uom: string };
+const emptyFilters: Filters = { search: '', packaging: '', cityId: '', uom: '' };
+
+export function AdminProductPrices({ deliveryOnly = false }: { deliveryOnly?: boolean }) {
+  return <AdminProductPricesContent deliveryOnly={deliveryOnly} />;
+}
+
+function AdminProductPricesContent({ deliveryOnly }: { deliveryOnly: boolean }) {
+  const [tab, setTab] = useState<Tab>(deliveryOnly ? 'delivery' : 'product');
   const [data, setData] = useState<PricingConfiguration | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [productId, setProductId] = useState('');
   const [cityId, setCityId] = useState('');
   const [listPrice, setListPrice] = useState('');
   const [deliveryCityId, setDeliveryCityId] = useState('');
-  const [standardDeliveryPrice, setStandardDeliveryPrice] = useState('');
-  const [whiteCementDeliveryPrice, setWhiteCementDeliveryPrice] = useState('');
+  const [standardPrice, setStandardPrice] = useState('');
+  const [whitePrice, setWhitePrice] = useState('');
+  const [productErrors, setProductErrors] = useState<Record<string, string>>({});
+  const [deliveryErrors, setDeliveryErrors] = useState<Record<string, string>>({});
+  const productForm = useRef<HTMLFormElement>(null);
+  const deliveryForm = useRef<HTMLFormElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const next = await getPricingConfiguration();
-      setData(next);
-      setProductId((current) => current || next.products[0]?.id || '');
-      setCityId((current) =>
-        next.cities.some((city) => city.id === current) ? current : next.cities[0]?.id || '',
+      const result = await getPricingConfiguration();
+      setData(result);
+      setProductId((value) => value || result.products[0]?.id || '');
+      setCityId((value) =>
+        result.cities.some((city) => city.id === value) ? value : result.cities[0]?.id || '',
       );
-      setDeliveryCityId((current) =>
-        next.haderCities.some((city) => city.id === current)
-          ? current
-          : next.haderCities[0]?.id || '',
+      setDeliveryCityId((value) =>
+        result.haderCities.some((city) => city.id === value)
+          ? value
+          : result.haderCities[0]?.id || '',
       );
     } catch (failure) {
       setError(safeError(failure));
@@ -46,25 +76,23 @@ export function AdminProductPrices() {
 
   useEffect(() => void load(), [load]);
 
-  const selectedProduct = useMemo(
-    () => data?.products.find((product) => product.id === productId) ?? null,
-    [data, productId],
-  );
-  const selectedCity = data?.cities.find((item) => item.id === cityId) ?? null;
-  const selectedDeliveryCity = data?.haderCities.find((item) => item.id === deliveryCityId) ?? null;
+  const product = data?.products.find((item) => item.id === productId);
+  const city = data?.cities.find((item) => item.id === cityId);
+  const deliveryCity = data?.haderCities.find((item) => item.id === deliveryCityId);
 
-  const saveProduct = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!selectedProduct || !selectedCity || !positive(listPrice)) return;
+  const saveProduct = useCallback(async () => {
+    const errors: Record<string, string> = {};
+    if (!product) errors.product = 'Select a product.';
+    if (!city) errors.city = 'Select a city.';
+    if (!positive(listPrice)) errors.price = 'Price must be greater than zero.';
+    setProductErrors(errors);
+    if (Object.keys(errors).length || !product || !city) return;
     setSaving(true);
     setError('');
     setNotice('');
     try {
-      await saveProductListPrice(selectedProduct.id, {
-        cityId: selectedCity.id,
-        listPrice: Number(listPrice),
-      });
-      setNotice(`${selectedProduct.productCode} list price saved for ${selectedCity.name}.`);
+      await saveProductListPrice(product.id, { cityId: city.id, listPrice: Number(listPrice) });
+      setNotice('Saved successfully');
       setListPrice('');
       await load();
     } catch (failure) {
@@ -72,431 +100,872 @@ export function AdminProductPrices() {
     } finally {
       setSaving(false);
     }
-  };
+  }, [city, listPrice, load, product]);
 
-  const saveDelivery = async (event: FormEvent) => {
-    event.preventDefault();
-    if (
-      !selectedDeliveryCity ||
-      !nonnegative(standardDeliveryPrice) ||
-      !nonnegative(whiteCementDeliveryPrice)
-    )
-      return;
+  const saveDelivery = useCallback(async () => {
+    const errors: Record<string, string> = {};
+    if (!deliveryCity) errors.city = 'Select a city.';
+    if (!nonnegative(standardPrice)) errors.standard = 'Enter a valid delivery price.';
+    if (!nonnegative(whitePrice)) errors.white = 'Enter a valid delivery price.';
+    setDeliveryErrors(errors);
+    if (Object.keys(errors).length || !deliveryCity) return;
     setSaving(true);
     setError('');
     setNotice('');
     try {
       await saveHaderDeliveryPrice({
-        cityId: selectedDeliveryCity.id,
-        standardDeliveryPrice: Number(standardDeliveryPrice),
-        whiteCementDeliveryPrice: Number(whiteCementDeliveryPrice),
+        cityId: deliveryCity.id,
+        standardDeliveryPrice: Number(standardPrice),
+        whiteCementDeliveryPrice: Number(whitePrice),
       });
-      setNotice(`Hader delivery price saved for ${selectedDeliveryCity.name}.`);
-      setStandardDeliveryPrice('');
-      setWhiteCementDeliveryPrice('');
+      setNotice('Saved successfully');
+      setStandardPrice('');
+      setWhitePrice('');
       await load();
     } catch (failure) {
       setError(safeError(failure));
     } finally {
       setSaving(false);
     }
+  }, [deliveryCity, load, standardPrice, whitePrice]);
+
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 's') return;
+      event.preventDefault();
+      if (saving) return;
+      if (tab === 'product' && listPrice.trim()) void saveProduct();
+      if (tab === 'delivery' && (standardPrice.trim() || whitePrice.trim())) void saveDelivery();
+    };
+    window.addEventListener('keydown', shortcut);
+    return () => window.removeEventListener('keydown', shortcut);
+  }, [listPrice, saveDelivery, saveProduct, saving, standardPrice, tab, whitePrice]);
+
+  const latest = useMemo(() => {
+    const rows = tab === 'product' ? data?.productPrices : data?.deliveryPrices;
+    return (rows ?? []).reduce<ProductListPrice | HaderDeliveryPrice | null>(
+      (current, row) =>
+        !current || new Date(row.updatedAt) > new Date(current.updatedAt) ? row : current,
+      null,
+    );
+  }, [data, tab]);
+
+  const editProduct = (price: ProductListPrice) => {
+    setProductId(price.productId);
+    setCityId(price.cityId);
+    setListPrice(String(price.listPrice));
+    productForm.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+  const editDelivery = (price: HaderDeliveryPrice) => {
+    setDeliveryCityId(price.cityId);
+    setStandardPrice(String(price.standardDeliveryPrice));
+    setWhitePrice(String(price.whiteCementDeliveryPrice));
+    deliveryForm.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">Product and Delivery Pricing</h1>
-        <p className="mt-1 text-sm text-[#64748b]">
-          Configure authoritative list prices by product, packaging, and city. Prices are SAR / TON.
+    <div className="relative mx-auto max-w-[1500px] space-y-4 overflow-hidden">
+      <div className="customer-muted flex items-center gap-1.5 text-xs">
+        {!deliveryOnly && (
+          <>
+            Products <ChevronRight size={13} />
+          </>
+        )}
+        <span className="customer-primary font-semibold">
+          {deliveryOnly ? 'Delivery Pricing' : tab === 'product' ? 'Product Pricing' : 'Delivery Pricing'}
+        </span>
+      </div>
+      <div className="customer-border-soft flex flex-col gap-2 border-b sm:flex-row sm:items-end sm:justify-between">
+        {!deliveryOnly && <div role="tablist" className="flex gap-1">
+          <TabButton
+            active={tab === 'product'}
+            onClick={() => {
+              setTab('product');
+              setNotice('');
+            }}
+          >
+            Product Pricing
+          </TabButton>
+          <TabButton
+            active={tab === 'delivery'}
+            onClick={() => {
+              setTab('delivery');
+              setNotice('');
+            }}
+          >
+            Delivery Pricing
+          </TabButton>
+        </div>}
+        <p className="customer-muted pb-2 text-xs">
+          {latest ? (
+            <>
+              Last updated: {formatDateTime(latest.updatedAt)}{' '}
+              <strong className="customer-text">by {latest.configuredBy}</strong>
+            </>
+          ) : (
+            'Not updated yet.'
+          )}
         </p>
       </div>
-
       {error && <Message error>{error}</Message>}
       {notice && <Message>{notice}</Message>}
       {loading ? (
-        <div className="flex min-h-52 items-center justify-center text-sm text-[#64748b]">
-          <Loader2 className="mr-2 animate-spin" size={17} /> Loading pricing configuration...
-        </div>
-      ) : (
-        <>
-          <PricingSection title="Product Price Master">
-            <form onSubmit={saveProduct} className="grid gap-3 lg:grid-cols-[2fr_1fr_1fr_auto]">
-              <Field label="Product">
+        <Loading />
+      ) : tab === 'product' ? (
+        <div className="space-y-4">
+          <PageHeading
+            title="Product Pricing"
+            subtitle="Manage authoritative product list prices by product, packaging and city."
+            action={
+              <button
+                className={primaryButton}
+                onClick={() => productForm.current?.scrollIntoView({ behavior: 'smooth' })}
+              >
+                <PackagePlus size={16} /> Add Product Price
+              </button>
+            }
+          />
+          <Panel>
+            <form
+              ref={productForm}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveProduct();
+              }}
+              className="grid gap-3 lg:grid-cols-[2fr_1fr_1fr_auto]"
+            >
+              <Field label="Product" error={productErrors.product}>
                 <select
+                  className={input}
                   value={productId}
-                  onChange={(e) => setProductId(e.target.value)}
-                  className={input}
+                  onChange={(event) => {
+                    setProductId(event.target.value);
+                    clearField(setProductErrors, 'product');
+                  }}
                 >
-                  {data?.products.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.productCode} — {product.productName}
+                  <option value="">Select product</option>
+                  {data?.products.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.productCode} — {item.productName}
                     </option>
                   ))}
                 </select>
               </Field>
-              <Field label="KSA City">
+              <Field label="KSA City" error={productErrors.city}>
                 <select
-                  value={cityId}
-                  onChange={(e) => setCityId(e.target.value)}
                   className={input}
-                  required
+                  value={cityId}
+                  onChange={(event) => {
+                    setCityId(event.target.value);
+                    clearField(setProductErrors, 'city');
+                  }}
                 >
-                  <option value="">Select KSA city</option>
-                  {data?.cities.map((city) => (
-                    <option key={city.id} value={city.id}>
-                      {city.name}
+                  <option value="">Select city</option>
+                  {data?.cities.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
                     </option>
                   ))}
                 </select>
               </Field>
-              <Field label="List Price (SAR / TON)">
+              <Field label="List Price" suffix="SAR / TON" error={productErrors.price}>
                 <input
-                  value={listPrice}
-                  onChange={(e) => setListPrice(e.target.value)}
                   className={input}
                   type="number"
                   min="0.01"
                   step="0.01"
-                  required
+                  inputMode="decimal"
+                  value={listPrice}
+                  onChange={(event) => {
+                    setListPrice(event.target.value);
+                    if (positive(event.target.value)) clearField(setProductErrors, 'price');
+                  }}
                 />
               </Field>
-              <button disabled={saving || !selectedProduct} className={`${primaryButton} self-end`}>
-                <Save size={15} /> Save Price
+              <button className={`${primaryButton} self-end`} disabled={saving}>
+                Save Price
               </button>
             </form>
-            {selectedProduct && (
-              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 rounded-lg bg-[#f8fafc] px-3 py-2 text-xs text-[#64748b]">
-                <span>
-                  <strong className="text-[#1a1b23]">{selectedProduct.productCode}</strong>
-                </span>
-                <span>{selectedProduct.productName}</span>
-                <span>
-                  Packaging:{' '}
-                  <strong className="text-[#1a1b23]">{selectedProduct.packagingType}</strong>
-                </span>
-                <span>
-                  UOM: <strong className="text-[#1a1b23]">{selectedProduct.uom}</strong>
-                </span>
-              </div>
-            )}
-            <PriceTable data={data} />
-          </PricingSection>
-
-          <PricingSection title="Hader Delivery Price">
-            <form onSubmit={saveDelivery} className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto]">
-              <Field label="Hader City">
+          </Panel>
+          <ProductTable data={data} onEdit={editProduct} />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <PageHeading
+            title="Hader Delivery Pricing"
+            subtitle="Manage delivery rates by Hader city and cement type."
+          />
+          <Panel>
+            <form
+              ref={deliveryForm}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveDelivery();
+              }}
+              className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto]"
+            >
+              <Field label="Hader City" error={deliveryErrors.city}>
                 <select
-                  value={deliveryCityId}
-                  onChange={(e) => setDeliveryCityId(e.target.value)}
                   className={input}
-                  required
+                  value={deliveryCityId}
+                  onChange={(event) => {
+                    setDeliveryCityId(event.target.value);
+                    clearField(setDeliveryErrors, 'city');
+                  }}
                 >
-                  <option value="">Select Hader city</option>
-                  {data?.haderCities.map((city) => (
-                    <option key={city.id} value={city.id}>
-                      {city.name}
+                  <option value="">Select city</option>
+                  {data?.haderCities.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
                     </option>
                   ))}
                 </select>
               </Field>
-              <Field label="Standard Delivery Price (SAR / TON)">
+              <Field
+                label="Standard Delivery Price"
+                suffix="SAR / TON"
+                error={deliveryErrors.standard}
+              >
                 <input
-                  value={standardDeliveryPrice}
-                  onChange={(e) => setStandardDeliveryPrice(e.target.value)}
                   className={input}
                   type="number"
                   min="0"
                   step="0.01"
-                  required
+                  value={standardPrice}
+                  onChange={(event) => {
+                    setStandardPrice(event.target.value);
+                    if (nonnegative(event.target.value)) clearField(setDeliveryErrors, 'standard');
+                  }}
                 />
               </Field>
-              <Field label="White Cement Delivery Price (SAR / TON)">
+              <Field
+                label="White Cement Delivery Price"
+                suffix="SAR / TON"
+                error={deliveryErrors.white}
+              >
                 <input
-                  value={whiteCementDeliveryPrice}
-                  onChange={(e) => setWhiteCementDeliveryPrice(e.target.value)}
                   className={input}
                   type="number"
                   min="0"
                   step="0.01"
-                  required
+                  value={whitePrice}
+                  onChange={(event) => {
+                    setWhitePrice(event.target.value);
+                    if (nonnegative(event.target.value)) clearField(setDeliveryErrors, 'white');
+                  }}
                 />
               </Field>
-              <button disabled={saving} className={`${primaryButton} self-end`}>
-                <Truck size={15} /> Save Delivery Price
+              <button className={`${primaryButton} self-end`} disabled={saving}>
+                Save Delivery Price
               </button>
             </form>
-            <DeliveryTable data={data} />
-          </PricingSection>
-
-          <PricingSection title="Hader City Configuration">
-            <p className="mb-3 text-xs text-[#64748b]">
-              Select which active KSA cities are available for Hader delivery pricing.
-            </p>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {data?.cities.map((city) => (
-                <button
-                  key={city.id}
-                  type="button"
-                  disabled={saving}
-                  onClick={async () => {
-                    setSaving(true);
-                    setError('');
-                    try {
-                      await setHaderCity(city.id, !city.isHaderEnabled);
-                      await load();
-                    } catch (failure) {
-                      setError(safeError(failure));
-                    } finally {
-                      setSaving(false);
-                    }
-                  }}
-                  className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${city.isHaderEnabled ? 'border-[#54247a] bg-[#f6f2fa] text-[#54247a]' : 'border-[#e3e1e8] bg-white text-[#64748b]'}`}
-                >
-                  <span className="flex items-center gap-2">
-                    <MapPin size={14} />
-                    {city.name}
-                  </span>
-                  <span className="text-xs font-semibold">
-                    {city.isHaderEnabled ? 'Enabled' : 'Disabled'}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </PricingSection>
-        </>
+          </Panel>
+          <DeliveryTable data={data} onEdit={editDelivery} />
+          <CityConfiguration
+            data={data}
+            saving={saving}
+            setSaving={setSaving}
+            load={load}
+            setError={setError}
+          />
+        </div>
       )}
+      <div
+        aria-hidden={!saving}
+        className={`pointer-events-none absolute inset-0 z-20 flex justify-center rounded-xl bg-black/10 pt-28 backdrop-blur-[1px] transition-opacity duration-200 ${saving ? 'opacity-100' : 'opacity-0'}`}
+      >
+        <div className="customer-card customer-primary flex h-12 items-center gap-2 rounded-lg border px-4 text-sm font-semibold shadow-sm">
+          <Loader2 size={17} className="animate-spin" /> Saving changes...
+        </div>
+      </div>
     </div>
   );
 }
 
-function PricingSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-xl border border-[#e3e1e8] bg-white p-4">
-      <h2 className="mb-4 border-b border-[#e3e1e8] pb-3 text-sm font-bold text-[#54247a]">
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-function PriceTable({ data }: { data: PricingConfiguration | null }) {
-  const [productFilter, setProductFilter] = useState('');
-  const [cityFilter, setCityFilter] = useState('');
-  const [packagingFilter, setPackagingFilter] = useState('');
-  const [uomFilter, setUomFilter] = useState('');
+function ProductTable({
+  data,
+  onEdit,
+}: {
+  data: PricingConfiguration | null;
+  onEdit: (row: ProductListPrice) => void;
+}) {
+  const [draft, setDraft] = useState<Filters>(emptyFilters);
+  const [filters, setFilters] = useState<Filters>(emptyFilters);
+  const [sortKey, setSortKey] = useState<SortKey>('updated');
+  const [ascending, setAscending] = useState(false);
   const [page, setPage] = useState(1);
-  const filtered = useMemo(
-    () =>
-      (data?.productPrices ?? []).filter((price) => {
-        const product = data?.products.find((item) => item.id === price.productId);
-        const productText =
-          `${product?.productCode ?? ''} ${product?.productName ?? ''}`.toLowerCase();
-        return (
-          productText.includes(productFilter.toLowerCase()) &&
-          (!cityFilter || price.cityId === cityFilter) &&
-          (!packagingFilter || price.packagingType === packagingFilter) &&
-          (!uomFilter || price.uom === uomFilter)
-        );
-      }),
-    [cityFilter, data, packagingFilter, productFilter, uomFilter],
-  );
-  useEffect(() => setPage(1), [productFilter, cityFilter, packagingFilter, uomFilter]);
-  const visible = filtered.slice((page - 1) * 10, page * 10);
-  const pageCount = Math.max(1, Math.ceil(filtered.length / 10));
-  const packaging = Array.from(
-    new Set((data?.productPrices ?? []).map((item) => item.packagingType)),
-  );
-  const uoms = Array.from(new Set((data?.productPrices ?? []).map((item) => item.uom)));
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [menu, setMenu] = useState<string | null>(null);
+  const pageSize = 10;
+  const rows = useMemo(() => {
+    const filtered = (data?.productPrices ?? []).filter((row) => {
+      const product = data?.products.find((item) => item.id === row.productId);
+      return (
+        `${product?.productCode ?? ''} ${product?.productName ?? ''}`
+          .toLowerCase()
+          .includes(filters.search.toLowerCase()) &&
+        (!filters.cityId || row.cityId === filters.cityId) &&
+        (!filters.packaging || row.packagingType === filters.packaging) &&
+        (!filters.uom || row.uom === filters.uom)
+      );
+    });
+    return filtered.sort((a, b) => {
+      const ap = data?.products.find((item) => item.id === a.productId)?.productName ?? '';
+      const bp = data?.products.find((item) => item.id === b.productId)?.productName ?? '';
+      const values = {
+        product: [ap, bp],
+        city: [a.city, b.city],
+        price: [a.listPrice, b.listPrice],
+        updated: [new Date(a.updatedAt).getTime(), new Date(b.updatedAt).getTime()],
+      }[sortKey];
+      const result =
+        typeof values[0] === 'number'
+          ? Number(values[0]) - Number(values[1])
+          : String(values[0]).localeCompare(String(values[1]));
+      return ascending ? result : -result;
+    });
+  }, [ascending, data, filters, sortKey]);
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const visible = rows.slice((page - 1) * pageSize, page * pageSize);
+  const setSort = (key: SortKey) => {
+    if (sortKey === key) setAscending((value) => !value);
+    else {
+      setSortKey(key);
+      setAscending(true);
+    }
+  };
+  const apply = () => {
+    setFilters(draft);
+    setPage(1);
+    setSelected(new Set());
+  };
+  const clear = () => {
+    setDraft(emptyFilters);
+    setFilters(emptyFilters);
+    setPage(1);
+    setSelected(new Set());
+  };
+  const chips = Object.entries(filters).filter(([, value]) => value);
   return (
-    <div className="mt-4 overflow-hidden rounded-lg border border-[#e3e1e8]">
-      <div className="grid gap-2 border-b border-[#e3e1e8] bg-[#f8fafc] p-2 md:grid-cols-4">
-        <input
-          aria-label="Filter product"
-          placeholder="Product"
-          value={productFilter}
-          onChange={(e) => setProductFilter(e.target.value)}
-          className={compactInput}
-        />
-        <select
-          aria-label="Filter city"
-          value={cityFilter}
-          onChange={(e) => setCityFilter(e.target.value)}
-          className={compactInput}
-        >
-          <option value="">All cities</option>
-          {data?.cities.map((city) => (
-            <option key={city.id} value={city.id}>
-              {city.name}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="Filter packaging"
-          value={packagingFilter}
-          onChange={(e) => setPackagingFilter(e.target.value)}
-          className={compactInput}
-        >
-          <option value="">All packaging</option>
-          {packaging.map((value) => (
-            <option key={value}>{value}</option>
-          ))}
-        </select>
-        <select
-          aria-label="Filter UOM"
-          value={uomFilter}
-          onChange={(e) => setUomFilter(e.target.value)}
-          className={compactInput}
-        >
-          <option value="">All UOM</option>
-          {uoms.map((value) => (
-            <option key={value}>{value}</option>
-          ))}
-        </select>
+    <Panel noPadding>
+      <div className="border-b border-[#e3e1e8] p-3">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_auto_auto]">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+            <input
+              className={`${compactInput} pl-9`}
+              placeholder="Search product name/code"
+              value={draft.search}
+              onChange={(event) => setDraft({ ...draft, search: event.target.value })}
+              onKeyDown={(event) => event.key === 'Enter' && apply()}
+            />
+          </div>
+          <FilterSelect
+            label="packaging"
+            value={draft.packaging}
+            setValue={(value) => setDraft({ ...draft, packaging: value })}
+            options={unique((data?.productPrices ?? []).map((row) => row.packagingType))}
+          />
+          <select
+            className={compactInput}
+            value={draft.cityId}
+            onChange={(event) => setDraft({ ...draft, cityId: event.target.value })}
+          >
+            <option value="">All cities</option>
+            {data?.cities.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+          <FilterSelect
+            label="UOM"
+            value={draft.uom}
+            setValue={(value) => setDraft({ ...draft, uom: value })}
+            options={unique((data?.productPrices ?? []).map((row) => row.uom))}
+          />
+          <button className={secondaryButton} onClick={apply}>
+            Apply Filters
+          </button>
+          <button className={ghostButton} onClick={clear}>
+            <RotateCcw size={14} /> Clear
+          </button>
+        </div>
+        {chips.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {chips.map(([key, value]) => (
+              <button
+                key={key}
+                className="inline-flex items-center gap-1 rounded-full bg-[#f6f2fa] px-2.5 py-1 text-xs font-medium text-[#54247a]"
+                onClick={() => {
+                  const next = { ...filters, [key]: '' };
+                  setFilters(next);
+                  setDraft(next);
+                  setPage(1);
+                }}
+              >
+                {filterName(key)}:{' '}
+                {key === 'cityId' ? data?.cities.find((item) => item.id === value)?.name : value}
+                <X size={12} />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-sm">
-          <thead className="bg-[#f8fafc] text-left text-xs text-[#64748b]">
+        <table className="w-full min-w-[980px] text-sm">
+          <thead className={tableHead}>
             <tr>
-              <th className={cell}>Product</th>
+              <th className="w-10 px-3 py-2.5">
+                <input
+                  className={checkbox}
+                  type="checkbox"
+                  checked={visible.length > 0 && visible.every((row) => selected.has(row.id))}
+                  onChange={() => {
+                    const all = visible.every((row) => selected.has(row.id));
+                    const next = new Set(selected);
+                    visible.forEach((row) => (all ? next.delete(row.id) : next.add(row.id)));
+                    setSelected(next);
+                  }}
+                />
+              </th>
+              <th className="w-14 px-2 py-2.5">S.No.</th>
+              <SortHead label="Product" onClick={() => setSort('product')} />
               <th className={cell}>Packaging</th>
-              <th className={cell}>City</th>
+              <SortHead label="City" onClick={() => setSort('city')} />
               <th className={cell}>UOM</th>
-              <th className={`${cell} text-right`}>List Price</th>
+              <SortHead label="List Price (SAR / TON)" onClick={() => setSort('price')} right />
+              <SortHead label="Last Updated" onClick={() => setSort('updated')} />
               <th className={cell}>Updated By</th>
-              <th className={cell}>Updated At</th>
+              <th className="w-14 px-3 py-2.5">Actions</th>
             </tr>
           </thead>
           <tbody>
             {visible.length ? (
-              visible.map((price) => {
-                const product = data?.products.find((item) => item.id === price.productId);
+              visible.map((row, index) => {
+                const product = data?.products.find((item) => item.id === row.productId);
                 return (
-                  <tr key={price.id} className="border-t border-[#e3e1e8]">
+                  <tr key={row.id} className={tableRow}>
                     <td className={cell}>
-                      <span className="font-bold">{product?.productCode}</span>
-                      <span className="ml-2 text-xs text-[#64748b]">{product?.productName}</span>
+                      <input
+                        className={checkbox}
+                        type="checkbox"
+                        checked={selected.has(row.id)}
+                        onChange={() => setSelected(toggleSet(selected, row.id))}
+                      />
                     </td>
-                    <td className={cell}>{price.packagingType}</td>
-                    <td className={cell}>{price.city}</td>
-                    <td className={cell}>{price.uom}</td>
-                    <td className={`${cell} text-right font-bold`}>{money(price.listPrice)} SAR</td>
-                    <td className={cell}>{price.configuredBy}</td>
+                    <td className={cell}>{(page - 1) * pageSize + index + 1}</td>
+                    <td className={cell}>
+                      <strong className="block">{product?.productName}</strong>
+                      <span className="text-xs text-[#64748b]">{product?.productCode}</span>
+                    </td>
+                    <td className={cell}>{row.packagingType}</td>
+                    <td className={cell}>{row.city}</td>
+                    <td className={cell}>{row.uom}</td>
+                    <td className={`${cell} text-right font-bold tabular-nums`}>
+                      {money(row.listPrice)}
+                    </td>
                     <td className={`${cell} whitespace-nowrap text-xs text-[#64748b]`}>
-                      {formatDateTime(price.updatedAt)}
+                      {formatDateTime(row.updatedAt)}
+                    </td>
+                    <td className={cell}>{row.configuredBy}</td>
+                    <td className="relative px-3 py-2.5">
+                      <RowMenu
+                        open={menu === row.id}
+                        toggle={() => setMenu(menu === row.id ? null : row.id)}
+                        edit={() => {
+                          setMenu(null);
+                          onEdit(row);
+                        }}
+                      />
                     </td>
                   </tr>
                 );
               })
             ) : (
-              <tr>
-                <td colSpan={7} className="p-6 text-center text-[#64748b]">
-                  No product list prices configured.
-                </td>
-              </tr>
+              <Empty colSpan={10}>No product prices match the filters.</Empty>
             )}
           </tbody>
         </table>
       </div>
-      {filtered.length > 10 && (
-        <div className="flex items-center justify-between border-t border-[#e3e1e8] px-3 py-2 text-xs text-[#64748b]">
-          <span>
-            Showing {(page - 1) * 10 + 1}–{Math.min(page * 10, filtered.length)} of{' '}
-            {filtered.length}
-          </span>
-          <div className="flex gap-1">
-            <button
-              className={pageButton}
-              disabled={page === 1}
-              onClick={() => setPage((value) => value - 1)}
-            >
-              Previous
-            </button>
-            <span className="px-2 py-1">
-              {page} / {pageCount}
-            </span>
-            <button
-              className={pageButton}
-              disabled={page === pageCount}
-              onClick={() => setPage((value) => value + 1)}
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
+      <Footer
+        page={page}
+        pageCount={pageCount}
+        total={rows.length}
+        pageSize={pageSize}
+        setPage={setPage}
+        selected={selected.size}
+      />
+    </Panel>
   );
 }
 
-function DeliveryTable({ data }: { data: PricingConfiguration | null }) {
+function DeliveryTable({
+  data,
+  onEdit,
+}: {
+  data: PricingConfiguration | null;
+  onEdit: (row: HaderDeliveryPrice) => void;
+}) {
+  const [cityId, setCityId] = useState('');
+  const [page, setPage] = useState(1);
+  const [menu, setMenu] = useState<string | null>(null);
+  const pageSize = 10;
+  const rows = (data?.deliveryPrices ?? []).filter((row) => !cityId || row.cityId === cityId);
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const visible = rows.slice((page - 1) * pageSize, page * pageSize);
   return (
-    <div className="mt-4 overflow-x-auto rounded-lg border border-[#e3e1e8]">
-      <table className="w-full min-w-[600px] text-sm">
-        <thead className="bg-[#f8fafc] text-left text-xs text-[#64748b]">
-          <tr>
-            <th className={cell}>Hader City</th>
-            <th className={`${cell} text-right`}>Standard SAR / TON</th>
-            <th className={`${cell} text-right`}>White Cement SAR / TON</th>
-            <th className={cell}>Updated By</th>
-            <th className={cell}>Updated At</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data?.deliveryPrices.length ? (
-            data.deliveryPrices.map((price) => (
-              <tr key={price.id} className="border-t border-[#e3e1e8]">
-                <td className={cell}>{price.city}</td>
-                <td className={`${cell} text-right font-bold`}>
-                  {money(price.standardDeliveryPrice)} SAR
-                </td>
-                <td className={`${cell} text-right font-bold`}>
-                  {money(price.whiteCementDeliveryPrice)} SAR
-                </td>
-                <td className={cell}>{price.configuredBy}</td>
-                <td className={`${cell} whitespace-nowrap text-xs text-[#64748b]`}>
-                  {formatDateTime(price.updatedAt)}
-                </td>
-              </tr>
-            ))
-          ) : (
+    <Panel noPadding>
+      <div className="flex flex-col gap-2 border-b border-[#e3e1e8] p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-sm font-bold">Configured Delivery Prices</h3>
+          <p className="text-xs text-[#64748b]">
+            Customer-facing rates only. Transporter costs are not displayed.
+          </p>
+        </div>
+        <select
+          className={`${compactInput} sm:w-52`}
+          value={cityId}
+          onChange={(event) => {
+            setCityId(event.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">All Hader cities</option>
+          {data?.haderCities.map((city) => (
+            <option key={city.id} value={city.id}>
+              {city.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-sm">
+          <thead className={tableHead}>
             <tr>
-              <td colSpan={5} className="p-6 text-center text-[#64748b]">
-                No Hader delivery prices configured.
-              </td>
+              <th className={cell}>S.No.</th>
+              <th className={cell}>Hader City</th>
+              <th className={`${cell} text-right`}>Standard Delivery (SAR / TON)</th>
+              <th className={`${cell} text-right`}>White Cement (SAR / TON)</th>
+              <th className={cell}>Last Updated</th>
+              <th className={cell}>Updated By</th>
+              <th className={cell}>Actions</th>
             </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {visible.length ? (
+              visible.map((row, index) => (
+                <tr key={row.id} className={tableRow}>
+                  <td className={cell}>{(page - 1) * pageSize + index + 1}</td>
+                  <td className={`${cell} font-semibold`}>{row.city}</td>
+                  <td className={`${cell} text-right font-bold`}>
+                    {money(row.standardDeliveryPrice)}
+                  </td>
+                  <td className={`${cell} text-right font-bold`}>
+                    {money(row.whiteCementDeliveryPrice)}
+                  </td>
+                  <td className={`${cell} whitespace-nowrap text-xs text-[#64748b]`}>
+                    {formatDateTime(row.updatedAt)}
+                  </td>
+                  <td className={cell}>{row.configuredBy}</td>
+                  <td className="relative px-3 py-2.5">
+                    <RowMenu
+                      open={menu === row.id}
+                      toggle={() => setMenu(menu === row.id ? null : row.id)}
+                      edit={() => {
+                        setMenu(null);
+                        onEdit(row);
+                      }}
+                    />
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <Empty colSpan={7}>No delivery prices configured for this city.</Empty>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <Footer
+        page={page}
+        pageCount={pageCount}
+        total={rows.length}
+        pageSize={pageSize}
+        setPage={setPage}
+      />
+    </Panel>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function CityConfiguration({
+  data,
+  saving,
+  setSaving,
+  load,
+  setError,
+}: {
+  data: PricingConfiguration | null;
+  saving: boolean;
+  setSaving: (value: boolean) => void;
+  load: () => Promise<void>;
+  setError: (value: string) => void;
+}) {
+  return (
+    <details className="customer-card rounded-xl border">
+      <summary className="customer-primary flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-bold">
+        Hader City Configuration <ChevronDown size={16} />
+      </summary>
+      <div className="customer-border-soft border-t p-4">
+        <p className="customer-muted mb-3 text-xs">
+          Select which active KSA cities are available for Hader delivery pricing.
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {data?.cities.map((city) => (
+            <button
+              key={city.id}
+              disabled={saving}
+              onClick={async () => {
+                setSaving(true);
+                try {
+                  await setHaderCity(city.id, !city.isHaderEnabled);
+                  await load();
+                } catch (failure) {
+                  setError(safeError(failure));
+                } finally {
+                  setSaving(false);
+                }
+              }}
+              className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${
+                city.isHaderEnabled
+                  ? 'border-[var(--customer-primary)] bg-[var(--customer-primary-soft)] text-[var(--customer-primary)]'
+                  : 'customer-border customer-surface customer-secondary'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <MapPin size={14} />
+                {city.name}
+              </span>
+              <strong className="text-xs">{city.isHaderEnabled ? 'Enabled' : 'Disabled'}</strong>
+            </button>
+          ))}
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function PageHeading({
+  title,
+  subtitle,
+  action,
+}: {
+  title: string;
+  subtitle: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h1 className="customer-text text-2xl font-bold">{title}</h1>
+        <p className="customer-muted mt-1 text-sm">{subtitle}</p>
+      </div>
+      {action}
+    </div>
+  );
+}
+function Panel({ children, noPadding = false }: { children: ReactNode; noPadding?: boolean }) {
+  return (
+    <section
+      className={`customer-card rounded-xl border shadow-sm ${noPadding ? 'overflow-visible' : 'p-4'}`}
+    >
+      {children}
+    </section>
+  );
+}
+function Field({
+  label,
+  suffix,
+  error,
+  children,
+}: {
+  label: string;
+  suffix?: string;
+  error?: string | undefined;
+  children: ReactNode;
+}) {
   return (
     <label>
-      <span className="mb-1.5 block text-xs font-semibold">{label}</span>
+      <span className="customer-text mb-1.5 flex justify-between gap-2 text-xs font-semibold">
+        {label}
+        {suffix && <span className="customer-muted font-medium">{suffix}</span>}
+      </span>
       {children}
+      {error && <span className="mt-1 block text-xs font-medium text-[#b42318]">{error}</span>}
     </label>
   );
 }
-function Message({ children, error }: { children: React.ReactNode; error?: boolean }) {
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={`border-b-2 px-4 py-2.5 text-sm font-semibold ${
+        active
+          ? 'border-[var(--customer-primary)] text-[var(--customer-primary)]'
+          : 'customer-secondary border-transparent hover:text-[var(--customer-text-primary)]'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+function Message({ error, children }: { error?: boolean; children: ReactNode }) {
   return (
     <div
-      className={`flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${error ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}
+      className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${error ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}
     >
-      <AlertCircle size={16} className="mt-0.5 shrink-0" />
+      {error ? <AlertCircle size={16} /> : <Check size={16} />}
       {children}
     </div>
   );
 }
+function Loading() {
+  return (
+    <div className="customer-muted flex min-h-52 items-center justify-center text-sm">
+      <Loader2 size={17} className="mr-2 animate-spin" /> Loading pricing configuration...
+    </div>
+  );
+}
+function FilterSelect({
+  label,
+  value,
+  setValue,
+  options,
+}: {
+  label: string;
+  value: string;
+  setValue: (value: string) => void;
+  options: string[];
+}) {
+  return (
+    <select
+      className={compactInput}
+      value={value}
+      onChange={(event) => setValue(event.target.value)}
+    >
+      <option value="">All {label.toLowerCase()}</option>
+      {options.map((option) => (
+        <option key={option}>{option}</option>
+      ))}
+    </select>
+  );
+}
+function SortHead({
+  label,
+  onClick,
+  right,
+}: {
+  label: string;
+  onClick: () => void;
+  right?: boolean;
+}) {
+  return (
+    <th className={`${cell} ${right ? 'text-right' : ''}`}>
+      <button className="inline-flex items-center gap-1 font-semibold" onClick={onClick}>
+        {label}
+        <ChevronsUpDown size={12} />
+      </button>
+    </th>
+  );
+}
+function RowMenu({ open, toggle, edit }: { open: boolean; toggle: () => void; edit: () => void }) {
+  return (
+    <>
+      <button
+        aria-label="Row actions"
+        onClick={toggle}
+        className="customer-border customer-secondary inline-flex h-8 w-8 items-center justify-center rounded-md border hover:bg-[var(--customer-primary-soft)] hover:text-[var(--customer-primary)]"
+      >
+        <Ellipsis size={16} />
+      </button>
+      {open && (
+        <div className="customer-card absolute right-3 top-10 z-10 min-w-28 rounded-lg border p-1 shadow-lg">
+          <button
+            onClick={edit}
+            className="w-full rounded-md px-3 py-2 text-left text-xs font-semibold hover:bg-[var(--customer-primary-soft)]"
+          >
+            Edit price
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+function Empty({ colSpan, children }: { colSpan: number; children: ReactNode }) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className="customer-muted p-8 text-center">
+        {children}
+      </td>
+    </tr>
+  );
+}
+function Footer({
+  page,
+  pageCount,
+  total,
+  pageSize,
+  setPage,
+  selected = 0,
+}: {
+  page: number;
+  pageCount: number;
+  total: number;
+  pageSize: number;
+  setPage: (page: number) => void;
+  selected?: number;
+}) {
+  return (
+    <div className="customer-border-soft customer-muted flex flex-col gap-2 border-t px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+      <span>
+        {selected ? `${selected} selected · ` : ''}Showing {total ? (page - 1) * pageSize + 1 : 0}–
+        {Math.min(page * pageSize, total)} of {total}
+      </span>
+      <div className="flex items-center gap-1">
+        <button className={pageButton} disabled={page === 1} onClick={() => setPage(page - 1)}>
+          <ChevronLeft size={14} /> Previous
+        </button>
+        <span className="px-2">
+          {page} / {pageCount}
+        </span>
+        <button
+          className={pageButton}
+          disabled={page === pageCount}
+          onClick={() => setPage(page + 1)}
+        >
+          Next <ChevronRight size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function safeError(error: unknown) {
   return error instanceof AdminPricingApiError
     ? error.message
     : 'Unable to complete the pricing request.';
 }
 function positive(value: string) {
-  return Number.isFinite(Number(value)) && Number(value) > 0;
+  return value.trim() !== '' && Number.isFinite(Number(value)) && Number(value) > 0;
 }
 function nonnegative(value: string) {
   return value.trim() !== '' && Number.isFinite(Number(value)) && Number(value) >= 0;
@@ -512,12 +981,44 @@ function formatDateTime(value: string) {
     new Date(value),
   );
 }
+function unique(values: string[]) {
+  return Array.from(new Set(values)).sort();
+}
+function toggleSet(current: Set<string>, id: string) {
+  const next = new Set(current);
+  next.has(id) ? next.delete(id) : next.add(id);
+  return next;
+}
+function filterName(key: string) {
+  return (
+    (
+      { search: 'Product', packaging: 'Packaging', cityId: 'City', uom: 'UOM' } as Record<
+        string,
+        string
+      >
+    )[key] ?? key
+  );
+}
+function clearField(
+  setter: React.Dispatch<React.SetStateAction<Record<string, string>>>,
+  field: string,
+) {
+  setter((current) => ({ ...current, [field]: '' }));
+}
+
 const input =
-  'h-10 w-full rounded-lg border border-[#e3e1e8] bg-white px-3 text-sm outline-none focus:border-[#54247a] focus:ring-2 focus:ring-[#54247a]/10';
-const cell = 'px-3 py-2.5';
-const primaryButton =
-  'inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#54247a] px-4 text-sm font-bold text-white hover:bg-[#472066] disabled:opacity-50';
+  'customer-input customer-border customer-text h-10 w-full rounded-lg border px-3 text-sm outline-none transition placeholder:text-[var(--customer-text-muted)] focus:border-[var(--customer-primary)] focus:ring-2 focus:ring-[var(--customer-primary-soft)]';
 const compactInput =
-  'h-9 w-full rounded-md border border-[#e3e1e8] bg-white px-2.5 text-xs outline-none focus:border-[#54247a]';
+  'customer-input customer-border customer-text h-9 w-full rounded-md border px-2.5 text-xs outline-none transition focus:border-[var(--customer-primary)]';
+const primaryButton =
+  'customer-primary-bg inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-bold text-white transition disabled:opacity-50';
+const secondaryButton =
+  'customer-primary-bg h-9 rounded-md px-3 text-xs font-bold text-white';
+const ghostButton =
+  'customer-surface customer-border customer-secondary inline-flex h-9 items-center justify-center gap-1.5 rounded-md border px-3 text-xs font-semibold hover:bg-[var(--customer-surface-secondary)]';
 const pageButton =
-  'rounded-md border border-[#e3e1e8] bg-white px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40';
+  'customer-surface customer-border customer-text inline-flex items-center gap-1 rounded-md border px-2 py-1.5 font-semibold disabled:opacity-40';
+const checkbox = 'h-4 w-4 rounded border-[#cbd5e1] accent-[#54247a]';
+const cell = 'px-3 py-2.5';
+const tableHead = 'customer-surface-secondary customer-secondary text-left text-xs';
+const tableRow = 'customer-border-soft border-t transition-colors hover:bg-[var(--customer-surface-secondary)]';

@@ -1,16 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import {
-  CheckCircle2,
-  Edit3,
-  Eye,
-  MapPin,
-  Plus,
-  Save,
-  Star,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { CheckCircle2, Edit3, Eye, MapPin, Plus, Star, Trash2, X } from 'lucide-react';
 import { LocationPickerMap } from '../../components/registration/LocationPickerMap';
 import type { Coordinates } from '../../config/map';
 import {
@@ -19,13 +9,16 @@ import {
   isSaudiPhoneNumber,
 } from '../../context/RegistrationContext';
 import {
+  CustomerLocationsApiError,
   createCustomerLocation,
   deleteCustomerLocation,
   getCustomerLocations,
+  getCustomerLocationCities,
   setPrimaryCustomerLocation,
   updateCustomerLocation,
   type CustomerLocation,
   type CustomerLocationPayload,
+  type CustomerLocationCity,
 } from '../../services/customerLocationsService';
 
 type LocationForm = {
@@ -76,6 +69,7 @@ const regions = [
 
 export function CustomerLocations() {
   const [locations, setLocations] = useState<CustomerLocation[]>([]);
+  const [cities, setCities] = useState<CustomerLocationCity[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -84,6 +78,10 @@ export function CustomerLocations() {
   const [form, setForm] = useState<LocationForm>(emptyForm);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [mapTarget, setMapTarget] = useState<MapTarget>(null);
+  const cityOptions = useMemo(
+    () => Array.from(new Set([form.city, ...cities.map((city) => city.name)].filter(Boolean))),
+    [cities, form.city],
+  );
 
   const editingLocation = useMemo(
     () => locations.find((location) => location.id === editingId) ?? null,
@@ -104,11 +102,21 @@ export function CustomerLocations() {
 
   useEffect(() => {
     void loadLocations();
+    void getCustomerLocationCities()
+      .then(setCities)
+      .catch(() => setCities([]));
   }, []);
 
   const updateField = (field: keyof LocationForm, value: string | boolean | number | undefined) => {
-    setForm((current) => ({ ...current, [field]: value }));
-    setFormErrors((current) => ({ ...current, [field]: '' }));
+    const next = { ...form, [field]: value };
+    setForm(next);
+    setFormErrors((errors) =>
+      errors[field] ? { ...errors, [field]: validateLocationField(next, field) } : errors,
+    );
+  };
+
+  const validateField = (field: keyof LocationForm) => {
+    setFormErrors((current) => ({ ...current, [field]: validateLocationField(form, field) }));
   };
 
   const resetForm = () => {
@@ -143,6 +151,9 @@ export function CustomerLocations() {
     if (!form.city.trim()) next.city = 'City is required.';
     if (!form.region.trim()) next.region = 'Region is required.';
     if (!form.country.trim()) next.country = 'Country is required.';
+    if (form.postalCode && !/^\d{5}$/.test(form.postalCode)) {
+      next.postalCode = 'Enter a valid 5-digit postal code.';
+    }
     if (!form.contactPerson.trim()) next.contactPerson = 'Contact person is required.';
     if (!isSaudiPhoneNumber(form.contactPhone)) {
       next.contactPhone = 'Enter a valid Saudi mobile number.';
@@ -174,7 +185,10 @@ export function CustomerLocations() {
       setLocations(nextLocations);
       resetForm();
       setSuccess(editingId ? 'Delivery location updated.' : 'Delivery location added.');
-    } catch {
+    } catch (saveError) {
+      if (saveError instanceof CustomerLocationsApiError && saveError.errors) {
+        setFormErrors(saveError.errors);
+      }
       setError('Unable to save delivery location. Please review the form and try again.');
     } finally {
       setSaving(false);
@@ -236,16 +250,18 @@ export function CustomerLocations() {
 
         <div className="grid gap-5 pt-5 md:grid-cols-2">
           <TextInput
-            label="Location Name / Site ID"
+            label="Location Name"
             required
             value={form.name}
             error={formErrors.name}
             onChange={(value) => updateField('name', value)}
+            onBlur={() => validateField('name')}
           />
           <TextInput
             label="Site ID"
-            value={form.siteId}
-            onChange={(value) => updateField('siteId', value)}
+            readOnly
+            value={form.siteId || 'Auto-generated when saved'}
+            onChange={() => undefined}
           />
           <TextInput
             label="Street Address"
@@ -253,13 +269,17 @@ export function CustomerLocations() {
             value={form.streetAddress}
             error={formErrors.streetAddress}
             onChange={(value) => updateField('streetAddress', value)}
+            onBlur={() => validateField('streetAddress')}
           />
-          <TextInput
+          <SelectInput
             label="City"
             required
             value={form.city}
             error={formErrors.city}
+            options={cityOptions}
+            placeholder="Select City"
             onChange={(value) => updateField('city', value)}
+            onBlur={() => validateField('city')}
           />
           <SelectInput
             label="Region / Province"
@@ -268,6 +288,7 @@ export function CustomerLocations() {
             error={formErrors.region}
             options={regions}
             onChange={(value) => updateField('region', value)}
+            onBlur={() => validateField('region')}
           />
           <TextInput
             label="Country"
@@ -279,7 +300,11 @@ export function CustomerLocations() {
           <TextInput
             label="Postal Code"
             value={form.postalCode}
-            onChange={(value) => updateField('postalCode', value)}
+            error={formErrors.postalCode}
+            inputMode="numeric"
+            maxLength={5}
+            onChange={(value) => updateField('postalCode', value.replace(/\D/g, '').slice(0, 5))}
+            onBlur={() => validateField('postalCode')}
           />
           <TextInput
             label="Contact Person"
@@ -287,6 +312,7 @@ export function CustomerLocations() {
             value={form.contactPerson}
             error={formErrors.contactPerson}
             onChange={(value) => updateField('contactPerson', value)}
+            onBlur={() => validateField('contactPerson')}
           />
           <PhoneInput
             label="Contact Phone"
@@ -294,6 +320,7 @@ export function CustomerLocations() {
             value={form.contactPhone}
             error={formErrors.contactPhone}
             onChange={(value) => updateField('contactPhone', value)}
+            onBlur={() => validateField('contactPhone')}
           />
         </div>
 
@@ -352,7 +379,7 @@ export function CustomerLocations() {
             disabled={saving}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#54247a] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#472066] disabled:opacity-60"
           >
-            {editingId ? <Save size={16} /> : <Plus size={16} />}
+            {!editingId && <Plus size={16} />}
             {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Location'}
           </button>
         </div>
@@ -534,7 +561,11 @@ function TextInput(props: {
   value: string;
   required?: boolean;
   error?: string | undefined;
+  inputMode?: 'text' | 'numeric' | undefined;
+  maxLength?: number | undefined;
+  readOnly?: boolean | undefined;
   onChange: (value: string) => void;
+  onBlur?: (() => void) | undefined;
 }) {
   return (
     <label className="block">
@@ -544,8 +575,12 @@ function TextInput(props: {
       </span>
       <input
         value={props.value}
+        inputMode={props.inputMode}
+        maxLength={props.maxLength}
+        readOnly={props.readOnly}
         onChange={(event) => props.onChange(event.target.value)}
-        className={`mt-2 h-11 w-full rounded-xl border px-3 text-sm font-medium outline-none focus:ring-2 ${
+        onBlur={props.onBlur}
+        className={`mt-2 h-11 w-full rounded-xl border px-3 text-sm font-medium outline-none focus:ring-2 ${props.readOnly ? 'cursor-not-allowed bg-slate-50 text-slate-500' : 'bg-white'} ${
           props.error
             ? 'border-red-400 focus:ring-red-100'
             : 'border-slate-200 focus:border-[#54247a] focus:ring-[#54247a]/10'
@@ -564,7 +599,9 @@ function SelectInput(props: {
   options: string[];
   required?: boolean;
   error?: string | undefined;
+  placeholder?: string | undefined;
   onChange: (value: string) => void;
+  onBlur?: (() => void) | undefined;
 }) {
   return (
     <label className="block">
@@ -575,13 +612,14 @@ function SelectInput(props: {
       <select
         value={props.value}
         onChange={(event) => props.onChange(event.target.value)}
+        onBlur={props.onBlur}
         className={`mt-2 h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium outline-none focus:ring-2 ${
           props.error
             ? 'border-red-400 focus:ring-red-100'
             : 'border-slate-200 focus:border-[#54247a] focus:ring-[#54247a]/10'
         }`}
       >
-        <option value="">Select Region</option>
+        <option value="">{props.placeholder ?? 'Select Region'}</option>
         {props.options.map((option) => (
           <option key={option} value={option}>
             {option}
@@ -601,6 +639,7 @@ function PhoneInput(props: {
   required?: boolean;
   error?: string | undefined;
   onChange: (value: string) => void;
+  onBlur?: (() => void) | undefined;
 }) {
   return (
     <label className="block">
@@ -624,6 +663,7 @@ function PhoneInput(props: {
           maxLength={11}
           value={formatSaudiPhoneNumber(props.value)}
           onChange={(event) => props.onChange(getSaudiPhoneLocalDigits(event.target.value))}
+          onBlur={props.onBlur}
           className="min-w-0 flex-1 px-3 text-sm font-medium outline-none"
           placeholder="5XX XXX XXX"
         />
@@ -663,7 +703,6 @@ function StateMessage({ tone, message }: { tone: 'error' | 'success'; message: s
 function toPayload(form: LocationForm): CustomerLocationPayload {
   return {
     name: form.name.trim(),
-    siteId: form.siteId.trim() || undefined,
     streetAddress: form.streetAddress.trim(),
     city: form.city.trim(),
     region: form.region.trim(),
@@ -675,6 +714,26 @@ function toPayload(form: LocationForm): CustomerLocationPayload {
     longitude: form.longitude,
     isPrimary: form.isPrimary,
   };
+}
+
+function validateLocationField(form: LocationForm, field: keyof LocationForm) {
+  if (field === 'name' && !form.name.trim()) return 'Location name is required.';
+  if (field === 'streetAddress' && !form.streetAddress.trim()) {
+    return 'Street address is required.';
+  }
+  if (field === 'city' && !form.city.trim()) return 'City is required.';
+  if (field === 'region' && !form.region.trim()) return 'Region is required.';
+  if (field === 'country' && !form.country.trim()) return 'Country is required.';
+  if (field === 'postalCode' && form.postalCode && !/^\d{5}$/.test(form.postalCode)) {
+    return 'Enter a valid 5-digit postal code.';
+  }
+  if (field === 'contactPerson' && !form.contactPerson.trim()) {
+    return 'Contact person is required.';
+  }
+  if (field === 'contactPhone' && !isSaudiPhoneNumber(form.contactPhone)) {
+    return 'Enter a valid Saudi mobile number.';
+  }
+  return '';
 }
 
 function getCoordinates(location: {

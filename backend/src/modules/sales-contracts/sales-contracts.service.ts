@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import type { SalesUser } from '../sales-auth/sales-auth.types.js';
+import { pickupLocationsService } from '../pickup-locations/pickup-locations.service.js';
 import type {
   CreateContractFromAcceptedQuotationPayload,
   ListSalesContractsQuery,
@@ -164,7 +165,6 @@ interface AcceptedQuotationItemRow {
   amount: string | null;
 }
 
-const pickupLocations = new Set(['ALSAFWA_PLANT_MAIN']);
 type ContractItemSnapshot = ReturnType<typeof contractItemSnapshot>;
 
 export class SalesContractsService {
@@ -375,7 +375,7 @@ export class SalesContractsService {
       const acceptedQuantityTons = roundQuantity(
         items.reduce((sum, item) => sum + Number(item.equivalent_tons), 0),
       );
-      const destination = resolveAcceptedDestination(quotation);
+      const destination = await resolveAcceptedDestination(quotation);
       const firstItem = items[0];
       if (!firstItem) {
         throw new AppError(
@@ -782,7 +782,12 @@ export class SalesContractsService {
       getActiveProduct(payload.productId),
     ]);
 
-    if (payload.fulfilment === 'PICKUP' && !pickupLocations.has(payload.pickupLocationId ?? '')) {
+    if (
+      payload.fulfilment === 'PICKUP' &&
+      !(await pickupLocationsService.listActive()).some(
+        (location) => location.id === payload.pickupLocationId,
+      )
+    ) {
       throw new AppError('Pickup location was not found.', 400, 'PICKUP_LOCATION_NOT_FOUND');
     }
 
@@ -1268,9 +1273,13 @@ function parseDeliveryLocations(value: unknown): DeliveryLocation[] {
   return [];
 }
 
-function resolveAcceptedDestination(quotation: AcceptedQuotationRow) {
+async function resolveAcceptedDestination(quotation: AcceptedQuotationRow) {
   if (quotation.fulfilment_type === 'PICKUP') {
-    return { id: quotation.pickup_location_id, name: 'AlSafwa Cement Plant', city: 'Jeddah' };
+    if (quotation.pickup_location_id === 'ALSAFWA_PLANT_MAIN') {
+      return { id: quotation.pickup_location_id, name: 'AlSafwa Cement Plant', city: 'Jeddah' };
+    }
+    if (!quotation.pickup_location_id) return null;
+    try { return await pickupLocationsService.get(quotation.pickup_location_id); } catch { return null; }
   }
 
   return (

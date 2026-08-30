@@ -130,6 +130,37 @@ export class DocumentStorageService {
     };
   }
 
+  async saveShipmentPodDocument(input: {
+    shipmentId: string;
+    documentType: string;
+    fileName: string;
+    mimeType?: string | undefined;
+    buffer: Buffer;
+  }): Promise<StoredDocumentFile> {
+    const mimeType = this.validateFile(input.fileName, input.mimeType, input.buffer);
+    const extension = path.extname(input.fileName).toLowerCase();
+    const safeDocumentType = input.documentType.replace(/[^a-z0-9_-]/gi, '-').toLowerCase();
+    const storageKey = path
+      .join(
+        'shipments',
+        input.shipmentId,
+        'pod',
+        `${safeDocumentType}-${randomUUID()}${extension}`,
+      )
+      .replaceAll(path.sep, '/');
+    const targetPath = this.resolveStorageKey(storageKey);
+
+    await mkdir(path.dirname(targetPath), { recursive: true });
+    await writeFile(targetPath, input.buffer, { flag: 'wx' });
+    return {
+      storageKey,
+      originalFileName: sanitizeDownloadFileName(input.fileName),
+      mimeType,
+      size: input.buffer.length,
+      uploadedAt: new Date().toISOString(),
+    };
+  }
+
   async readStoredDocument(storageKey: string): Promise<DocumentReadStream> {
     const filePath = this.resolveStorageKey(storageKey);
 

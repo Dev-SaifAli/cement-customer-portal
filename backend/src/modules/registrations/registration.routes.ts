@@ -12,6 +12,11 @@ registrationRouter.post(
 );
 
 registrationRouter.get(
+  '/cities',
+  asyncHandler((request, response) => registrationController.listCities(request, response)),
+);
+
+registrationRouter.get(
   '/:id',
   asyncHandler((request, response) => registrationController.get(request, response)),
 );

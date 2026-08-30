@@ -16,10 +16,13 @@ export interface CustomerLocation {
   latitude?: number | undefined;
   longitude?: number | undefined;
   isPrimary: boolean;
+  createdAt?: string | null | undefined;
 }
 
-export type CustomerLocationPayload = Omit<CustomerLocation, 'id' | 'siteId' | 'isPrimary'> & {
-  siteId?: string | undefined;
+export type CustomerLocationPayload = Omit<
+  CustomerLocation,
+  'id' | 'siteId' | 'isPrimary' | 'createdAt'
+> & {
   isPrimary?: boolean | undefined;
   latitude?: Coordinates['latitude'] | undefined;
   longitude?: Coordinates['longitude'] | undefined;
@@ -33,20 +36,37 @@ interface CustomerLocationsResponse {
 }
 
 interface ApiErrorBody {
+  errors?: Record<string, string>;
   error?: {
     message?: string;
+    errors?: Record<string, string>;
   };
   message?: string;
 }
 
 export class CustomerLocationsApiError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    public readonly errors?: Record<string, string>,
+  ) {
     super(message);
     this.name = 'CustomerLocationsApiError';
   }
 }
 
 export const getCustomerLocations = async () => requestCustomerLocations('/customer/locations');
+
+export const getCustomerLocationCities = async () => {
+  const response = await request<{ success: boolean; data: { cities: CustomerLocationCity[] } }>(
+    '/customer/locations/cities',
+  );
+  return response.data.cities;
+};
+
+export interface CustomerLocationCity {
+  id: string;
+  name: string;
+}
 
 export const createCustomerLocation = async (payload: CustomerLocationPayload) =>
   requestCustomerLocations('/customer/locations', {
@@ -71,6 +91,11 @@ export const setPrimaryCustomerLocation = async (id: string) =>
   });
 
 async function requestCustomerLocations(path: string, options: RequestInit = {}) {
+  const data = await request<ApiErrorBody & CustomerLocationsResponse>(path, options);
+  return data.data.locations;
+}
+
+async function request<T>(path: string, options: RequestInit = {}) {
   let response: Response;
 
   try {
@@ -86,14 +111,14 @@ async function requestCustomerLocations(path: string, options: RequestInit = {})
     throw new CustomerLocationsApiError('Unable to connect to the delivery locations service.');
   }
 
-  const data = (await response.json().catch(() => ({}))) as ApiErrorBody &
-    CustomerLocationsResponse;
+  const data = (await response.json().catch(() => ({}))) as ApiErrorBody & T;
 
   if (!response.ok) {
     throw new CustomerLocationsApiError(
       data.error?.message ?? data.message ?? 'Delivery location request failed.',
+      data.error?.errors ?? data.errors,
     );
   }
 
-  return data.data.locations;
+  return data as T;
 }

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { PoolClient } from 'pg';
 import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import type { CustomerUser } from '../customer-auth/customer-auth.types.js';
@@ -18,7 +19,10 @@ export interface CustomerLocation {
   latitude?: number | undefined;
   longitude?: number | undefined;
   isPrimary: boolean;
+  createdAt: string | null;
 }
+
+type Executor = Pick<PoolClient, 'query'>;
 
 interface LocationsRow {
   delivery_locations: unknown;
@@ -29,21 +33,45 @@ export class CustomerLocationsService {
     return this.getLocations(customerUser);
   }
 
-  async addLocation(customerUser: CustomerUser, input: CustomerLocationInput) {
-    const locations = await this.getLocations(customerUser);
-    const id = randomUUID();
-    const next = normalizePrimaryLocations(
-      [
-        ...locations,
-        {
-          ...toLocation(input, id),
-          isPrimary: locations.length === 0 || input.isPrimary === true,
-        },
-      ],
-      input.isPrimary === true || locations.length === 0 ? id : undefined,
+  async listCities() {
+    const result = await pool.query<{ id: string; name: string }>(
+      `select id, name from ksa_cities where is_active = true order by name`,
     );
+    return result.rows;
+  }
 
-    return this.saveLocations(customerUser, next);
+  async addLocation(customerUser: CustomerUser, input: CustomerLocationInput) {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      const locations = await this.getLocations(customerUser, client);
+      const id = randomUUID();
+      const siteId = await nextSiteId(client);
+      await client.query(
+        `insert into customer_location_site_ids
+         (location_id, site_id, registration_id, customer_account_id)
+         values ($1, $2, $3, $4)`,
+        [id, siteId, customerUser.account.registrationId, customerUser.account.id],
+      );
+      const next = normalizePrimaryLocations(
+        [
+          {
+            ...toLocation(input, id, siteId, new Date().toISOString()),
+            isPrimary: locations.length === 0 || input.isPrimary === true,
+          },
+          ...locations,
+        ],
+        input.isPrimary === true || locations.length === 0 ? id : undefined,
+      );
+      const saved = await this.saveLocations(customerUser, next, client);
+      await client.query('commit');
+      return saved;
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async updateLocation(customerUser: CustomerUser, id: string, input: CustomerLocationInput) {
@@ -57,7 +85,7 @@ export class CustomerLocationsService {
       locations.map((location) =>
         location.id === id
           ? {
-              ...toLocation(input, id),
+              ...toLocation(input, id, location.siteId, location.createdAt),
               isPrimary: input.isPrimary === true || location.isPrimary,
             }
           : location,
@@ -95,8 +123,8 @@ export class CustomerLocationsService {
     return this.saveLocations(customerUser, normalizePrimaryLocations(locations, id));
   }
 
-  private async getLocations(customerUser: CustomerUser) {
-    const result = await pool.query<LocationsRow>(
+  private async getLocations(customerUser: CustomerUser, executor: Executor = pool) {
+    const result = await executor.query<LocationsRow>(
       `select registration_drafts.delivery_locations
        from customer_accounts
        inner join registration_drafts
@@ -109,18 +137,20 @@ export class CustomerLocationsService {
 
     const row = result.rows[0];
     if (!row) {
-      throw new AppError(
-        'Delivery locations were not found.',
-        404,
-        'CUSTOMER_LOCATIONS_NOT_FOUND',
-      );
+      throw new AppError('Delivery locations were not found.', 404, 'CUSTOMER_LOCATIONS_NOT_FOUND');
     }
 
-    return normalizePrimaryLocations(arrayOrEmpty(row.delivery_locations).map(safeLocation));
+    return sortLocations(
+      normalizePrimaryLocations(arrayOrEmpty(row.delivery_locations).map(safeLocation)),
+    );
   }
 
-  private async saveLocations(customerUser: CustomerUser, locations: CustomerLocation[]) {
-    const result = await pool.query<LocationsRow>(
+  private async saveLocations(
+    customerUser: CustomerUser,
+    locations: CustomerLocation[],
+    executor: Executor = pool,
+  ) {
+    const result = await executor.query<LocationsRow>(
       `update registration_drafts
        set delivery_locations = $3::jsonb,
            updated_at = now()
@@ -144,17 +174,24 @@ export class CustomerLocationsService {
       );
     }
 
-    return normalizePrimaryLocations(arrayOrEmpty(row.delivery_locations).map(safeLocation));
+    return sortLocations(
+      normalizePrimaryLocations(arrayOrEmpty(row.delivery_locations).map(safeLocation)),
+    );
   }
 }
 
 export const customerLocationsService = new CustomerLocationsService();
 
-function toLocation(input: CustomerLocationInput, id: string): CustomerLocation {
+function toLocation(
+  input: CustomerLocationInput,
+  id: string,
+  siteId: string,
+  createdAt: string | null,
+): CustomerLocation {
   return {
     id,
     name: input.name.trim(),
-    siteId: input.siteId?.trim() || `LOC-${id.slice(0, 8).toUpperCase()}`,
+    siteId,
     streetAddress: input.streetAddress.trim(),
     city: input.city.trim(),
     region: input.region.trim(),
@@ -165,6 +202,7 @@ function toLocation(input: CustomerLocationInput, id: string): CustomerLocation 
     latitude: input.latitude,
     longitude: input.longitude,
     isPrimary: input.isPrimary === true,
+    createdAt,
   };
 }
 
@@ -186,7 +224,30 @@ function safeLocation(value: unknown): CustomerLocation {
     latitude: numberOrUndefined(location.latitude),
     longitude: numberOrUndefined(location.longitude),
     isPrimary: location.isPrimary === true,
+    createdAt: dateStringOrNull(location.createdAt),
   };
+}
+
+async function nextSiteId(executor: Executor) {
+  const result = await executor.query<{ site_id: string }>(
+    `select 'LOC-' || lpad(nextval('customer_location_site_id_seq')::text, 6, '0') as site_id`,
+  );
+  const siteId = result.rows[0]?.site_id;
+  if (!siteId) {
+    throw new AppError('Site ID could not be generated.', 503, 'SITE_ID_GENERATION_FAILED');
+  }
+  return siteId;
+}
+
+function sortLocations(locations: CustomerLocation[]) {
+  return locations
+    .map((location, index) => ({ location, index }))
+    .sort((left, right) => {
+      const leftTime = left.location.createdAt ? Date.parse(left.location.createdAt) : 0;
+      const rightTime = right.location.createdAt ? Date.parse(right.location.createdAt) : 0;
+      return rightTime - leftTime || left.index - right.index;
+    })
+    .map(({ location }) => location);
 }
 
 function normalizePrimaryLocations(locations: CustomerLocation[], primaryId?: string) {
@@ -217,4 +278,9 @@ function stringOrNull(value: unknown) {
 
 function numberOrUndefined(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function dateStringOrNull(value: unknown) {
+  if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) return null;
+  return new Date(value).toISOString();
 }

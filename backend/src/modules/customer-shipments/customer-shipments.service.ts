@@ -9,6 +9,7 @@ interface CustomerShipmentRow {
   id: string;
   shipment_number: string;
   status: string;
+  loading_status: string | null;
   quantity_ton: string;
   scheduled_date: Date | string | null;
   delivered_at: Date | string | null;
@@ -51,8 +52,12 @@ export class CustomerShipmentsService {
       );
     }
     if (query.status) {
-      values.push(query.status);
-      conditions.push(`s.status = $${values.length}`);
+      if (query.status === 'LOADING') {
+        conditions.push("s.status = 'ASSIGNED' and s.loading_status is not null");
+      } else {
+        values.push(query.status);
+        conditions.push(`s.status = $${values.length}`);
+      }
     }
     if (query.dateFrom) {
       values.push(query.dateFrom);
@@ -110,7 +115,7 @@ export class CustomerShipmentsService {
 
 export const customerShipmentsService = new CustomerShipmentsService();
 
-const customerShipmentSelect = `select s.id,s.shipment_number,s.status,s.quantity_ton,
+const customerShipmentSelect = `select s.id,s.shipment_number,s.status,s.loading_status,s.quantity_ton,
  s.scheduled_date,s.delivered_at,s.created_at,s.updated_at,
  o.id as order_id,o.order_number,o.fulfilment_type,o.ship_to_snapshot,o.hader_city_name,
  dr.requested_date,c.id as contract_id,c.reference as contract_reference,
@@ -131,7 +136,7 @@ function mapShipment(row: CustomerShipmentRow) {
   return {
     id: row.id,
     shipmentNumber: row.shipment_number,
-    status: row.status,
+    status: customerStatus(row.status, row.loading_status),
     quantityTon,
     equivalentBags:
       unitWeightKg > 0 && row.packaging.toLowerCase() !== 'bulk'
@@ -186,4 +191,8 @@ function dateOnly(value: Date | string | null) {
 
 function dateTime(value: Date | string | null) {
   return value ? new Date(String(value)).toISOString() : null;
+}
+
+function customerStatus(status: string, loadingStatus: string | null) {
+  return status === 'ASSIGNED' && loadingStatus ? 'LOADING' : status;
 }

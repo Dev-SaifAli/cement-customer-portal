@@ -14,7 +14,7 @@ export class CustomerQuotationsController {
     response.status(200).json({
       success: true,
       data: {
-        locations: customerQuotationsService.getPickupLocations(),
+        locations: await customerQuotationsService.getPickupLocations(),
       },
     });
   }

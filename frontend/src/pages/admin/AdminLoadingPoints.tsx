@@ -1,9 +1,11 @@
 import { Factory, Pencil, Plus, Search, Warehouse, X } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { SearchableTomSelect } from '../../components/ui/SearchableTomSelect';
 import { useSalesAuth } from '../../context/SalesAuthContext';
 import {
   createLoadingPoint,
   listLoadingPoints,
+  LoadingPointRequestError,
   updateLoadingPoint,
   type LoadingPoint,
   type LoadingPointInput,
@@ -131,16 +133,20 @@ export function AdminLoadingPoints() {
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-[#f8fafc] text-xs font-semibold uppercase tracking-wide text-[#64748b]">
               <tr>
+                <th className="px-4 py-3">S.No.</th>
                 <th className="px-4 py-3">
                   {pointType === 'SILO' ? 'Silo ID' : 'Bagging Line ID'}
                 </th>
                 <th className="px-4 py-3">Product</th>
-                <th className="px-4 py-3">Packaging</th>
+                <th className="px-4 py-3">
+                  {pointType === 'SILO' ? 'Packaging' : 'Bag Size'}
+                </th>
                 <th className="px-4 py-3">
                   {pointType === 'SILO' ? 'Capacity (TON)' : 'Capacity (TON/hour)'}
                 </th>
                 {pointType === 'BAGGING_LINE' && <th className="px-4 py-3">Maximum Trucks</th>}
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Last Updated</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -148,14 +154,15 @@ export function AdminLoadingPoints() {
               {loading ? (
                 Array.from({ length: 5 }).map((_, index) => (
                   <tr key={index}>
-                    <td colSpan={pointType === 'BAGGING_LINE' ? 7 : 6} className="px-4 py-4">
+                    <td colSpan={pointType === 'BAGGING_LINE' ? 9 : 8} className="px-4 py-4">
                       <div className="h-4 animate-pulse rounded bg-slate-100" />
                     </td>
                   </tr>
                 ))
               ) : items.length ? (
-                items.map((item) => (
+                items.map((item, index) => (
                   <tr key={item.id} className="hover:bg-[#faf8fc]">
+                    <td className="px-4 py-4 text-[#64748b]">{(page - 1) * 10 + index + 1}</td>
                     <td className="px-4 py-4 font-semibold">{item.pointNumber}</td>
                     <td className="px-4 py-4">
                       <p className="font-medium">{item.product?.name ?? 'Not configured'}</p>
@@ -163,7 +170,11 @@ export function AdminLoadingPoints() {
                         {item.product?.code ?? 'Select a product'}
                       </p>
                     </td>
-                    <td className="px-4 py-4">{item.product?.packagingType ?? 'Not configured'}</td>
+                    <td className="px-4 py-4">
+                      {pointType === 'SILO'
+                        ? item.product?.packagingType ?? 'Not configured'
+                        : bagSizeLabel(item.product?.uom)}
+                    </td>
                     <td className="px-4 py-4">
                       {pointType === 'SILO'
                         ? `${item.capacityTon.toFixed(3)} TON`
@@ -174,6 +185,12 @@ export function AdminLoadingPoints() {
                     )}
                     <td className="px-4 py-4">
                       <Status value={item.status} />
+                    </td>
+                    <td
+                      className="px-4 py-4 text-[#64748b]"
+                      title={formatExactTimestamp(item.updatedAt || item.createdAt)}
+                    >
+                      {formatRelativeTimestamp(item.updatedAt || item.createdAt)}
                     </td>
                     <td className="px-4 py-4 text-right">
                       {canManage && (
@@ -191,7 +208,7 @@ export function AdminLoadingPoints() {
               ) : (
                 <tr>
                   <td
-                    colSpan={pointType === 'BAGGING_LINE' ? 7 : 6}
+                    colSpan={pointType === 'BAGGING_LINE' ? 9 : 8}
                     className="px-4 py-12 text-center text-[#64748b]"
                   >
                     No {title.toLowerCase()} configured.
@@ -263,7 +280,6 @@ function LoadingPointForm({
     [pointType, products],
   );
   const [form, setForm] = useState<LoadingPointInput>({
-    pointNumber: point?.pointNumber ?? '',
     pointType,
     productId: point?.product?.id ?? '',
     capacityTon: point?.capacityTon ?? 0,
@@ -273,27 +289,74 @@ function LoadingPointForm({
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const selectedProduct = compatibleProducts.find((product) => product.id === form.productId);
+  const capacityError =
+    pointType === 'SILO' ? fieldErrors.capacityTon : fieldErrors.capacityTonPerHour;
+  const updateField = (field: keyof LoadingPointInput, value: LoadingPointInput[typeof field]) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const validCapacity =
-      pointType === 'SILO' ? Number(form.capacityTon) > 0 : Number(form.capacityTonPerHour) > 0;
-    const validMaxTrucks = pointType === 'SILO' || Number(form.maxTrucks) >= 1;
-    if (!form.productId || !validCapacity || !validMaxTrucks) {
-      setError(
-        pointType === 'SILO'
-          ? 'Product and a capacity greater than zero are required.'
-          : 'Product, a capacity greater than zero, and at least one maximum truck are required.',
-      );
+    const nextFieldErrors: Record<string, string> = {};
+    if (!form.productId) nextFieldErrors.productId = 'Select a compatible product.';
+    if (pointType === 'SILO' && Number(form.capacityTon) <= 0) {
+      nextFieldErrors.capacityTon = 'Silo capacity must be greater than zero.';
+    }
+    if (pointType === 'BAGGING_LINE' && Number(form.capacityTonPerHour) <= 0) {
+      nextFieldErrors.capacityTonPerHour = 'Bagging Line capacity must be greater than zero.';
+    }
+    if (pointType === 'BAGGING_LINE' && Number(form.maxTrucks) < 1) {
+      nextFieldErrors.maxTrucks = 'Maximum Trucks must be at least one.';
+    }
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setError('');
       return;
     }
+    const payload: LoadingPointInput =
+      pointType === 'SILO'
+        ? {
+            pointType,
+            productId: form.productId,
+            capacityTon: Number(form.capacityTon),
+            status: form.status,
+          }
+        : {
+            pointType,
+            productId: form.productId,
+            capacityTonPerHour: Number(form.capacityTonPerHour),
+            maxTrucks: Number(form.maxTrucks),
+            status: form.status,
+          };
     setBusy(true);
     setError('');
+    setFieldErrors({});
     try {
-      if (point) await updateLoadingPoint(point.id, form);
-      else await createLoadingPoint(form);
+      if (point) await updateLoadingPoint(point.id, payload);
+      else await createLoadingPoint(payload);
       await onSaved();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to save loading point.');
+      if (cause instanceof LoadingPointRequestError) {
+        const requestFieldErrors =
+          Object.keys(cause.fieldErrors).length > 0
+            ? cause.fieldErrors
+            : fieldErrorsForLoadingPointError(cause.code, cause.message);
+        if (Object.keys(requestFieldErrors).length) {
+          setFieldErrors(requestFieldErrors);
+          setError('Correct the highlighted fields and try again.');
+        } else {
+          setError(cause.message);
+        }
+      } else {
+        setError(cause instanceof Error ? cause.message : 'Unable to save loading point.');
+      }
     } finally {
       setBusy(false);
     }
@@ -326,50 +389,70 @@ function LoadingPointForm({
             <X size={18} />
           </button>
         </header>
-        <div className="grid gap-4 p-5 sm:grid-cols-2">
-          <Field label={pointType === 'SILO' ? 'Silo ID' : 'Bagging Line ID'}>
-            <input
-              required
-              value={form.pointNumber}
-              onChange={(event) => setForm({ ...form, pointNumber: event.target.value })}
-              className={inputClass}
-              placeholder={pointType === 'SILO' ? 'SILO-01' : 'LINE-01'}
-            />
-          </Field>
-          <Field label="Status">
-            <select
-              value={form.status}
-              onChange={(event) =>
-                setForm({ ...form, status: event.target.value as LoadingPointStatus })
-              }
-              className={inputClass}
-            >
-              {statuses.map((value) => (
-                <option key={value} value={value}>
-                  {label(value)}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <div className="sm:col-span-2">
-            <Field label="Product">
-              <select
-                required
-                value={form.productId}
-                onChange={(event) => setForm({ ...form, productId: event.target.value })}
-                className={inputClass}
-              >
-                <option value="">Select compatible product</option>
-                {compatibleProducts.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.code} — {product.name}
-                  </option>
-                ))}
-              </select>
+        <div className="grid gap-4 p-5 sm:grid-cols-12">
+          {point && (
+            <div className="sm:col-span-5">
+              <Field label={pointType === 'SILO' ? 'Silo ID' : 'Bagging Line ID'} required={false}>
+                <div className="flex h-11 items-center rounded-lg border border-[#e2e8f0] bg-slate-50 px-3 text-sm text-[#64748b]">
+                  {point.pointNumber}
+                </div>
+              </Field>
+            </div>
+          )}
+          <div className="sm:col-span-5">
+            <Field label="Status" {...(fieldErrors.status ? { error: fieldErrors.status } : {})}>
+              <SearchableTomSelect
+                ariaLabel="Loading point status"
+                placeholder="Select status"
+                value={form.status}
+                options={statuses.map((value) => ({ value, label: label(value) }))}
+                dropdownParent="body"
+                onChange={(value) => updateField('status', value as LoadingPointStatus)}
+              />
             </Field>
           </div>
-          <div className={pointType === 'SILO' ? 'sm:col-span-2' : ''}>
-            <Field label={pointType === 'SILO' ? 'Capacity (TON)' : 'Capacity (TON/hour)'}>
+          <div className="sm:col-span-12">
+            <Field
+              label="Product"
+              {...(fieldErrors.productId ? { error: fieldErrors.productId } : {})}
+            >
+              <SearchableTomSelect
+                ariaLabel="Compatible product"
+                placeholder="Select compatible product"
+                value={form.productId}
+                options={compatibleProducts.map((product) => ({
+                  value: product.id,
+                  label: `${product.code} — ${product.name}`,
+                }))}
+                dropdownParent="body"
+                onChange={(value) => updateField('productId', value)}
+              />
+            </Field>
+          </div>
+          {pointType === 'BAGGING_LINE' && (
+            <div className="sm:col-span-4">
+              <Field label="Bag Size">
+                <SearchableTomSelect
+                  ariaLabel="Product bag size"
+                  placeholder={form.productId ? 'Bag size not configured' : 'Select product first'}
+                  value={selectedProduct?.uom ?? ''}
+                  options={
+                    selectedProduct?.uom
+                      ? [{ value: selectedProduct.uom, label: bagSizeLabel(selectedProduct.uom) }]
+                      : []
+                  }
+                  disabled
+                  dropdownParent="body"
+                  onChange={() => undefined}
+                />
+              </Field>
+            </div>
+          )}
+          <div className={pointType === 'BAGGING_LINE' ? 'sm:col-span-4' : 'sm:col-span-5'}>
+            <Field
+              label={pointType === 'SILO' ? 'Capacity (TON)' : 'Capacity (TON/hour)'}
+              {...(capacityError ? { error: capacityError } : {})}
+            >
               <input
                 required
                 min="0.001"
@@ -377,10 +460,9 @@ function LoadingPointForm({
                 type="number"
                 value={(pointType === 'SILO' ? form.capacityTon : form.capacityTonPerHour) || ''}
                 onChange={(event) =>
-                  setForm(
-                    pointType === 'SILO'
-                      ? { ...form, capacityTon: Number(event.target.value) }
-                      : { ...form, capacityTonPerHour: Number(event.target.value) },
+                  updateField(
+                    pointType === 'SILO' ? 'capacityTon' : 'capacityTonPerHour',
+                    Number(event.target.value),
                   )
                 }
                 className={inputClass}
@@ -393,20 +475,25 @@ function LoadingPointForm({
             )}
           </div>
           {pointType === 'BAGGING_LINE' && (
-            <Field label="Maximum Trucks">
-              <input
-                required
-                min="1"
-                step="1"
-                type="number"
-                value={form.maxTrucks || ''}
-                onChange={(event) => setForm({ ...form, maxTrucks: Number(event.target.value) })}
-                className={inputClass}
-              />
-            </Field>
+            <div className="sm:col-span-4">
+              <Field
+                label="Maximum Trucks"
+                {...(fieldErrors.maxTrucks ? { error: fieldErrors.maxTrucks } : {})}
+              >
+                <input
+                  required
+                  min="1"
+                  step="1"
+                  type="number"
+                  value={form.maxTrucks || ''}
+                  onChange={(event) => updateField('maxTrucks', Number(event.target.value))}
+                  className={inputClass}
+                />
+              </Field>
+            </div>
           )}
           {error && (
-            <p className="sm:col-span-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-[#b42318]">
+            <p className="sm:col-span-12 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-[#b42318]">
               {error}
             </p>
           )}
@@ -423,7 +510,7 @@ function LoadingPointForm({
             disabled={busy}
             className="rounded-lg bg-[#54247a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#472066] disabled:opacity-50"
           >
-            {busy ? 'Saving...' : 'Save Loading Point'}
+            {busy ? 'Saving...' : `Save ${pointType === 'SILO' ? 'Silo' : 'Bagging Line'}`}
           </button>
         </footer>
       </form>
@@ -450,12 +537,23 @@ function Tab({
     </button>
   );
 }
-function Field({ label: text, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label: text,
+  children,
+  error,
+  required = true,
+}: {
+  label: string;
+  children: React.ReactNode;
+  error?: string;
+  required?: boolean;
+}) {
   return (
     <label className="block text-sm font-semibold text-[#1a1b23]">
       {text}
-      <span className="text-red-600"> *</span>
+      {required && <span className="text-red-600"> *</span>}
       <span className="mt-1.5 block">{children}</span>
+      {error && <span className="mt-1.5 block text-xs font-medium text-[#b42318]">{error}</span>}
     </label>
   );
 }
@@ -481,5 +579,60 @@ function label(value: string) {
     .replaceAll('_', ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
+
+function bagSizeLabel(uom?: string) {
+  if (!uom) return 'Not configured';
+  const match = uom.trim().toUpperCase().match(/^(\d+)KG_BAG$/);
+  return match ? `${match[1]} KG` : uom.replaceAll('_', ' ');
+}
+
+function formatExactTimestamp(value: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
+function formatRelativeTimestamp(value: string) {
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+  if (elapsedSeconds < 10) return 'Just now';
+  if (elapsedSeconds < 60) return `${elapsedSeconds} seconds ago`;
+
+  const minutes = Math.floor(elapsedSeconds / 60);
+  if (minutes < 60) return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+  if (hours < 48) return 'Yesterday';
+
+  const days = Math.floor(hours / 24);
+  if (days < 14) return `${days} days ago`;
+
+  const weeks = Math.floor(days / 7);
+  if (days < 60) return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
+
+  const months = Math.floor(days / 30);
+  if (days < 365) return `${months} ${months === 1 ? 'month' : 'months'} ago`;
+
+  const years = Math.floor(days / 365);
+  return `${years} ${years === 1 ? 'year' : 'years'} ago`;
+}
 const inputClass =
   'h-11 w-full rounded-lg border border-[#e2e8f0] bg-white px-3 text-sm outline-none focus:border-[#54247a]';
+
+function fieldErrorsForLoadingPointError(code: string | undefined, message: string) {
+  if (
+    ['LOADING_POINT_PRODUCT_INVALID', 'LOADING_POINT_PRODUCT_INCOMPATIBLE', 'LOADING_POINT_PACKAGING_UNSUPPORTED'].includes(
+      code ?? '',
+    )
+  ) {
+    return { productId: message };
+  }
+  if (code === 'LOADING_POINT_CAPACITY_INVALID') return { capacityTon: message };
+  if (code === 'BAGGING_LINE_CAPACITY_INVALID') return { capacityTonPerHour: message };
+  if (code === 'BAGGING_LINE_MAX_TRUCKS_INVALID') return { maxTrucks: message };
+  return {};
+}

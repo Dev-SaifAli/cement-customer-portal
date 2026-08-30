@@ -11,6 +11,12 @@ export class CustomerLocationsController {
     response.status(200).json({ success: true, data: { locations } });
   }
 
+  async listCities(request: CustomerAuthenticatedRequest, response: Response) {
+    getCustomerUser(request);
+    const cities = await customerLocationsService.listCities();
+    response.status(200).json({ success: true, data: { cities } });
+  }
+
   async create(request: CustomerAuthenticatedRequest, response: Response) {
     const customerUser = getCustomerUser(request);
     const input = customerLocationSchema.parse(request.body);
