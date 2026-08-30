@@ -22,5 +22,7 @@ export const createShipmentPodSchema = z
     }
   });
 
+export const updateShipmentPodSchema = createShipmentPodSchema;
+
 export type CreateShipmentPodInput = z.infer<typeof createShipmentPodSchema>;
 export type ShipmentPodDocumentType = z.infer<typeof shipmentPodDocumentTypeSchema>;

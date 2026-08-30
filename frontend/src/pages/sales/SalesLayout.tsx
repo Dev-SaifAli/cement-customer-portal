@@ -12,6 +12,7 @@ import {
   BriefcaseBusiness,
   ShoppingBag,
   PackageCheck,
+  MapPinned,
   Sun,
   X,
 } from 'lucide-react';
@@ -47,15 +48,19 @@ export function SalesLayout() {
             title: 'Sales Quotations',
             subtitle: 'Review requirements and prepare customer quotations',
           }
-    : location.pathname.startsWith('/sales/contracts')
-      ? { title: 'Sales Contracts', subtitle: 'Manage accepted quotation contracts' }
-      : location.pathname.startsWith('/sales/orders')
-        ? { title: 'Customer Orders', subtitle: 'Review and process submitted customer orders' }
-        : location.pathname.startsWith('/sales/shipments')
-          ? { title: 'Customer Shipments', subtitle: 'Read-only shipment visibility' }
-          : location.pathname.startsWith('/sales/applications')
-            ? { title: 'Sales Applications', subtitle: 'Review submitted customer applications' }
-            : { title: 'Sales Portal', subtitle: 'Internal customer review workspace' };
+    : location.pathname.startsWith('/sales/ship-to-variance')
+      ? user?.role === 'COMMERCIAL_DIRECTOR'
+        ? { title: 'Ship-to Variance Approvals', subtitle: 'Review pending extra-charge requests' }
+        : { title: 'Ship-to Variance', subtitle: 'Review actual-city delivery price differences' }
+      : location.pathname.startsWith('/sales/contracts')
+        ? { title: 'Sales Contracts', subtitle: 'Manage accepted quotation contracts' }
+        : location.pathname.startsWith('/sales/orders')
+          ? { title: 'Customer Orders', subtitle: 'Review and process submitted customer orders' }
+          : location.pathname.startsWith('/sales/shipments')
+            ? { title: 'Customer Shipments', subtitle: 'Read-only shipment visibility' }
+            : location.pathname.startsWith('/sales/applications')
+              ? { title: 'Sales Applications', subtitle: 'Review submitted customer applications' }
+              : { title: 'Sales Portal', subtitle: 'Internal customer review workspace' };
 
   const handleLogout = async () => {
     await logout();
@@ -140,14 +145,36 @@ export function SalesLayout() {
               </SalesNavLink>
             </>
           )}
-          <SalesNavLink
-            to="/sales/quotations"
-            icon={<FileText size={18} />}
-            collapsed={sidebarCollapsed}
-            onClick={() => setSidebarOpen(false)}
-          >
-            Quotations
-          </SalesNavLink>
+          {user?.role !== 'COMMERCIAL_DIRECTOR' && (
+            <SalesNavLink
+              to="/sales/quotations"
+              icon={<FileText size={18} />}
+              collapsed={sidebarCollapsed}
+              onClick={() => setSidebarOpen(false)}
+            >
+              Quotations
+            </SalesNavLink>
+          )}
+          {user?.role === 'PRICE_MANAGER' && (
+            <SalesNavLink
+              to="/sales/ship-to-variance"
+              icon={<MapPinned size={18} />}
+              collapsed={sidebarCollapsed}
+              onClick={() => setSidebarOpen(false)}
+            >
+              Ship-to Variance
+            </SalesNavLink>
+          )}
+          {user?.role === 'COMMERCIAL_DIRECTOR' && (
+            <SalesNavLink
+              to="/sales/ship-to-variance-approvals"
+              icon={<MapPinned size={18} />}
+              collapsed={sidebarCollapsed}
+              onClick={() => setSidebarOpen(false)}
+            >
+              Variance Approvals
+            </SalesNavLink>
+          )}
           {user?.role === 'SALES_REP' && (
             <>
               <SalesNavLink

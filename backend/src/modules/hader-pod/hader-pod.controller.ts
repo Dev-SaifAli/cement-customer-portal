@@ -7,6 +7,7 @@ import {
   createShipmentPodSchema,
   shipmentPodDocumentTypeSchema,
   shipmentPodIdSchema,
+  updateShipmentPodSchema,
 } from './hader-pod.validation.js';
 
 export class HaderPodController {
@@ -24,6 +25,15 @@ export class HaderPodController {
       success: true,
       data: { pod: await haderPodService.get(shipmentId(request)) },
     });
+  }
+
+  async update(request: SalesAuthenticatedRequest, response: Response) {
+    const pod = await haderPodService.update(
+      shipmentId(request),
+      updateShipmentPodSchema.parse(request.body),
+      user(request),
+    );
+    response.json({ success: true, data: { pod } });
   }
 
   async uploadDocument(request: SalesAuthenticatedRequest, response: Response) {

@@ -15,6 +15,10 @@ import { SalesQuotationDetailsPage } from '../pages/sales/SalesQuotationDetails'
 import { SalesQuotationsPage } from '../pages/sales/SalesQuotations';
 import { HaderShipments } from '../pages/hader/HaderShipments';
 import { HaderShipmentDetails } from '../pages/hader/HaderShipmentDetails';
+import { PriceManagerShipToVariancesPage } from '../pages/sales/PriceManagerShipToVariances';
+import { PriceManagerShipToVarianceDetailsPage } from '../pages/sales/PriceManagerShipToVarianceDetails';
+import { CommercialDirectorVarianceApprovalsPage } from '../pages/sales/CommercialDirectorVarianceApprovals';
+import { CommercialDirectorVarianceApprovalDetailsPage } from '../pages/sales/CommercialDirectorVarianceApprovalDetails';
 import { getSalesLandingPath } from '../utils/salesRouting';
 
 export function SalesRoutes() {
@@ -44,6 +48,17 @@ export function SalesRoutes() {
               <Route path="quotations" element={<SalesQuotationsPage />} />
               <Route path="quotations/:id" element={<SalesQuotationDetailsPage />} />
             </Route>
+            <Route element={<RequireSalesRoles roles={['PRICE_MANAGER']} />}>
+              <Route path="ship-to-variance" element={<PriceManagerShipToVariancesPage />} />
+              <Route
+                path="ship-to-variance/:id"
+                element={<PriceManagerShipToVarianceDetailsPage />}
+              />
+            </Route>
+            <Route element={<RequireSalesRoles roles={['COMMERCIAL_DIRECTOR']} />}>
+              <Route path="ship-to-variance-approvals" element={<CommercialDirectorVarianceApprovalsPage />} />
+              <Route path="ship-to-variance-approvals/:id" element={<CommercialDirectorVarianceApprovalDetailsPage />} />
+            </Route>
           </Route>
         </Route>
         <Route path="*" element={<SalesRoleLanding />} />
@@ -64,6 +79,8 @@ function RequireSalesRoles({
     | 'DELIVERY_TEAM_USER'
     | 'PRICE_MANAGER'
     | 'PRICING_ADMIN'
+    | 'COMMERCIAL_DIRECTOR'
+    | 'PORTAL_ADMINISTRATOR'
   >;
 }) {
   const { user, loading, restoreError, refresh } = useSalesAuth();
