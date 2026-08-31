@@ -424,8 +424,25 @@ export function CustomerLocations() {
           locationLabel={form.name || undefined}
           onCancel={() => setMapTarget(null)}
           onConfirm={(coordinates) => {
-            updateField('latitude', coordinates.latitude);
-            updateField('longitude', coordinates.longitude);
+            const latitude = Number(coordinates.latitude);
+            const longitude = Number(coordinates.longitude);
+
+            if (
+              !Number.isFinite(latitude) ||
+              !Number.isFinite(longitude) ||
+              latitude < -90 ||
+              latitude > 90 ||
+              longitude < -180 ||
+              longitude > 180
+            ) {
+              setFormErrors((current) => ({
+                ...current,
+                coordinates: 'Selected map coordinates are invalid.',
+              }));
+              return;
+            }
+
+            setForm((current) => ({ ...current, latitude, longitude }));
             setFormErrors((current) => ({ ...current, coordinates: '' }));
             setMapTarget(null);
           }}

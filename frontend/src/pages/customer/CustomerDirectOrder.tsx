@@ -60,6 +60,8 @@ export function CustomerDirectOrder() {
   const canCreate = user?.role === 'CUSTOMER_ADMIN' || user?.role === 'PURCHASER';
   const quantityTons = Number(quantity);
   const selectedLocation = locations.find((location) => location.id === shipToLocationId) ?? null;
+  const hasMappedLocations = locations.some(hasMapCoordinates);
+  const hasUnmappedLocations = locations.some((location) => !hasMapCoordinates(location));
   const selectedPickup =
     pickupLocations.find((location) => location.id === pickupLocationId) ?? null;
 
@@ -71,11 +73,11 @@ export function CustomerDirectOrder() {
         setProducts(productResult.items);
         setLocations(customerLocations);
         setPickupLocations(pickupResult);
-        setShipToLocationId(
-          customerLocations.find((location) => location.isPrimary)?.id ??
-            customerLocations[0]?.id ??
-            '',
+        const mappedPrimaryLocation = customerLocations.find(
+          (location) => location.isPrimary && hasMapCoordinates(location),
         );
+        const firstMappedLocation = customerLocations.find(hasMapCoordinates);
+        setShipToLocationId(mappedPrimaryLocation?.id ?? firstMappedLocation?.id ?? '');
         setPickupLocationId(pickupResult[0]?.id ?? '');
       })
       .catch(() => {
@@ -101,6 +103,7 @@ export function CustomerDirectOrder() {
   const pricingPayload = useMemo<DirectOrderInput | null>(() => {
     if (!selectedProduct || !Number.isFinite(quantityTons) || quantityTons <= 0) return null;
     if (fulfilmentType === 'DELIVERY' && !shipToLocationId) return null;
+    if (fulfilmentType === 'DELIVERY' && !hasMapCoordinates(selectedLocation)) return null;
     if (fulfilmentType === 'PICKUP' && !pickupLocationId) return null;
     return {
       productId: selectedProduct.id,
@@ -119,6 +122,7 @@ export function CustomerDirectOrder() {
     quantityTons,
     requestedDeliveryDate,
     selectedProduct,
+    selectedLocation,
     shipToLocationId,
   ]);
 
@@ -202,8 +206,16 @@ export function CustomerDirectOrder() {
     if (!selectedProduct) return setError('Select a product to continue.');
     if (!Number.isFinite(quantityTons) || quantityTons <= 0)
       return setError('Enter a quantity greater than zero TON.');
+    if (fulfilmentType === 'DELIVERY' && !hasMappedLocations)
+      return setError(
+        'Set a delivery location on the map before creating a Direct Order. Open Delivery Locations, edit the location, and select its map position.',
+      );
     if (fulfilmentType === 'DELIVERY' && !shipToLocationId)
       return setError('Select a ship-to location.');
+    if (fulfilmentType === 'DELIVERY' && !hasMapCoordinates(selectedLocation))
+      return setError(
+        'Set the delivery location on the map before creating a Direct Order. Open Delivery Locations, edit the location, and select its map position.',
+      );
     if (fulfilmentType === 'DELIVERY' && !requestedDeliveryDate)
       return setError('Select a requested delivery date.');
     if (fulfilmentType === 'PICKUP' && !pickupLocationId)
@@ -408,11 +420,28 @@ export function CustomerDirectOrder() {
                   >
                     <option value="">Select ship-to location</option>
                     {locations.map((location) => (
-                      <option key={location.id} value={location.id}>
+                      <option
+                        key={location.id}
+                        value={location.id}
+                        disabled={!hasMapCoordinates(location)}
+                      >
                         {location.name} — {location.city}, {location.region}
+                        {!hasMapCoordinates(location) ? ' — Map location required' : ''}
                       </option>
                     ))}
                   </select>
+                  {hasUnmappedLocations && (
+                    <p className="customer-secondary mt-2 text-xs leading-5">
+                      Locations marked “Map location required” cannot be used for delivery orders.{' '}
+                      <Link
+                        to="/customer/locations"
+                        className="font-bold text-[var(--customer-primary)] hover:underline"
+                      >
+                        Set the delivery location on the map
+                      </Link>
+                      .
+                    </p>
+                  )}
                 </Field>
                 <Field label="Requested Delivery Date" required>
                   <div className="relative">
@@ -764,6 +793,19 @@ function State({
       {loading && <Loader2 size={17} className="animate-spin" />}
       {message}
     </div>
+  );
+}
+
+function hasMapCoordinates(location: CustomerLocation | null): location is CustomerLocation & {
+  latitude: number;
+  longitude: number;
+} {
+  return (
+    location !== null &&
+    typeof location.latitude === 'number' &&
+    Number.isFinite(location.latitude) &&
+    typeof location.longitude === 'number' &&
+    Number.isFinite(location.longitude)
   );
 }
 
