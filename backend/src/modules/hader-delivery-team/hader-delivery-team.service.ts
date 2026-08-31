@@ -177,6 +177,7 @@ export class HaderDeliveryTeamService {
       event: 'SHIPMENT_CLOSED',
       timestampColumn: 'closed_at',
       actorColumn: 'closed_by_sales_user_id',
+      requiresPod: true,
     });
   }
 
@@ -190,6 +191,7 @@ export class HaderDeliveryTeamService {
       timestampColumn: 'in_transit_at' | 'delivered_at' | 'closed_at';
       actorColumn:
         'in_transit_by_sales_user_id' | 'delivered_by_sales_user_id' | 'closed_by_sales_user_id';
+      requiresPod?: boolean;
     },
   ) {
     const client = await pool.connect();
@@ -207,6 +209,19 @@ export class HaderDeliveryTeamService {
           409,
           'DELIVERY_TEAM_TRANSITION_INVALID',
         );
+      }
+      if (change.requiresPod) {
+        const pod = await client.query<{ exists: boolean }>(
+          'select exists(select 1 from shipment_pods where shipment_id=$1) as exists',
+          [id],
+        );
+        if (!pod.rows[0]?.exists) {
+          throw new AppError(
+            'Proof of delivery is required before the shipment can be closed.',
+            409,
+            'SHIPMENT_POD_REQUIRED',
+          );
+        }
       }
       await client.query(
         `update shipments set status=$2,${change.timestampColumn}=now(),${change.actorColumn}=$3,
