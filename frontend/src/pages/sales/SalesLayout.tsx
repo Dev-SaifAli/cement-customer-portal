@@ -34,7 +34,11 @@ export function SalesLayout() {
     items.push({ to: '/sales/ship-to-variance', label: 'Ship-to Variance', icon: <MapPinned size={18} /> });
   }
   if (user?.role === 'COMMERCIAL_DIRECTOR') {
-    items.push({ to: '/sales/ship-to-variance-approvals', label: 'Variance Approvals', icon: <MapPinned size={18} /> });
+    items.push({
+      to: '/sales/ship-to-variance-approvals',
+      label: 'Ship-to Variance Approvals',
+      icon: <MapPinned size={18} />,
+    });
   }
   if (user?.role === 'SALES_REP') {
     items.push(
