@@ -1,0 +1,291 @@
+{
+  "document": {
+    "title": "AlSafwa Cement Portal — User Guide and UAT",
+    "subtitle": "Client-facing operating guide and user acceptance testing evidence",
+    "version": "1.0",
+    "owner": "AlSafwa Cement",
+    "classification": "Client Use",
+    "preparedFor": "AlSafwa Cement Portal End Users"
+  },
+  "implementedAreas": [
+    "Customer Registration & Onboarding",
+    "Customer Portal",
+    "Sales Representative",
+    "Pricing Administrator",
+    "Hader Manager",
+    "Price Manager",
+    "Commercial Director",
+    "Portal Administrator / User Management",
+    "End-to-End Workflows"
+  ],
+  "pendingAreas": [
+    "VAS Cloud Logistics API integration",
+    "System Parameters",
+    "Audit / Activity Logs",
+    "Global Notifications (subject to implementation verification)",
+    "Reports & Analytics (subject to implementation verification)",
+    "Financial posting of approved Ship-to Variance charges",
+    "Oracle Fusion integration",
+    "Invoices / Receivables / Statements (subject to implementation verification)"
+  ],
+  "sections": [
+    {
+      "id": "customer-registration-onboarding",
+      "title": "Customer Registration & Onboarding",
+      "audience": "Prospective customer and Customer Administrator",
+      "summary": "Create an organization registration, provide company and contact details, upload required documents, define delivery locations, nominate the Customer Administrator, and submit the application for Sales review.",
+      "steps": [
+        "Open the customer registration page and start a new application.",
+        "Enter the required company and contact information.",
+        "Upload the required company documents and provide valid future expiry dates.",
+        "Add delivery locations and select map locations where applicable.",
+        "Enter the Customer Administrator details.",
+        "Review the application and submit it for Sales review."
+      ],
+      "screenshots": [
+        {
+          "file": "01_customer_registration_start.png",
+          "caption": "Customer registration start page",
+          "instruction": "Select the registration action to begin a new organization application."
+        },
+        {
+          "file": "02_company_information.png",
+          "caption": "Company information",
+          "instruction": "Complete the required organization and company registration information."
+        },
+        {
+          "file": "03_contact_information.png",
+          "caption": "Contact information",
+          "instruction": "Provide the primary business contact details."
+        },
+        {
+          "file": "04_documents.png",
+          "caption": "Required company documents",
+          "instruction": "Upload the required documents and enter valid expiry dates where requested."
+        },
+        {
+          "file": "05_delivery_locations.png",
+          "caption": "Delivery locations",
+          "instruction": "Add the operational delivery locations associated with the registration."
+        },
+        {
+          "file": "06_set_map_location.png",
+          "caption": "Map location selection",
+          "instruction": "Use the map to select and confirm the correct delivery location."
+        },
+        {
+          "file": "07_customer_admin.png",
+          "caption": "Customer Administrator details",
+          "instruction": "Nominate the primary administrator who will manage the customer portal account."
+        },
+        {
+          "file": "08_registration_review_submit.png",
+          "caption": "Registration review and submission",
+          "instruction": "Review the entered information and submit the application for Sales review."
+        }
+      ]
+    },
+    {
+      "id": "sales-representative-onboarding",
+      "title": "Sales Representative",
+      "audience": "Sales Representative",
+      "summary": "Review submitted customer registration information, approve the registration, and activate the customer account using the authorized Sales workflow.",
+      "steps": [
+        "Open the submitted application from the Sales applications queue.",
+        "Review the company, contact, document, delivery-location, and administrator information.",
+        "Apply the appropriate Sales decision.",
+        "For an approved application, complete customer account activation using the existing activation action."
+      ],
+      "screenshots": [
+        {
+          "file": "09_sales_registration_review.png",
+          "caption": "Sales registration review",
+          "instruction": "Review the complete submitted registration before making a decision."
+        },
+        {
+          "file": "10_sales_approve.png",
+          "caption": "Sales approval action",
+          "instruction": "Approve the application when all required information has been verified."
+        },
+        {
+          "file": "11_approve_customer_account.png",
+          "caption": "Customer account activation",
+          "instruction": "Use the authorized activation action to enable the approved customer account."
+        },
+        {
+          "file": "12_customer_registration_result_application_status.png",
+          "caption": "Customer registration result and application status",
+          "instruction": "Confirm the customer-visible registration result after the Sales onboarding decision."
+        }
+      ]
+    },
+    {
+      "id": "customer-portal",
+      "title": "Customer Portal",
+      "audience": "Activated customer users",
+      "summary": "Guidance for authenticated customer features. Detailed procedures will be added as real screenshots are captured and mapped.",
+      "steps": [],
+      "screenshots": []
+    },
+    {
+      "id": "pricing-administrator",
+      "title": "Pricing Administrator",
+      "audience": "Pricing Administrator",
+      "summary": "Guidance for authorized product, pricing, and related administration. Detailed procedures will be added as real screenshots are captured and mapped.",
+      "steps": [],
+      "screenshots": []
+    },
+    {
+      "id": "hader-manager",
+      "title": "Hader Manager",
+      "audience": "Hader Manager",
+      "summary": "Guidance for authorized Hader delivery operations. Detailed procedures will be added as real screenshots are captured and mapped.",
+      "steps": [],
+      "screenshots": []
+    },
+    {
+      "id": "price-manager",
+      "title": "Price Manager",
+      "audience": "Price Manager",
+      "summary": "Guidance for authorized pricing review and variance workflows. Detailed procedures will be added as real screenshots are captured and mapped.",
+      "steps": [],
+      "screenshots": []
+    },
+    {
+      "id": "commercial-director",
+      "title": "Commercial Director",
+      "audience": "Commercial Director",
+      "summary": "Guidance for authorized commercial approval workflows. Detailed procedures will be added as real screenshots are captured and mapped.",
+      "steps": [],
+      "screenshots": []
+    },
+    {
+      "id": "portal-administrator",
+      "title": "Portal Administrator",
+      "audience": "Portal Administrator",
+      "summary": "Guidance for internal user administration and role-aware access management. Detailed procedures will be added as real screenshots are captured and mapped.",
+      "steps": [],
+      "screenshots": []
+    },
+    {
+      "id": "end-to-end-workflows",
+      "title": "End-to-End Workflows",
+      "audience": "Business process owners and UAT participants",
+      "summary": "Cross-role workflow guidance will be expanded only from verified application evidence.",
+      "steps": [],
+      "screenshots": []
+    }
+  ],
+  "uatCases": [
+    {
+      "id": "UAT-REG-001",
+      "area": "Customer Registration & Onboarding",
+      "title": "Start a customer registration",
+      "role": "Prospective customer",
+      "preconditions": "The registration page is available and the user is not signed in.",
+      "steps": [
+        "Open the customer registration page.",
+        "Start a new organization registration."
+      ],
+      "expectedResult": "The registration workflow opens and allows the user to enter company information.",
+      "evidence": ["01_customer_registration_start.png"]
+    },
+    {
+      "id": "UAT-REG-002",
+      "area": "Customer Registration & Onboarding",
+      "title": "Complete company and contact information",
+      "role": "Prospective customer",
+      "preconditions": "A customer registration has been started.",
+      "steps": [
+        "Enter all required company information.",
+        "Enter all required contact information.",
+        "Continue to the documents step."
+      ],
+      "expectedResult": "Valid company and contact information is retained and the registration can continue.",
+      "evidence": ["02_company_information.png", "03_contact_information.png"]
+    },
+    {
+      "id": "UAT-REG-003",
+      "area": "Customer Registration & Onboarding",
+      "title": "Upload registration documents",
+      "role": "Prospective customer",
+      "preconditions": "The registration has reached the document step and valid files are available.",
+      "steps": [
+        "Upload the required company documents.",
+        "Enter valid future expiry dates where required.",
+        "Continue to the next step."
+      ],
+      "expectedResult": "The uploaded documents and their metadata remain associated with the registration.",
+      "evidence": ["04_documents.png"]
+    },
+    {
+      "id": "UAT-REG-004",
+      "area": "Customer Registration & Onboarding",
+      "title": "Add a delivery location and map position",
+      "role": "Prospective customer",
+      "preconditions": "The registration has reached the delivery-location step.",
+      "steps": [
+        "Enter a delivery location.",
+        "Open the map selector.",
+        "Select and confirm the correct map location."
+      ],
+      "expectedResult": "The delivery location and selected map position are retained in the registration.",
+      "evidence": ["05_delivery_locations.png", "06_set_map_location.png"]
+    },
+    {
+      "id": "UAT-REG-005",
+      "area": "Customer Registration & Onboarding",
+      "title": "Nominate administrator and submit registration",
+      "role": "Prospective customer",
+      "preconditions": "All preceding registration steps contain valid information.",
+      "steps": [
+        "Enter the Customer Administrator details.",
+        "Review the full registration.",
+        "Submit the application."
+      ],
+      "expectedResult": "The application is submitted for Sales review and receives an application reference.",
+      "evidence": ["07_customer_admin.png", "08_registration_review_submit.png"]
+    },
+    {
+      "id": "UAT-SAL-001",
+      "area": "Sales Representative",
+      "title": "Review and approve a customer registration",
+      "role": "Sales Representative",
+      "preconditions": "A valid customer registration is pending Sales review and the Sales user is authenticated.",
+      "steps": [
+        "Open the pending registration from the Sales applications queue.",
+        "Review the submitted information and documents.",
+        "Approve the application."
+      ],
+      "expectedResult": "The application is approved through the authorized Sales workflow.",
+      "evidence": ["09_sales_registration_review.png", "10_sales_approve.png"]
+    },
+    {
+      "id": "UAT-SAL-002",
+      "area": "Sales Representative",
+      "title": "Activate an approved customer account",
+      "role": "Sales Representative",
+      "preconditions": "The customer application is approved and ready for account activation.",
+      "steps": [
+        "Open the approved application.",
+        "Run the customer account activation action."
+      ],
+      "expectedResult": "The customer account is activated using the approved registration information.",
+      "evidence": ["11_approve_customer_account.png"]
+    },
+    {
+      "id": "UAT-CUS-001",
+      "area": "Customer Registration & Onboarding",
+      "title": "Check application status",
+      "role": "Prospective customer",
+      "preconditions": "The user has the submitted application reference and registered email.",
+      "steps": [
+        "Open the application status page.",
+        "Enter the application reference and registered email.",
+        "Submit the status enquiry."
+      ],
+      "expectedResult": "The current customer-visible application result is displayed.",
+      "evidence": ["12_customer_registration_result_application_status.png"]
+    }
+  ]
+}

@@ -76,6 +76,8 @@ describe('Hader Delivery Team APIs', () => {
       clientQuery.mockImplementation((sql: string) => {
         if (sql.includes('select status from shipments'))
           return Promise.resolve({ rows: [{ status: from }] });
+        if (sql.includes('select exists(select 1 from shipment_pods'))
+          return Promise.resolve({ rows: [{ exists: true }] });
         return Promise.resolve({ rows: [] });
       });
 
@@ -109,6 +111,29 @@ describe('Hader Delivery Team APIs', () => {
       .set({ Cookie: `sales_session=${token()}` });
     expect(response.status).toBe(409);
     expect(response.body.error.code).toBe('DELIVERY_TEAM_TRANSITION_INVALID');
+    expect(clientQuery).not.toHaveBeenCalledWith(
+      expect.stringContaining('update shipments set status'),
+      expect.anything(),
+    );
+  });
+
+  it('requires proof of delivery before closing a delivered shipment', async () => {
+    authenticate('DELIVERY_TEAM_USER');
+    connect.mockResolvedValue({ query: clientQuery, release });
+    clientQuery.mockImplementation((sql: string) => {
+      if (sql.includes('select status from shipments'))
+        return Promise.resolve({ rows: [{ status: 'DELIVERED' }] });
+      if (sql.includes('select exists(select 1 from shipment_pods'))
+        return Promise.resolve({ rows: [{ exists: false }] });
+      return Promise.resolve({ rows: [] });
+    });
+
+    const response = await request(createApp())
+      .post(`/api/v1/hader/shipments/${shipmentId}/close`)
+      .set({ Cookie: `sales_session=${token()}` });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe('SHIPMENT_POD_REQUIRED');
     expect(clientQuery).not.toHaveBeenCalledWith(
       expect.stringContaining('update shipments set status'),
       expect.anything(),

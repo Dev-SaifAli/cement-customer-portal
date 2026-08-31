@@ -17,6 +17,16 @@ if (existsSync(backendEnvPath)) {
 }
 
 const booleanFromString = z.enum(['true', 'false']).transform((value) => value === 'true');
+const emptyStringToUndefined = (value: unknown) => (value === '' ? undefined : value);
+const optionalString = z.preprocess(
+  emptyStringToUndefined,
+  z.string().trim().min(1).optional(),
+);
+const optionalUrl = z.preprocess(emptyStringToUndefined, z.url().optional());
+const optionalPositiveInteger = z.preprocess(
+  emptyStringToUndefined,
+  z.coerce.number().int().positive().optional(),
+);
 
 const schema = z
   .object({
@@ -56,6 +66,11 @@ const schema = z
     FILE_STORAGE_ENDPOINT: z.string().optional(),
     FILE_STORAGE_ACCESS_KEY: z.string().optional(),
     FILE_STORAGE_SECRET_KEY: z.string().optional(),
+    VAS_ENABLED: booleanFromString.default(false),
+    VAS_BASE_URL: optionalUrl,
+    VAS_ORDER_ENDPOINT: optionalString,
+    VAS_COMPANY_CODE: optionalString,
+    VAS_TIMEOUT_MS: optionalPositiveInteger,
   })
   .superRefine((env, context) => {
     if (env.NODE_ENV === 'production' && (!env.JWT_SECRET || !env.SESSION_SECRET)) {
@@ -63,6 +78,23 @@ const schema = z
         code: 'custom',
         message: 'JWT_SECRET and SESSION_SECRET are required in production',
       });
+    }
+    if (env.VAS_ENABLED) {
+      const requiredConfiguration = [
+        ['VAS_BASE_URL', env.VAS_BASE_URL],
+        ['VAS_ORDER_ENDPOINT', env.VAS_ORDER_ENDPOINT],
+        ['VAS_COMPANY_CODE', env.VAS_COMPANY_CODE],
+        ['VAS_TIMEOUT_MS', env.VAS_TIMEOUT_MS],
+      ] as const;
+      for (const [name, value] of requiredConfiguration) {
+        if (value === undefined) {
+          context.addIssue({
+            code: 'custom',
+            path: [name],
+            message: `${name} is required when VAS_ENABLED is true`,
+          });
+        }
+      }
     }
   });
 

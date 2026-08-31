@@ -24,7 +24,6 @@ import { useSalesAuth } from '../../context/SalesAuthContext';
 import {
   closeDeliveryShipment,
   createShipmentPod,
-  dispatchShipment,
   getDeliveryTeamShipment,
   getShipmentPod,
   getShipmentPodDocumentBlob,
@@ -83,7 +82,7 @@ export function HaderDeliveryTeamDetails() {
 
   const execute = async () => {
     if (!shipment) return;
-    const action = availableAction(shipment.status);
+    const action = availableAction(shipment.status, pod);
     if (!action || !window.confirm(action.confirmation)) return;
     setSaving(true);
     setError('');
@@ -99,7 +98,7 @@ export function HaderDeliveryTeamDetails() {
 
   if (loading) return <div className="customer-card h-72 animate-pulse rounded-2xl border" />;
   if (!shipment) return <State error={error} retry={() => void load()} />;
-  const action = availableAction(shipment.status);
+  const action = availableAction(shipment.status, pod);
 
   return (
     <div className="space-y-5">
@@ -797,13 +796,8 @@ function State({ error, retry }: { error: string; retry: () => void }) {
     </div>
   );
 }
-function availableAction(status: DeliveryTeamShipment['status']) {
+function availableAction(status: DeliveryTeamShipment['status'], pod: ShipmentPod | null) {
   const actions = {
-    LOADED: {
-      label: 'Dispatch Shipment',
-      confirmation: 'Dispatch this loaded shipment?',
-      execute: dispatchShipment,
-    },
     DISPATCHED: {
       label: 'Start Delivery',
       confirmation: 'Start delivery for this shipment?',
@@ -814,17 +808,19 @@ function availableAction(status: DeliveryTeamShipment['status']) {
       confirmation: 'Mark this shipment as delivered?',
       execute: markShipmentDelivered,
     },
-    DELIVERED: {
-      label: 'Close Shipment',
-      confirmation: 'Close this delivered shipment?',
-      execute: closeDeliveryShipment,
-    },
   } satisfies Partial<
     Record<
       DeliveryTeamShipment['status'],
       { label: string; confirmation: string; execute: (id: string) => Promise<unknown> }
     >
   >;
+  if (status === 'DELIVERED' && pod) {
+    return {
+      label: 'Close Shipment',
+      confirmation: 'Close this delivered shipment?',
+      execute: closeDeliveryShipment,
+    };
+  }
   return actions[status as keyof typeof actions];
 }
 function scheduled(shipment: DeliveryTeamShipment) {
