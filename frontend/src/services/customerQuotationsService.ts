@@ -141,11 +141,6 @@ interface QuotationResponse {
   };
 }
 
-interface QuotationListResponse {
-  success: boolean;
-  data: CustomerQuotationListResult;
-}
-
 interface ApiErrorBody {
   error?: {
     message?: string;
@@ -168,7 +163,9 @@ export const getPickupLocations = async () => {
   return response.data.locations;
 };
 
-export const listCustomerQuotations = async (filters: CustomerQuotationListFilters = {}) => {
+export const listCustomerQuotations = async (
+  filters: CustomerQuotationListFilters = {},
+): Promise<CustomerQuotationListResult> => {
   const searchParams = new URLSearchParams();
   if (filters.page) searchParams.set('page', String(filters.page));
   if (filters.reference?.trim()) searchParams.set('reference', filters.reference.trim());
@@ -179,11 +176,11 @@ export const listCustomerQuotations = async (filters: CustomerQuotationListFilte
     searchParams.set('deliveryLocation', filters.deliveryLocation.trim());
   if (filters.status) searchParams.set('status', filters.status);
 
-  const response = await requestCustomerQuotations<QuotationListResponse>(
+  const response = await requestCustomerQuotations<unknown>(
     `/customer/quotations${searchParams.size ? `?${searchParams.toString()}` : ''}`,
   );
 
-  return response.data;
+  return parseQuotationListResponse(response);
 };
 
 export const createCustomerQuotation = async (payload: CustomerQuotationPayload) => {
@@ -277,3 +274,76 @@ async function requestCustomerQuotations<TResponse>(path: string, options: Reque
 
   return data;
 }
+
+function parseQuotationListResponse(response: unknown): CustomerQuotationListResult {
+  if (!isRecord(response) || response.success !== true || !isQuotationListResult(response.data)) {
+    throw new CustomerQuotationsApiError('The quotation service returned an invalid response.');
+  }
+
+  return response.data;
+}
+
+function isQuotationListResult(value: unknown): value is CustomerQuotationListResult {
+  if (!isRecord(value) || !Array.isArray(value.items) || !isRecord(value.pagination)) {
+    return false;
+  }
+
+  const { page, pageSize, total, totalPages } = value.pagination;
+
+  return (
+    value.items.every(isQuotationSummary) &&
+    isNonNegativeInteger(page) &&
+    page > 0 &&
+    isNonNegativeInteger(pageSize) &&
+    pageSize > 0 &&
+    isNonNegativeInteger(total) &&
+    isNonNegativeInteger(totalPages)
+  );
+}
+
+function isQuotationSummary(value: unknown): value is CustomerQuotationSummary {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    isNullableString(value.reference) &&
+    isQuotationStatus(value.status) &&
+    (value.fulfilmentType === 'PICKUP' || value.fulfilmentType === 'DELIVERY') &&
+    isNullableString(value.deliveryLocation) &&
+    isNullableString(value.requestedDate) &&
+    isNonNegativeInteger(value.itemCount) &&
+    isNullableString(value.submittedAt) &&
+    typeof value.createdAt === 'string' &&
+    typeof value.updatedAt === 'string'
+  );
+}
+
+function isQuotationStatus(value: unknown): value is QuotationStatus {
+  return (
+    typeof value === 'string' &&
+    quotationStatuses.includes(value as QuotationStatus)
+  );
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === 'string';
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+const quotationStatuses: readonly QuotationStatus[] = [
+  'DRAFT',
+  'PENDING_SALES_REVIEW',
+  'UNDER_REVIEW',
+  'PENDING_HADER_APPROVAL',
+  'PENDING_PRICE_APPROVAL',
+  'READY_FOR_CUSTOMER',
+  'ACCEPTED',
+  'REJECTED',
+  'CLARIFICATION_REQUESTED',
+];
