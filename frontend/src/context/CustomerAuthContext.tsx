@@ -15,6 +15,7 @@ import {
   type CustomerAuthAccount,
   type CustomerAuthUser,
 } from '../services/customerAuthService';
+import { AppLoadingScreen } from '../components/ui/AppLoadingScreen';
 
 interface CustomerAuthContextValue {
   user: CustomerAuthUser | null;
@@ -90,7 +91,11 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     [account, loading, login, logout, refresh, restoreError, user],
   );
 
-  return <CustomerAuthContext.Provider value={value}>{children}</CustomerAuthContext.Provider>;
+  return (
+    <CustomerAuthContext.Provider value={value}>
+      {loading ? <AppLoadingScreen label="Restoring your secure session" /> : children}
+    </CustomerAuthContext.Provider>
+  );
 }
 
 export function useCustomerAuth() {

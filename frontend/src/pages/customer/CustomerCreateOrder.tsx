@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import {
   ArrowLeft,
   ArrowRight,
@@ -266,7 +267,7 @@ export function CustomerCreateOrder() {
                   label="Remaining Contract Quantity"
                   value={`${formatNumber(remaining)} TON`}
                 />
-                <span className="customer-secondary text-xl">−</span>
+                <span className="customer-secondary text-xl">âˆ’</span>
                 <Metric label="Requested Quantity" value={`${formatNumber(requestedTons)} TON`} />
                 <span className="customer-secondary text-xl">=</span>
                 <Metric
@@ -355,7 +356,7 @@ export function CustomerCreateOrder() {
                       <div className="mt-3 grid gap-4 sm:grid-cols-2">
                         <label className="customer-text text-sm font-semibold">
                           Truck <span className="text-red-600">*</span>
-                          <select
+                          <NativeTomSelect
                             value={truckId}
                             onChange={(event) => {
                               setTruckId(event.target.value);
@@ -371,7 +372,7 @@ export function CustomerCreateOrder() {
                                 {formatNumber(truck.capacityTon)} TON
                               </option>
                             ))}
-                          </select>
+                          </NativeTomSelect>
                           {!trucks.length && (
                             <span className="mt-2 block text-xs font-medium text-amber-700">
                               No active trucks available. Add a truck before creating pickup orders.{' '}
@@ -383,7 +384,7 @@ export function CustomerCreateOrder() {
                         </label>
                         <label className="customer-text text-sm font-semibold">
                           Driver <span className="text-red-600">*</span>
-                          <select
+                          <NativeTomSelect
                             value={driverId}
                             onChange={(event) => {
                               setDriverId(event.target.value);
@@ -398,7 +399,7 @@ export function CustomerCreateOrder() {
                                 {driver.name} — {driver.mobile} — {driver.licenseNumber}
                               </option>
                             ))}
-                          </select>
+                          </NativeTomSelect>
                           {!drivers.length && (
                             <span className="mt-2 block text-xs font-medium text-amber-700">
                               No active drivers available. Add a driver before creating pickup

@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { ChevronLeft, ChevronRight, Filter, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -5,13 +6,13 @@ import {
   getSalesApplicationFilterOptions,
   listSalesApplications,
   SalesApiError,
-  type SalesFilterOption,
   type SalesApplicationStatus,
   type SalesApplicationSummary,
   type SalesApplicationsPagination,
 } from '../../services/salesService';
 import { ErrorBanner } from './SalesDashboard';
 import { salesStatuses, statusLabels } from './salesUtils';
+import { AsyncSearchableTomSelect } from '../../components/ui/AsyncSearchableTomSelect';
 
 const fixedPageSize = 10;
 
@@ -250,12 +251,18 @@ export function SalesApplicationsPage() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <SearchField
+          <QuickSearchableFilter
+            field="reference"
             value={quickReference}
             placeholder="Application Reference"
             onChange={setQuickReference}
           />
-          <SearchField value={quickCompany} placeholder="Company Name" onChange={setQuickCompany} />
+          <QuickSearchableFilter
+            field="company"
+            value={quickCompany}
+            placeholder="Company Name"
+            onChange={setQuickCompany}
+          />
           <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
@@ -482,7 +489,7 @@ export function SalesApplicationsPage() {
                     <td className="whitespace-nowrap px-3 py-2.5">
                       <Link
                         to={`/sales/applications/${application.id}`}
-                        className="font-extrabold text-slate-950 underline-offset-4 hover:text-[#4b2c71] hover:underline"
+                        className="customer-text font-extrabold underline-offset-4 transition-colors hover:text-[var(--customer-primary)] hover:underline"
                       >
                         {application.reference ?? 'No reference'}
                       </Link>
@@ -572,11 +579,13 @@ export function SalesApplicationsPage() {
   );
 }
 
-function SearchField({
+function QuickSearchableFilter({
+  field,
   value,
   placeholder,
   onChange,
 }: {
+  field: 'reference' | 'company';
   value: string;
   placeholder: string;
   onChange: (value: string) => void;
@@ -584,11 +593,16 @@ function SearchField({
   return (
     <label className="min-w-0 flex-1">
       <span className="sr-only">{placeholder}</span>
-      <input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-[#4b2c71] focus:ring-2 focus:ring-[#4b2c71]/10"
+      <AsyncSearchableTomSelect
+        ariaLabel={placeholder}
+        size="compact"
         placeholder={placeholder}
+        value={value}
+        loadOptions={async (query, signal) => {
+          const options = await getSalesApplicationFilterOptions({ field, search: query, limit: 20 });
+          return signal.aborted ? [] : options;
+        }}
+        onChange={onChange}
       />
     </label>
   );
@@ -606,17 +620,17 @@ function FilterSelect({
   return (
     <label className="min-w-[170px] flex-1">
       <span className="sr-only">Filter option</span>
-      <select
+      <NativeTomSelect
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#4b2c71] focus:ring-2 focus:ring-[#4b2c71]/10"
+        className="h-9 w-full"
       >
         {options.map(([optionValue, optionLabel]) => (
           <option key={optionValue} value={optionValue}>
             {optionLabel}
           </option>
         ))}
-      </select>
+      </NativeTomSelect>
     </label>
   );
 }
@@ -657,75 +671,19 @@ function SearchableFilterValueInput({
   placeholder: string;
   onChange: (value: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [options, setOptions] = useState<SalesFilterOption[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-
-    let mounted = true;
-    const timer = window.setTimeout(() => {
-      setLoading(true);
-      getSalesApplicationFilterOptions({ field, search: value, limit: 20 })
-        .then((nextOptions) => {
-          if (mounted) setOptions(nextOptions);
-        })
-        .catch(() => {
-          if (mounted) setOptions([]);
-        })
-        .finally(() => {
-          if (mounted) setLoading(false);
-        });
-    }, 250);
-
-    return () => {
-      mounted = false;
-      window.clearTimeout(timer);
-    };
-  }, [field, open, value]);
-
   return (
-    <label className="relative min-w-[220px] flex-1">
+    <label className="min-w-[220px] flex-1">
       <span className="sr-only">{placeholder}</span>
-      <input
+      <AsyncSearchableTomSelect
+        ariaLabel={placeholder}
         value={value}
-        onFocus={() => setOpen(true)}
-        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
-        onChange={(event) => {
-          onChange(event.target.value);
-          setOpen(true);
-        }}
-        className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-[#4b2c71] focus:ring-2 focus:ring-[#4b2c71]/10"
         placeholder={placeholder}
-        autoComplete="off"
+        loadOptions={async (query, signal) => {
+          const options = await getSalesApplicationFilterOptions({ field, search: query, limit: 20 });
+          return signal.aborted ? [] : options;
+        }}
+        onChange={onChange}
       />
-
-      {open && (
-        <div className="absolute left-0 right-0 top-[42px] z-30 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-xl">
-          {loading ? (
-            <p className="px-3 py-2 text-sm text-slate-500">Loading values...</p>
-          ) : options.length === 0 ? (
-            <p className="px-3 py-2 text-sm text-slate-500">No matching values</p>
-          ) : (
-            options.map((option) => (
-              <button
-                key={`${field}-${option.value}`}
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  onChange(option.value);
-                  setOpen(false);
-                }}
-                className="block w-full truncate px-3 py-2 text-left text-sm text-slate-700 hover:bg-[#f6f2fa] hover:text-[#4b2c71]"
-                title={option.label}
-              >
-                {option.label}
-              </button>
-            ))
-          )}
-        </div>
-      )}
     </label>
   );
 }
@@ -864,7 +822,7 @@ function getTodayInputDate() {
 }
 
 function formatSubmittedDate(value: string | null | undefined) {
-  if (!value) return '�';
+  if (!value) return '—';
 
   const submittedDate = new Date(value);
   const elapsedSeconds = Math.max(0, Math.floor((Date.now() - submittedDate.getTime()) / 1000));

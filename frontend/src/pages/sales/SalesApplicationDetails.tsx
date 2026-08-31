@@ -137,8 +137,8 @@ export function SalesApplicationDetailsPage() {
               <StatusBadge status={application.status} />
             </div>
             <p className="mt-2 text-sm text-slate-500">
-              Submitted {formatDateTime(application.submittedAt)} Â· Created{' '}
-              {formatDateTime(application.createdAt)} Â· Updated{' '}
+              Submitted {formatDateTime(application.submittedAt)} · Created{' '}
+              {formatDateTime(application.createdAt)} · Updated{' '}
               {formatDateTime(application.updatedAt)}
             </p>
           </div>
@@ -288,12 +288,23 @@ function ReviewActionModal({
     ? `A reason is required before marking this application as ${statusLabels[action.status].toLowerCase()}.`
     : `Reason is optional for ${statusLabels[action.status].toLowerCase()}.`;
 
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !submitting) onCancel();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onCancel, submitting]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-6"
       role="dialog"
       aria-modal="true"
       aria-label={title}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !submitting) onCancel();
+      }}
     >
       <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
@@ -436,7 +447,7 @@ function DocumentsSection({
             download: true,
           });
           const fileSize =
-            typeof document?.fileSize === 'number' ? formatFileSize(document.fileSize) : 'â€”';
+            typeof document?.fileSize === 'number' ? formatFileSize(document.fileSize) : '—';
 
           return (
             <div
@@ -523,10 +534,10 @@ function DeliveryLocationsSection({ locations }: { locations: Array<Record<strin
               <p className="mt-1 text-sm text-slate-600">
                 {[location.streetAddress, location.city, location.region, location.country]
                   .filter(Boolean)
-                  .join(', ') || 'â€”'}
+                  .join(', ') || '—'}
               </p>
               <p className="mt-2 text-sm text-slate-600">
-                Contact: {displayValue(location.contactPerson)} Â·{' '}
+                Contact: {displayValue(location.contactPerson)} ·{' '}
                 {displayValue(location.contactPhone)}
               </p>
             </div>

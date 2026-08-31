@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import {
   Check,
   ChevronRight,
@@ -222,7 +223,7 @@ export function AdminProductDocument() {
               <span>
                 Product code: <strong className="customer-text">{product.productCode}</strong>
               </span>
-              <span aria-hidden="true">•</span>
+              <span aria-hidden="true">â€¢</span>
               <span>
                 Last updated: {dateTime(product.updatedAt)} by{' '}
                 <strong className="customer-text">{product.updatedBy}</strong>
@@ -323,7 +324,7 @@ export function AdminProductDocument() {
               </Field>
             </div>
             <Field label="Packaging" required error={errors.packaging}>
-              <select
+              <NativeTomSelect
                 className={input}
                 value={form.packaging}
                 onChange={(event) => {
@@ -337,7 +338,7 @@ export function AdminProductDocument() {
               >
                 <option value="Bag">Bag</option>
                 <option value="Bulk">Bulk</option>
-              </select>
+              </NativeTomSelect>
             </Field>
             {isBagPackaging(form.packaging) && (
               <Field label="Bag Size" required error={errors.unitWeightKg}>
@@ -413,7 +414,7 @@ export function AdminProductDocument() {
             {priceOpen && (
               <div className="customer-surface-secondary customer-border mt-4 grid gap-3 rounded-lg border p-3 md:grid-cols-[1fr_1fr_auto_auto]">
                 <Field label="City" error={priceErrors.city}>
-                  <select
+                  <NativeTomSelect
                     className={input}
                     value={priceCityId}
                     onChange={(event) => {
@@ -427,7 +428,7 @@ export function AdminProductDocument() {
                         {city.name}
                       </option>
                     ))}
-                  </select>
+                  </NativeTomSelect>
                 </Field>
                 <Field label="List Price" suffix="SAR / TON" error={priceErrors.price}>
                   <input

@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { ArrowLeft, Bell, CircleParking, Factory, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -123,7 +124,7 @@ export function HaderLoadingDetails() {
           )}
           {l.loadingStatus === 'AT_GATE' && (
             <>
-              <select
+              <NativeTomSelect
                 value={point}
                 onChange={(e) => setPoint(e.target.value)}
                 className="h-10 min-w-64 rounded-lg border border-slate-200 bg-white px-3 text-sm"
@@ -139,7 +140,7 @@ export function HaderLoadingDetails() {
                         : ''}
                   </option>
                 ))}
-              </select>
+              </NativeTomSelect>
               {!item.compatibleLoadingPoints.length && (
                 <span className="self-center text-sm text-amber-700">
                   No compatible loading points configured.

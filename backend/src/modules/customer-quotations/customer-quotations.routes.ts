@@ -1,11 +1,17 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler.js';
-import { requireCustomerAuth } from '../customer-auth/customer-auth.middleware.js';
+import {
+  requireCustomerAuth,
+  requireCustomerRole,
+} from '../customer-auth/customer-auth.middleware.js';
 import { customerQuotationsController } from './customer-quotations.controller.js';
 
 export const customerQuotationsRouter = Router();
 
-customerQuotationsRouter.use(requireCustomerAuth);
+customerQuotationsRouter.use(
+  requireCustomerAuth,
+  requireCustomerRole('CUSTOMER_ADMIN', 'PURCHASER'),
+);
 
 customerQuotationsRouter.get(
   '/pickup-locations',

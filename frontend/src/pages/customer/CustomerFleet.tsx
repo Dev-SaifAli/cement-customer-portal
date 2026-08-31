@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { useCallback, useEffect, useState } from 'react';
 import {
   AlertCircle,
@@ -171,7 +172,7 @@ export function CustomerFleet() {
             />
           </div>
           <div className="flex items-center gap-3">
-            <select
+            <NativeTomSelect
               value={status}
               onChange={(event) => {
                 setStatus(event.target.value as '' | FleetStatus);
@@ -182,7 +183,7 @@ export function CustomerFleet() {
               <option value="">All statuses</option>
               <option value="ACTIVE">Active</option>
               <option value="INACTIVE">Inactive</option>
-            </select>
+            </NativeTomSelect>
             <span className="text-sm font-semibold customer-text-muted">
               {pagination.total} {tab === 'trucks' ? 'Trucks' : 'Drivers'}
             </span>
@@ -425,7 +426,7 @@ function TruckForm({
           />
         </Field>
         <Field label="Vehicle Type *">
-          <select
+          <NativeTomSelect
             value={form.vehicleType}
             onChange={(e) => setForm({ ...form, vehicleType: e.target.value })}
             className={formControlClass}
@@ -434,7 +435,7 @@ function TruckForm({
             {vehicleTypes.map((v) => (
               <option key={v}>{v}</option>
             ))}
-          </select>
+          </NativeTomSelect>
         </Field>
         <Field label="Capacity (TON) *">
           <input
@@ -699,7 +700,7 @@ function Pagination({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t customer-border px-4 py-3 text-sm customer-text-muted">
       <span>
-        Showing {start}–{end} of {pagination.total}
+        Showing {start}â€“{end} of {pagination.total}
       </span>
       <div className="flex gap-2">
         <button

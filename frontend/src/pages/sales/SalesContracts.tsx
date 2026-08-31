@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { BriefcaseBusiness, ChevronLeft, ChevronRight, Eye, Filter, RotateCcw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -150,7 +151,7 @@ export function SalesContractsPage() {
                     />
                   </th>
                   <th className="px-4 py-2">
-                    <select
+                    <NativeTomSelect
                       value={filters.status}
                       onChange={(event) =>
                         updateFilter('status', event.target.value as ContractFilters['status'])
@@ -160,7 +161,7 @@ export function SalesContractsPage() {
                       <option value="">All</option>
                       <option value="DRAFT">Draft</option>
                       <option value="ACTIVE">Active</option>
-                    </select>
+                    </NativeTomSelect>
                   </th>
                   <th className="px-4 py-2" />
                   <th className="px-4 py-2" />

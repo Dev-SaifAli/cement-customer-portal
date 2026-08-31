@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { Search } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -67,7 +68,7 @@ export function HaderShipments({ audience = 'hader' }: { audience?: 'hader' | 's
               className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm"
             />
           </div>
-          <select
+          <NativeTomSelect
             value={status}
             onChange={(e) => {
               setStatus(e.target.value);
@@ -87,7 +88,7 @@ export function HaderShipments({ audience = 'hader' }: { audience?: 'hader' | 's
             ].map((v) => (
               <option key={v}>{v}</option>
             ))}
-          </select>
+          </NativeTomSelect>
         </div>
         {error ? (
           <State message={error} action={() => void load()} />

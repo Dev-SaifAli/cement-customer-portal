@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useSalesAuth } from '../context/SalesAuthContext';
 import { SessionRestoreError } from '../components/auth/SessionRestoreError';
+import { AppLoadingScreen } from '../components/ui/AppLoadingScreen';
 import { CustomerThemeProvider } from '../context/CustomerThemeContext';
 import { AdminProducts } from '../pages/admin/AdminProducts';
 import { AdminProductDocument } from '../pages/admin/AdminProductDocument';
@@ -93,13 +94,7 @@ function RequireInternalAdmin() {
   const { user, loading, restoreError, refresh } = useSalesAuth();
   const location = useLocation();
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f8fafc] text-sm text-[#64748b]">
-        Restoring secure pricing session...
-      </div>
-    );
-  }
+  if (loading) return <AppLoadingScreen label="Restoring your secure session" />;
 
   if (restoreError && !user) {
     return <SessionRestoreError onRetry={() => void refresh()} />;

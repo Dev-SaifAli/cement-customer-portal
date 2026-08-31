@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -596,7 +597,7 @@ export function SalesQuotationDetailsPage() {
               />
             </Field>
             <Field label="Payment Terms">
-              <select
+              <NativeTomSelect
                 disabled={!editable}
                 value={paymentTerms}
                 onChange={(e) => setPaymentTerms(e.target.value)}
@@ -607,7 +608,7 @@ export function SalesQuotationDetailsPage() {
                 <option>30 Days From Invoice Date</option>
                 <option>45 Days From Invoice Date</option>
                 <option>60 Days From Invoice Date</option>
-              </select>
+              </NativeTomSelect>
             </Field>
             <Field label="Commercial Notes" wide>
               <textarea
@@ -931,7 +932,7 @@ function ContractCreationModal({
                 </Field>
                 {quotation.fulfilmentType === 'PICKUP' && (
                   <Field label="Pickup From">
-                    <select
+                    <NativeTomSelect
                       value={form.pickupLocationId}
                       onChange={(event) =>
                         onChange((current) => ({
@@ -942,7 +943,7 @@ function ContractCreationModal({
                       className={inputClass}
                     >
                       <option value="ALSAFWA_PLANT_MAIN">AlSafwa Cement Plant</option>
-                    </select>
+                    </NativeTomSelect>
                   </Field>
                 )}
                 <Field label="Ship-To Location">
@@ -1122,7 +1123,7 @@ function DiscountInput({
         placeholder="0"
         className="h-9 w-full rounded-md border border-[#e3e1e8] px-2 text-right font-semibold outline-none focus:border-[#54247a] disabled:bg-slate-50"
       />
-      <select
+      <NativeTomSelect
         aria-label="Discount mode"
         disabled={disabled}
         value={value?.discountMode ?? ''}
@@ -1137,7 +1138,7 @@ function DiscountInput({
         <option value="">None</option>
         <option value="PERCENT">%</option>
         <option value="SAR_PER_TON">SAR</option>
-      </select>
+      </NativeTomSelect>
     </div>
   );
 }
@@ -1312,7 +1313,7 @@ function changedPriceSummary(
           Number(prices[item.id]?.productPrice))
         : Number(prices[item.id]?.deliveryPrice);
     if (list === null || !Number.isFinite(entered) || Math.abs(list - entered) < 0.005) return [];
-    return [`${item.productCode}: ${money(list)} → ${money(entered)} SAR`];
+    return [`${item.productCode}: ${money(list)} â†’ ${money(entered)} SAR`];
   });
   return changes.length ? changes.join('; ') : `Modified ${type} pricing requires approval.`;
 }

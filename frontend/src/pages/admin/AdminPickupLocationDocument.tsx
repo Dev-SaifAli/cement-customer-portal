@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { ArrowLeft, MapPin } from 'lucide-react';
 import {
   useEffect,
@@ -247,7 +248,7 @@ export function AdminPickupLocationDocument() {
             </Field>
 
             <Field label="Status" error={fields.status}>
-              <select
+              <NativeTomSelect
                 value={form.status}
                 onChange={(event) => {
                   const status = event.target.value as PickupLocationInput['status'];
@@ -258,7 +259,7 @@ export function AdminPickupLocationDocument() {
               >
                 <option value="ACTIVE">Active</option>
                 <option value="INACTIVE">Inactive</option>
-              </select>
+              </NativeTomSelect>
             </Field>
           </div>
         </div>

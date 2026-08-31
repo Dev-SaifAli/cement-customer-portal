@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
+import { notificationEvents } from '../notifications/notification-events.js';
 import type { RegistrationDraft } from './registration.types.js';
 import type { UpdateRegistrationInput } from './registration.validation.js';
 
@@ -196,7 +197,14 @@ export class RegistrationService {
       [id, reference],
     );
 
-    return result.rows[0] ? mapRegistration(result.rows[0]) : this.getDraft(id);
+    if (!result.rows[0]) return this.getDraft(id);
+
+    const submitted = mapRegistration(result.rows[0]);
+    await notificationEvents.registrationSubmitted(
+      submitted.id,
+      submitted.reference ?? 'Registration application',
+    );
+    return submitted;
   }
 
   private async createUniqueReference() {

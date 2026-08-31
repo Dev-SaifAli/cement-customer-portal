@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -44,7 +45,7 @@ const safeCustomerUserRow = {
   phone: '+966555111222',
   role: 'PURCHASER',
   is_active: true,
-  password_must_change: true,
+  password_must_change: false,
   created_at: '2026-08-23T08:00:00.000Z',
   updated_at: '2026-08-23T08:00:00.000Z',
 };
@@ -129,9 +130,11 @@ describe('customer users API', () => {
     const response = await authenticatedRequest();
 
     expect(response.status).toBe(200);
-    expect(query).toHaveBeenNthCalledWith(2, expect.stringContaining('customer_account_id = $1'), [
-      customerAccountId,
-    ]);
+    expect(query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringMatching(/customer_account_id = \$1[\s\S]*id <> \$2/),
+      [customerAccountId, customerUserId],
+    );
     expect(response.body).toEqual({
       success: true,
       data: {
@@ -144,7 +147,7 @@ describe('customer users API', () => {
             role: 'PURCHASER',
             roleLabel: 'Purchaser',
             isActive: true,
-            passwordMustChange: true,
+            passwordMustChange: false,
             createdAt: '2026-08-23T08:00:00.000Z',
             updatedAt: '2026-08-23T08:00:00.000Z',
           },
@@ -154,6 +157,18 @@ describe('customer users API', () => {
     expect(JSON.stringify(response.body)).not.toContain('password_hash');
     expect(JSON.stringify(response.body)).not.toContain('passwordHash');
     expect(JSON.stringify(response.body)).not.toContain('hashed-password');
+  });
+
+  it('rejects customer user listing for non-administrator customer roles', async () => {
+    query.mockResolvedValueOnce({
+      rows: [{ ...authenticatedCustomerUserRow, role: 'PURCHASER' }],
+    });
+
+    const response = await authenticatedRequest();
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('CUSTOMER_ADMIN_REQUIRED');
+    expect(query).toHaveBeenCalledTimes(1);
   });
 
   it('creates a customer user under the authenticated customer account', async () => {
@@ -168,6 +183,8 @@ describe('customer users API', () => {
         name: 'Operations User',
         email: 'OPERATIONS@EXAMPLE.COM',
         phone: '+966555111222',
+        password: 'SecurePass1',
+        confirmPassword: 'SecurePass1',
         role: 'PURCHASER',
       });
 
@@ -185,14 +202,15 @@ describe('customer users API', () => {
     );
     const createdPasswordHash = query.mock.calls[1]?.[1]?.[4] as string;
     expect(createdPasswordHash).toEqual(expect.any(String));
-    expect(createdPasswordHash).not.toBe(response.body.data.temporaryPassword);
-    expect(response.body.data.temporaryPassword).toEqual(expect.stringMatching(/^Asf-/));
+    await expect(bcrypt.compare('SecurePass1', createdPasswordHash)).resolves.toBe(true);
+    expect(response.body.data).not.toHaveProperty('temporaryPassword');
     expect(response.body.data.user).toMatchObject({
       email: 'operations@example.com',
       phone: '+966555111222',
       role: 'PURCHASER',
-      passwordMustChange: true,
+      passwordMustChange: false,
     });
+    expect(JSON.stringify(response.body)).not.toContain('SecurePass1');
     expect(JSON.stringify(response.body)).not.toContain('password_hash');
     expect(JSON.stringify(response.body)).not.toContain('passwordHash');
   });
@@ -210,8 +228,41 @@ describe('customer users API', () => {
     expect(query).toHaveBeenNthCalledWith(2, expect.stringContaining('where id = $2'), [
       customerAccountId,
       safeCustomerUserRow.id,
+      customerUserId,
     ]);
     expect(response.body.data.user.email).toBe('operations@example.com');
+  });
+
+  it('does not expose the authenticated user through customer user details', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const response = await request(createApp())
+      .get(`/api/v1/customer/users/${customerUserId}`)
+      .set({ Cookie: `customer_session=${createValidCustomerToken()}` });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe('CUSTOMER_USER_NOT_FOUND');
+    expect(query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringMatching(/customer_account_id = \$1[\s\S]*id <> \$3/),
+      [customerAccountId, customerUserId, customerUserId],
+    );
+  });
+
+  it('rejects customer user detail access for non-administrator customer roles', async () => {
+    query.mockResolvedValueOnce({
+      rows: [{ ...authenticatedCustomerUserRow, role: 'VIEWER' }],
+    });
+
+    const response = await request(createApp())
+      .get(`/api/v1/customer/users/${safeCustomerUserRow.id}`)
+      .set({ Cookie: `customer_session=${createValidCustomerToken()}` });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('CUSTOMER_ADMIN_REQUIRED');
+    expect(query).toHaveBeenCalledTimes(1);
   });
 
   it('rejects customer user creation when the authenticated user is not a customer admin', async () => {
@@ -319,7 +370,6 @@ describe('customer users API', () => {
         rows: [
           {
             ...safeCustomerUserRow,
-            id: customerUserId,
             role: 'CUSTOMER_ADMIN',
             is_active: true,
           },
@@ -328,7 +378,7 @@ describe('customer users API', () => {
       .mockResolvedValueOnce({ rows: [{ active_admin_count: '0' }] });
 
     const response = await request(createApp())
-      .patch(`/api/v1/customer/users/${customerUserId}`)
+      .patch(`/api/v1/customer/users/${safeCustomerUserRow.id}`)
       .set({ Cookie: `customer_session=${createValidCustomerToken()}` })
       .send({ isActive: false });
 
@@ -344,7 +394,6 @@ describe('customer users API', () => {
         rows: [
           {
             ...safeCustomerUserRow,
-            id: customerUserId,
             role: 'CUSTOMER_ADMIN',
             is_active: true,
           },
@@ -355,7 +404,6 @@ describe('customer users API', () => {
         rows: [
           {
             ...safeCustomerUserRow,
-            id: customerUserId,
             role: 'CUSTOMER_ADMIN',
             is_active: false,
           },
@@ -363,13 +411,13 @@ describe('customer users API', () => {
       });
 
     const response = await request(createApp())
-      .patch(`/api/v1/customer/users/${customerUserId}`)
+      .patch(`/api/v1/customer/users/${safeCustomerUserRow.id}`)
       .set({ Cookie: `customer_session=${createValidCustomerToken()}` })
       .send({ isActive: false });
 
     expect(response.status).toBe(200);
     expect(response.body.data.user).toMatchObject({
-      id: customerUserId,
+      id: safeCustomerUserRow.id,
       role: 'CUSTOMER_ADMIN',
       isActive: false,
     });

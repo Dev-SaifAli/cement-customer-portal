@@ -100,7 +100,7 @@ export function NotificationBell({ audience }: { audience: NotificationAudience 
       >
         <Bell size={18} />
         {unreadCount > 0 && (
-          <span className="absolute -right-1.5 -top-1.5 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[#b42318] px-1 text-[10px] font-bold leading-none text-white">
+          <span className="absolute -right-1.5 -top-1.5 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[#991f18] px-1 text-[10px] font-bold leading-none text-white">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}

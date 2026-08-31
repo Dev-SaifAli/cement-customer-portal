@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useSalesAuth } from '../context/SalesAuthContext';
 import { SessionRestoreError } from '../components/auth/SessionRestoreError';
+import { AppLoadingScreen } from '../components/ui/AppLoadingScreen';
 import { CustomerThemeProvider } from '../context/CustomerThemeContext';
 import { HaderDeliveryRequestDetails } from '../pages/hader/HaderDeliveryRequestDetails';
 import { HaderDeliveryRequests } from '../pages/hader/HaderDeliveryRequests';
@@ -52,12 +53,7 @@ export function HaderRoutes() {
 function RequireHader() {
   const { user, loading, restoreError, refresh } = useSalesAuth();
   const location = useLocation();
-  if (loading)
-    return (
-      <div className="customer-portal customer-page-bg customer-secondary flex min-h-screen items-center justify-center">
-        Restoring internal session...
-      </div>
-    );
+  if (loading) return <AppLoadingScreen label="Restoring your secure session" />;
   if (restoreError && !user) return <SessionRestoreError onRetry={() => void refresh()} />;
   if (!user) return <Navigate to="/sales/login" replace state={{ from: location }} />;
   if (!roles.includes(user.role)) return <Navigate to="/sales" replace />;

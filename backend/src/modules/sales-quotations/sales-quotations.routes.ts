@@ -12,6 +12,10 @@ salesQuotationsRouter.get(
   asyncHandler((req, res) => salesQuotationsController.list(req, res)),
 );
 salesQuotationsRouter.get(
+  '/filter-options',
+  asyncHandler((req, res) => salesQuotationsController.filterOptions(req, res)),
+);
+salesQuotationsRouter.get(
   '/:id',
   asyncHandler((req, res) => salesQuotationsController.show(req, res)),
 );

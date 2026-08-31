@@ -1,11 +1,11 @@
 import {
-  ChevronLeft,
   ChevronRight,
   LogOut,
   Menu,
   Monitor,
   Moon,
   Sun,
+  UserCircle,
   X,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -28,17 +28,9 @@ export interface AppShellNavigationSection {
   defaultExpanded?: boolean;
 }
 
-export interface AppShellPageContext {
-  title: string;
-  subtitle?: string;
-  parent?: string;
-}
-
 interface AppShellProps {
-  homePath: string;
   portalLabel: string;
   navigation: AppShellNavigationSection[];
-  pageContext: AppShellPageContext;
   user: {
     name: string | null | undefined;
     email: string | null | undefined;
@@ -49,6 +41,7 @@ interface AppShellProps {
   onLogout: () => void | Promise<void>;
   collapseStorageKey: string;
   headerActions?: ReactNode;
+  profilePath?: string;
 }
 
 /**
@@ -56,16 +49,15 @@ interface AppShellProps {
  * navigation supplied by each portal remain owned by their existing layouts.
  */
 export function AppShell({
-  homePath,
   portalLabel,
   navigation,
-  pageContext,
   user,
   themePreference,
   onThemeChange,
   onLogout,
   collapseStorageKey,
   headerActions,
+  profilePath,
 }: AppShellProps) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -90,25 +82,36 @@ export function AppShell({
     });
   };
 
+  const handleBrandClick = () => {
+    if (window.matchMedia('(min-width: 1024px)').matches) {
+      toggleSidebar();
+      return;
+    }
+    setSidebarOpen(false);
+  };
+
   return (
     <div className="customer-portal customer-page-bg customer-text min-h-screen overflow-x-hidden font-['Manrope',system-ui,sans-serif]">
       <aside
-        className={`customer-surface customer-border fixed inset-y-0 left-0 z-40 flex w-[232px] flex-col border-r transition-all duration-200 lg:translate-x-0 ${
+        className={`customer-sidebar customer-border fixed inset-y-0 left-0 z-40 flex w-[232px] flex-col border-r transition-all duration-200 lg:translate-x-0 ${
           sidebarCollapsed ? 'lg:w-[68px]' : 'lg:w-[232px]'
         } ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div
           className={`customer-border-soft relative flex h-[60px] shrink-0 items-center border-b ${
-            sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-4'
+            sidebarCollapsed ? 'justify-between px-4 lg:justify-center lg:px-2' : 'justify-between px-4'
           }`}
         >
-          <Link
-            to={homePath}
-            className={`flex min-w-0 items-center gap-2.5 ${sidebarCollapsed ? 'lg:hidden' : ''}`}
-            onClick={() => setSidebarOpen(false)}
+          <button
+            type="button"
+            className={`flex min-w-0 items-center gap-2.5 rounded-lg text-left transition hover:opacity-80 ${
+              sidebarCollapsed ? 'lg:justify-center' : ''
+            }`}
+            onClick={handleBrandClick}
+            aria-label={sidebarCollapsed ? `Expand ${portalLabel} sidebar` : `Collapse ${portalLabel} sidebar`}
           >
             <Logo size="sm" />
-            <span className="customer-border min-w-0 border-l pl-2.5">
+            <span className={`customer-border min-w-0 border-l pl-2.5 ${sidebarCollapsed ? 'lg:hidden' : ''}`}>
               <span className="customer-primary block truncate text-sm font-bold leading-tight">
                 AlSafwa Cement
               </span>
@@ -116,14 +119,6 @@ export function AppShell({
                 {portalLabel}
               </span>
             </span>
-          </Link>
-          <button
-            type="button"
-            className="customer-surface customer-border customer-secondary absolute -right-3 top-[18px] hidden h-6 w-6 items-center justify-center rounded-full border shadow-sm transition hover:border-[var(--customer-primary)] hover:text-[var(--customer-primary)] lg:inline-flex"
-            onClick={toggleSidebar}
-            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {sidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
           </button>
           <button
             type="button"
@@ -137,7 +132,7 @@ export function AppShell({
 
         <nav
           className={`min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain ${
-            sidebarCollapsed ? 'p-2.5' : 'p-3'
+            sidebarCollapsed ? 'p-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden' : 'p-3'
           }`}
         >
           {navigation.map((section, sectionIndex) => (
@@ -167,30 +162,19 @@ export function AppShell({
           sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-[232px]'
         }`}
       >
-        <header className="customer-surface customer-border sticky top-0 z-20 flex h-[60px] items-center justify-between border-b px-4 lg:px-6">
-          <div className="flex min-w-0 items-center gap-3">
+        <header className="customer-surface customer-border sticky top-0 z-20 flex h-[60px] items-center justify-between border-b px-4 lg:justify-end lg:px-6">
+          <div className="flex min-w-0 items-center lg:hidden">
             <button
               type="button"
-              className="customer-secondary shrink-0 rounded-lg p-2 transition hover:bg-[var(--customer-surface-secondary)] lg:hidden"
+              className="customer-secondary shrink-0 rounded-lg p-2 transition hover:bg-[var(--customer-surface-secondary)]"
               onClick={() => setSidebarOpen(true)}
               aria-label="Open sidebar"
             >
               <Menu size={20} />
             </button>
-            <div className="min-w-0">
-              {pageContext.parent && (
-                <p className="customer-muted hidden truncate text-[10px] font-semibold sm:block">
-                  {pageContext.parent}
-                </p>
-              )}
-              <p className="customer-text truncate text-sm font-semibold">{pageContext.title}</p>
-              {pageContext.subtitle && (
-                <p className="customer-muted hidden truncate text-xs sm:block">{pageContext.subtitle}</p>
-              )}
-            </div>
           </div>
 
-          <div className="relative ml-3 flex shrink-0 items-center gap-2">
+          <div className="relative flex shrink-0 items-center gap-2">
             {headerActions}
             <button
               type="button"
@@ -211,11 +195,21 @@ export function AppShell({
               >
                 <div className="customer-border-soft border-b px-3 py-3">
                   <p className="customer-text truncate text-sm font-bold">{user.name}</p>
-                  {user.email && <p className="customer-muted mt-0.5 truncate text-xs">{user.email}</p>}
-                  {user.roleLabel && (
-                    <p className="customer-primary mt-2 truncate text-xs font-semibold">{user.roleLabel}</p>
-                  )}
+                  {user.roleLabel && <p className="customer-muted mt-1 truncate text-xs">{user.roleLabel}</p>}
                 </div>
+                {profilePath && (
+                  <div className="customer-border-soft border-b p-2">
+                    <Link
+                      to={profilePath}
+                      role="menuitem"
+                      onClick={() => setProfileOpen(false)}
+                      className="customer-secondary flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition hover:bg-[var(--customer-surface-secondary)] hover:text-[var(--customer-primary)]"
+                    >
+                      <UserCircle size={16} />
+                      Profile
+                    </Link>
+                  </div>
+                )}
                 <div className="customer-border-soft border-b px-2 py-3">
                   <p className="customer-muted px-1 pb-2 text-[11px] font-bold uppercase tracking-[0.08em]">
                     Appearance

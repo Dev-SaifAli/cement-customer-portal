@@ -1,8 +1,10 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { CheckCircle2, Edit3, Eye, MapPin, Plus, Star, Trash2, X } from 'lucide-react';
 import { LocationPickerMap } from '../../components/registration/LocationPickerMap';
 import type { Coordinates } from '../../config/map';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import {
   formatSaudiPhoneNumber,
   getSaudiPhoneLocalDigits,
@@ -68,6 +70,8 @@ const regions = [
 ];
 
 export function CustomerLocations() {
+  const { user } = useCustomerAuth();
+  const canManageLocations = user?.role === 'CUSTOMER_ADMIN';
   const [locations, setLocations] = useState<CustomerLocation[]>([]);
   const [cities, setCities] = useState<CustomerLocationCity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -240,6 +244,7 @@ export function CustomerLocations() {
       {error && <StateMessage tone="error" message={error} />}
       {success && <StateMessage tone="success" message={success} />}
 
+      {canManageLocations && (
       <section className="rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-6">
         <div className="flex items-center gap-2 border-b border-slate-100 pb-4">
           <MapPin className="h-5 w-5 text-[#54247a]" />
@@ -293,9 +298,10 @@ export function CustomerLocations() {
           <TextInput
             label="Country"
             required
-            value={form.country}
+            value="Saudi Arabia"
             error={formErrors.country}
-            onChange={(value) => updateField('country', value)}
+            readOnly
+            onChange={() => undefined}
           />
           <TextInput
             label="Postal Code"
@@ -384,6 +390,7 @@ export function CustomerLocations() {
           </button>
         </div>
       </section>
+      )}
 
       <section className="rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-6">
         <div className="flex flex-col gap-1 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
@@ -408,6 +415,7 @@ export function CustomerLocations() {
                 key={location.id}
                 location={location}
                 saving={saving}
+                canManage={canManageLocations}
                 onViewMap={() => setMapTarget({ type: 'view', location })}
                 onEdit={() => startEdit(location)}
                 onDelete={() => void removeLocation(location)}
@@ -464,6 +472,7 @@ export function CustomerLocations() {
 function LocationCard({
   location,
   saving,
+  canManage,
   onViewMap,
   onEdit,
   onDelete,
@@ -471,6 +480,7 @@ function LocationCard({
 }: {
   location: CustomerLocation;
   saving: boolean;
+  canManage: boolean;
   onViewMap: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -498,7 +508,7 @@ function LocationCard({
           {coordinates && (
             <ActionButton onClick={onViewMap} icon={<Eye size={15} />} label="View Map" />
           )}
-          {!location.isPrimary && (
+          {canManage && !location.isPrimary && (
             <ActionButton
               onClick={onMakePrimary}
               icon={<Star size={15} />}
@@ -506,14 +516,18 @@ function LocationCard({
               disabled={saving}
             />
           )}
-          <ActionButton onClick={onEdit} icon={<Edit3 size={15} />} label="Edit" />
-          <ActionButton
-            onClick={onDelete}
-            icon={<Trash2 size={15} />}
-            label="Delete"
-            tone="danger"
-            disabled={saving}
-          />
+          {canManage && (
+            <>
+              <ActionButton onClick={onEdit} icon={<Edit3 size={15} />} label="Edit" />
+              <ActionButton
+                onClick={onDelete}
+                icon={<Trash2 size={15} />}
+                label="Delete"
+                tone="danger"
+                disabled={saving}
+              />
+            </>
+          )}
         </div>
       </div>
 
@@ -626,10 +640,12 @@ function SelectInput(props: {
         {props.label}
         {props.required && <span className="ml-1 text-red-600">*</span>}
       </span>
-      <select
+      <NativeTomSelect
         value={props.value}
         onChange={(event) => props.onChange(event.target.value)}
         onBlur={props.onBlur}
+        aria-label={props.label}
+        searchPlaceholder={`Search ${props.label.toLowerCase()}...`}
         className={`mt-2 h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium outline-none focus:ring-2 ${
           props.error
             ? 'border-red-400 focus:ring-red-100'
@@ -642,7 +658,7 @@ function SelectInput(props: {
             {option}
           </option>
         ))}
-      </select>
+      </NativeTomSelect>
       {props.error && (
         <span className="mt-1 block text-xs font-semibold text-red-600">{props.error}</span>
       )}

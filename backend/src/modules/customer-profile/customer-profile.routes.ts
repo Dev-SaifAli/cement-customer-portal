@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler.js';
-import { requireCustomerAuth } from '../customer-auth/customer-auth.middleware.js';
+import {
+  requireCustomerAuth,
+  requireCustomerRole,
+} from '../customer-auth/customer-auth.middleware.js';
 import { customerProfileController } from './customer-profile.controller.js';
 
 export const customerProfileRouter = Router();
@@ -14,5 +17,6 @@ customerProfileRouter.get(
 customerProfileRouter.patch(
   '/',
   requireCustomerAuth,
+  requireCustomerRole('CUSTOMER_ADMIN'),
   asyncHandler(customerProfileController.update.bind(customerProfileController)),
 );

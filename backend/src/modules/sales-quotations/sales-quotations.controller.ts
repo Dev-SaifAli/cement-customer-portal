@@ -7,6 +7,7 @@ import { salesQuotationsService } from './sales-quotations.service.js';
 import {
   listSalesQuotationsSchema,
   rejectSalesQuotationApprovalSchema,
+  salesQuotationFilterOptionsSchema,
   salesQuotationIdSchema,
   updateSalesQuotationPricingSchema,
 } from './sales-quotations.validation.js';
@@ -18,6 +19,15 @@ export class SalesQuotationsController {
     response
       .status(200)
       .json({ success: true, data: await salesQuotationsService.list(query, user) });
+  }
+
+  async filterOptions(request: SalesAuthenticatedRequest, response: Response) {
+    const user = requireSalesUser(request);
+    const query = salesQuotationFilterOptionsSchema.parse(request.query);
+    response.status(200).json({
+      success: true,
+      data: { options: await salesQuotationsService.getFilterOptions(query, user) },
+    });
   }
 
   async show(request: SalesAuthenticatedRequest, response: Response) {

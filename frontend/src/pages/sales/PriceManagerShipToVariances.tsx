@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -73,7 +74,7 @@ export function PriceManagerShipToVariancesPage() {
             />
           </div>
           <div className="flex items-center gap-3">
-            <select
+            <NativeTomSelect
               value={status}
               onChange={(event) => {
                 setStatus(event.target.value as ListStatus);
@@ -84,7 +85,7 @@ export function PriceManagerShipToVariancesPage() {
               <option value="">All statuses</option>
               <option value="VARIANCE_DETECTED">Variance detected</option>
               <option value="PRICING_NOT_CONFIGURED">Pricing not configured</option>
-            </select>
+            </NativeTomSelect>
             <span className="customer-secondary whitespace-nowrap text-sm font-semibold">
               {pagination.total} Variances
             </span>
@@ -179,7 +180,7 @@ export function PriceManagerShipToVariancesPage() {
             <div className="customer-border-soft flex items-center justify-between border-t px-4 py-3">
               <span className="customer-secondary text-xs">
                 {selected.length ? `${selected.length} selected · ` : ''}Showing{' '}
-                {pagination.total ? (page - 1) * 10 + 1 : 0}–{Math.min(page * 10, pagination.total)} of {pagination.total}
+                {pagination.total ? (page - 1) * 10 + 1 : 0}â€“{Math.min(page * 10, pagination.total)} of {pagination.total}
               </span>
               <div className="flex gap-2">
                 <PaginationButton disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>

@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -60,7 +61,7 @@ export function HaderDeliveryRequests() {
             />
           </div>
           <div className="flex items-center gap-3">
-            <select
+            <NativeTomSelect
               value={status}
               onChange={(e) => {
                 setStatus(e.target.value);
@@ -76,7 +77,7 @@ export function HaderDeliveryRequests() {
                   </option>
                 ),
               )}
-            </select>
+            </NativeTomSelect>
             <span className="text-sm font-semibold text-slate-600">
               {pagination.total} Requests
             </span>
@@ -199,7 +200,7 @@ export function Pager({
   return (
     <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm text-slate-500">
       <span>
-        Showing {(pagination.page - 1) * 10 + 1}–{Math.min(pagination.page * 10, pagination.total)}{' '}
+        Showing {(pagination.page - 1) * 10 + 1}â€“{Math.min(pagination.page * 10, pagination.total)}{' '}
         of {pagination.total}
       </span>
       <div className="flex gap-2">

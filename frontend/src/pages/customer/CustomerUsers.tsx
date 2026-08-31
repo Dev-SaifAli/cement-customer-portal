@@ -1,9 +1,9 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   AlertCircle,
   Check,
-  Copy,
   Edit3,
   Plus,
   Power,
@@ -33,6 +33,8 @@ type UserForm = {
   phone: string;
   role: CustomerRole;
   isActive: boolean;
+  password: string;
+  confirmPassword: string;
 };
 
 type UserFilters = {
@@ -51,6 +53,8 @@ const emptyForm: UserForm = {
   phone: '',
   role: 'PURCHASER',
   isActive: true,
+  password: '',
+  confirmPassword: '',
 };
 
 const emptyFilters: UserFilters = {
@@ -79,7 +83,6 @@ export function CustomerUsers() {
   const [selectedUser, setSelectedUser] = useState<CustomerUser | null>(null);
   const [editingUser, setEditingUser] = useState<CustomerUser | null>(null);
   const [statusTarget, setStatusTarget] = useState<CustomerUser | null>(null);
-  const [temporaryPassword, setTemporaryPassword] = useState('');
   const [form, setForm] = useState<UserForm>(emptyForm);
   const [editForm, setEditForm] = useState<UserForm>(emptyForm);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -149,7 +152,6 @@ export function CustomerUsers() {
   const resetForm = () => {
     setForm(emptyForm);
     setFormErrors({});
-    setTemporaryPassword('');
   };
 
   const openCreateForm = () => {
@@ -174,6 +176,8 @@ export function CustomerUsers() {
       phone: customerUser.phone ?? '',
       role: customerUser.role,
       isActive: customerUser.isActive,
+      password: '',
+      confirmPassword: '',
     });
     setEditFormErrors({});
     setEditingUser(customerUser);
@@ -191,13 +195,10 @@ export function CustomerUsers() {
     setSaving(true);
     setError('');
     setSuccess('');
-    setTemporaryPassword('');
-
     try {
       const result = await createCustomerUser(toPayload(form));
       setUsers((current) => [...current, result.user]);
-      setTemporaryPassword(result.temporaryPassword);
-      setSuccess('Customer user created. Share the temporary password securely.');
+      setSuccess('Customer user created successfully.');
       setForm(emptyForm);
     } catch (requestError) {
       setError(
@@ -270,6 +271,14 @@ export function CustomerUsers() {
     if (!isValidEmail(value.email)) next.email = 'Enter a valid email address.';
     if (!isSaudiPhoneNumber(value.phone)) next.phone = 'Enter a valid Saudi mobile number.';
     if (!roleOptions.some((role) => role.value === value.role)) next.role = 'Select a valid role.';
+    if (!value.password) next.password = 'Password is required.';
+    else if (value.password.length < 8) next.password = 'Password must be at least 8 characters.';
+    else if (value.password.length > 128) next.password = 'Password must be 128 characters or fewer.';
+    else if (!/[A-Z]/.test(value.password) || !/[a-z]/.test(value.password) || !/\d/.test(value.password)) {
+      next.password = 'Password must include uppercase, lowercase, and a number.';
+    }
+    if (!value.confirmPassword) next.confirmPassword = 'Confirm password is required.';
+    else if (value.confirmPassword !== value.password) next.confirmPassword = 'Passwords do not match.';
 
     setFormErrors(next);
     return Object.keys(next).length === 0;
@@ -360,7 +369,7 @@ export function CustomerUsers() {
             <div>
               <h2 className="text-base font-bold text-slate-950">Add Customer User</h2>
               <p className="mt-1 text-xs font-medium text-slate-500">
-                A secure temporary password will be generated after creation.
+                Set the initial password the user will use to sign in.
               </p>
             </div>
             <button
@@ -413,29 +422,23 @@ export function CustomerUsers() {
               ]}
               onChange={(value) => updateForm('isActive', value === 'active')}
             />
+            <TextInput
+              label="Password"
+              required
+              type="password"
+              value={form.password}
+              error={formErrors.password}
+              onChange={(value) => updateForm('password', value)}
+            />
+            <TextInput
+              label="Confirm Password"
+              required
+              type="password"
+              value={form.confirmPassword}
+              error={formErrors.confirmPassword}
+              onChange={(value) => updateForm('confirmPassword', value)}
+            />
           </div>
-
-          {temporaryPassword && (
-            <div className="mt-5 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
-              <p className="text-sm font-bold text-emerald-800">Temporary password</p>
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-                <code className="min-w-0 flex-1 rounded-lg bg-white px-3 py-2 text-sm font-bold text-slate-950 ring-1 ring-emerald-100">
-                  {temporaryPassword}
-                </code>
-                <button
-                  type="button"
-                  onClick={() => void navigator.clipboard?.writeText(temporaryPassword)}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-emerald-800 hover:bg-emerald-100"
-                >
-                  <Copy size={15} />
-                  Copy
-                </button>
-              </div>
-              <p className="mt-2 text-xs font-medium text-emerald-700">
-                Share this password securely. It will not be shown again after you close this form.
-              </p>
-            </div>
-          )}
 
           <div className="mt-5 flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
             <button
@@ -741,7 +744,7 @@ function SelectInput<TValue extends string>(props: {
         {props.label}
         {props.required && <span className="ml-1 text-red-600">*</span>}
       </span>
-      <select
+      <NativeTomSelect
         value={props.value}
         onChange={(event) => props.onChange(event.target.value as TValue)}
         className={`mt-2 h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium outline-none focus:ring-2 ${
@@ -755,7 +758,7 @@ function SelectInput<TValue extends string>(props: {
             {option.label}
           </option>
         ))}
-      </select>
+      </NativeTomSelect>
       {props.error && (
         <span className="mt-1 block text-xs font-semibold text-red-600">{props.error}</span>
       )}
@@ -792,7 +795,7 @@ function FilterSelect<TValue extends string>({
   onChange: (value: TValue) => void;
 }) {
   return (
-    <select
+    <NativeTomSelect
       value={value}
       onChange={(event) => onChange(event.target.value as TValue)}
       className="h-9 w-full min-w-36 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-[#54247a] focus:ring-2 focus:ring-[#54247a]/10"
@@ -802,7 +805,7 @@ function FilterSelect<TValue extends string>({
           {option.label}
         </option>
       ))}
-    </select>
+    </NativeTomSelect>
   );
 }
 
@@ -1157,6 +1160,8 @@ function toPayload(form: UserForm): CreateCustomerUserPayload {
     name: form.name.trim(),
     email: form.email.trim().toLowerCase(),
     phone: toSaudiPhone(form.phone),
+    password: form.password,
+    confirmPassword: form.confirmPassword,
     role: form.role,
     isActive: form.isActive,
   };

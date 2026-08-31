@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { CalendarDays, ClipboardCheck, Search, Truck, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -246,13 +247,13 @@ function Filter({
   children: React.ReactNode;
 }) {
   return (
-    <select
+    <NativeTomSelect
       value={value}
       onChange={(event) => onChange(event.target.value)}
       className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#54247a]"
     >
       {children}
-    </select>
+    </NativeTomSelect>
   );
 }
 
@@ -386,7 +387,7 @@ function ResourceSelect({
   return (
     <label className="block text-sm font-semibold">
       {label} <span className="text-red-600">*</span>
-      <select
+      <NativeTomSelect
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-normal"
@@ -397,7 +398,7 @@ function ResourceSelect({
             {option.label}
           </option>
         ))}
-      </select>
+      </NativeTomSelect>
     </label>
   );
 }

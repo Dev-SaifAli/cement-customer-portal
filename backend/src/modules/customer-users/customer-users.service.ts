@@ -1,5 +1,4 @@
 import bcrypt from 'bcryptjs';
-import { randomBytes } from 'node:crypto';
 import { env } from '../../config/env.js';
 import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
@@ -46,16 +45,16 @@ export class CustomerUsersService {
          updated_at
        from customer_users
        where customer_account_id = $1
+         and id <> $2
        order by created_at asc`,
-      [customerUser.account.id],
+      [customerUser.account.id, customerUser.id],
     );
 
     return result.rows.map(mapCustomerUser);
   }
 
   async create(customerUser: CustomerUser, input: CreateCustomerUserInput) {
-    const temporaryPassword = generateTemporaryPassword();
-    const passwordHash = await bcrypt.hash(temporaryPassword, passwordHashRounds);
+    const passwordHash = await bcrypt.hash(input.password, passwordHashRounds);
 
     try {
       const result = await pool.query<CustomerUserRow>(
@@ -69,7 +68,7 @@ export class CustomerUsersService {
            is_active,
            password_must_change
          )
-         values ($1, $2, $3, $4, $5, $6, $7, true)
+         values ($1, $2, $3, $4, $5, $6, $7, false)
          returning
            id,
            customer_account_id,
@@ -103,7 +102,6 @@ export class CustomerUsersService {
 
       return {
         user: mapCustomerUser(row),
-        temporaryPassword,
       };
     } catch (error) {
       if (isUniqueEmailViolation(error)) {
@@ -194,8 +192,9 @@ export class CustomerUsersService {
        from customer_users
        where id = $2
          and customer_account_id = $1
+         and id <> $3
        limit 1`,
-      [customerUser.account.id, userId],
+      [customerUser.account.id, userId, customerUser.id],
     );
 
     const row = result.rows[0];
@@ -243,11 +242,6 @@ function mapCustomerUser(row: CustomerUserRow) {
     createdAt: dateString(row.created_at),
     updatedAt: dateString(row.updated_at),
   };
-}
-
-function generateTemporaryPassword() {
-  const secret = randomBytes(18).toString('base64url');
-  return `Asf-${secret}`;
 }
 
 function dateString(value: Date | string) {

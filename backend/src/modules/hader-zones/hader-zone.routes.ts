@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler.js';
-import { requireCustomerAuth } from '../customer-auth/customer-auth.middleware.js';
+import {
+  requireCustomerAuth,
+  requireCustomerRole,
+} from '../customer-auth/customer-auth.middleware.js';
 import { requireSalesAuth, requireSalesRole } from '../sales-auth/sales-auth.middleware.js';
 import { haderZoneController } from './hader-zone.controller.js';
 
@@ -29,7 +32,10 @@ adminHaderCitiesRouter.delete(
 );
 
 export const customerLocationValidationRouter = Router();
-customerLocationValidationRouter.use(requireCustomerAuth);
+customerLocationValidationRouter.use(
+  requireCustomerAuth,
+  requireCustomerRole('CUSTOMER_ADMIN', 'PURCHASER'),
+);
 customerLocationValidationRouter.post(
   '/validate-hader-zone',
   asyncHandler((request, response) => haderZoneController.validate(request, response)),

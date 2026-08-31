@@ -11,6 +11,7 @@ interface CustomerProfileRow {
   admin_id: string;
   admin_name: string;
   admin_email: string;
+  admin_phone: string | null;
   admin_role: CustomerUser['role'];
   registration_id: string;
   registration_reference: string | null;
@@ -40,6 +41,7 @@ export class CustomerProfileService {
       `with updated_user as (
          update customer_users
          set name = $3,
+             phone = $4,
              updated_at = now()
          where id = $2
            and customer_account_id = $1
@@ -71,6 +73,7 @@ export class CustomerProfileService {
          customer_users.id as admin_id,
          customer_users.name as admin_name,
          customer_users.email as admin_email,
+         customer_users.phone as admin_phone,
          customer_users.role as admin_role,
          registration_drafts.id as registration_id,
          registration_drafts.reference as registration_reference,
@@ -112,6 +115,7 @@ export class CustomerProfileService {
          customer_users.id as admin_id,
          customer_users.name as admin_name,
          customer_users.email as admin_email,
+         customer_users.phone as admin_phone,
          customer_users.role as admin_role,
          registration_drafts.id as registration_id,
          registration_drafts.reference as registration_reference,
@@ -140,8 +144,6 @@ export class CustomerProfileService {
 export const customerProfileService = new CustomerProfileService();
 
 function mapProfile(row: CustomerProfileRow) {
-  const administrator = objectOrEmpty(row.administrator);
-
   return {
     account: {
       id: row.account_id,
@@ -153,7 +155,7 @@ function mapProfile(row: CustomerProfileRow) {
       id: row.admin_id,
       name: row.admin_name,
       email: row.admin_email,
-      phone: stringOrNull(administrator.phone ?? administrator.phoneNumber ?? administrator.mobile),
+      phone: row.admin_phone,
       role: row.admin_role,
     },
     registration: {

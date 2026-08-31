@@ -14,6 +14,7 @@ import {
   SalesApiError,
   type SalesUser,
 } from '../services/salesService';
+import { AppLoadingScreen } from '../components/ui/AppLoadingScreen';
 
 interface SalesAuthContextValue {
   user: SalesUser | null;
@@ -80,7 +81,11 @@ export function SalesAuthProvider({ children }: { children: ReactNode }) {
     [loading, login, logout, refresh, restoreError, user],
   );
 
-  return <SalesAuthContext.Provider value={value}>{children}</SalesAuthContext.Provider>;
+  return (
+    <SalesAuthContext.Provider value={value}>
+      {loading ? <AppLoadingScreen label="Restoring your secure session" /> : children}
+    </SalesAuthContext.Provider>
+  );
 }
 
 export function useSalesAuth() {

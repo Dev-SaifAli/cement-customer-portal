@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import {
   AlertCircle,
   CheckCircle2,
@@ -352,7 +353,7 @@ export function AdminHaderCities() {
         {!loading && filtered.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e3e1e8] px-4 py-3 text-sm text-[#64748b]">
             <span>
-              Showing {(currentPage - 1) * PAGE_SIZE + 1}–
+              Showing {(currentPage - 1) * PAGE_SIZE + 1}â€“
               {Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
             </span>
             <div className="flex items-center gap-1">
@@ -467,7 +468,7 @@ function Filter({
   return (
     <label className="relative min-w-[155px]">
       <span className="sr-only">{label}</span>
-      <select
+      <NativeTomSelect
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="h-10 w-full appearance-none rounded-lg border border-[#e3e1e8] bg-white py-0 pl-3 pr-9 text-sm outline-none focus:border-[#54247a] focus:ring-2 focus:ring-[#54247a]/15"
@@ -477,7 +478,7 @@ function Filter({
             {text}
           </option>
         ))}
-      </select>
+      </NativeTomSelect>
       <ChevronDown
         size={15}
         className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#64748b]"

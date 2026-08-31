@@ -6,6 +6,7 @@ import type { SalesRole, SalesUser } from '../sales-auth/sales-auth.types.js';
 export type NotificationAudience = 'CUSTOMER' | 'SALES';
 
 export type NotificationType =
+  | 'REGISTRATION_SUBMITTED'
   | 'QUOTATION_SUBMITTED'
   | 'QUOTATION_READY_FOR_CUSTOMER'
   | 'QUOTATION_ACCEPTED'
@@ -32,7 +33,7 @@ export interface PublishNotificationInput {
   type: NotificationType;
   title: string;
   message: string;
-  entityType: 'QUOTATION' | 'CONTRACT' | 'ORDER' | 'DELIVERY_REQUEST' | 'SHIPMENT';
+  entityType: 'APPLICATION' | 'QUOTATION' | 'CONTRACT' | 'ORDER' | 'DELIVERY_REQUEST' | 'SHIPMENT';
   entityId: string;
   actionUrl: string;
   eventKey?: string;

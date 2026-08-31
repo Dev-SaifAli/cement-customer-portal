@@ -470,8 +470,18 @@ export const listSalesQuotations = async (params: {
   reference?: string;
   customer?: string;
   submittedDate?: string;
+  submittedTo?: string;
+  submittedOperator?: '' | 'on' | 'before' | 'after' | 'between';
   fulfilmentType?: '' | 'PICKUP' | 'DELIVERY';
+  fulfilmentOperator?: '' | 'equals' | 'notEquals';
   status?: '' | SalesQuotationStatus;
+  statusOperator?: '' | 'equals' | 'notEquals';
+  itemCount?: string;
+  itemCountTo?: string;
+  itemCountOperator?: '' | 'equals' | 'greaterThan' | 'lessThan' | 'between';
+  total?: string;
+  totalTo?: string;
+  totalOperator?: '' | 'equals' | 'greaterThan' | 'lessThan' | 'between';
 }) => {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -485,6 +495,21 @@ export const listSalesQuotations = async (params: {
     };
   }>(`/sales/quotations${query.size ? `?${query}` : ''}`);
   return response.data;
+};
+
+export const getSalesQuotationFilterOptions = async (params: {
+  field: 'reference' | 'customer' | 'status' | 'fulfilment' | 'itemCount' | 'total' | 'submitted';
+  search?: string;
+  limit?: number;
+}) => {
+  const query = new URLSearchParams({ field: params.field });
+  if (params.search) query.set('search', params.search);
+  if (params.limit) query.set('limit', String(params.limit));
+  const response = await requestSales<{
+    success: boolean;
+    data: { options: SalesFilterOption[] };
+  }>(`/sales/quotations/filter-options?${query.toString()}`);
+  return response.data.options;
 };
 
 export const getSalesQuotation = async (id: string) => {

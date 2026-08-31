@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { Factory, Pencil, Plus, Search, Warehouse, X } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { SearchableTomSelect } from '../../components/ui/SearchableTomSelect';
@@ -103,7 +104,7 @@ export function AdminLoadingPoints() {
             />
           </div>
           <div className="flex items-center gap-3">
-            <select
+            <NativeTomSelect
               value={status}
               onChange={(event) => {
                 setStatus(event.target.value as LoadingPointStatus | '');
@@ -117,7 +118,7 @@ export function AdminLoadingPoints() {
                   {label(value)}
                 </option>
               ))}
-            </select>
+            </NativeTomSelect>
             <span className="text-sm text-[#64748b]">{pagination.total} records</span>
           </div>
         </div>
@@ -220,7 +221,7 @@ export function AdminLoadingPoints() {
         </div>
         <footer className="flex items-center justify-between border-t border-[#e3e1e8] px-4 py-3 text-sm text-[#64748b]">
           <span>
-            Showing {items.length ? (page - 1) * 10 + 1 : 0}–{Math.min(page * 10, pagination.total)}{' '}
+            Showing {items.length ? (page - 1) * 10 + 1 : 0}â€“{Math.min(page * 10, pagination.total)}{' '}
             of {pagination.total}
           </span>
           <div className="flex gap-2">
