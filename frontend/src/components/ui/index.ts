@@ -8,4 +8,6 @@ export * from './Input';
 export * from './LoadingState';
 export * from './Modal';
 export * from './Select';
+export * from './Skeleton';
 export * from './Table';
+export * from './Textarea';

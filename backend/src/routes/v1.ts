@@ -17,6 +17,10 @@ import { customerProductsRouter } from '../modules/customer-products/customer-pr
 import { customerProfileRouter } from '../modules/customer-profile/customer-profile.routes.js';
 import { customerQuotationsRouter } from '../modules/customer-quotations/customer-quotations.routes.js';
 import { customerShipmentsRouter } from '../modules/customer-shipments/customer-shipments.routes.js';
+import {
+  customerTicketsRouter,
+  salesTicketsRouter,
+} from '../modules/customer-tickets/customer-tickets.routes.js';
 import { customerUsersRouter } from '../modules/customer-users/customer-users.routes.js';
 import { healthRouter } from '../modules/health/health.routes.js';
 import {
@@ -91,6 +95,7 @@ v1Router.use('/customer/pickup-locations', customerPickupLocationsRouter);
 v1Router.use('/customer/profile', customerProfileRouter);
 v1Router.use('/customer/quotations', customerQuotationsRouter);
 v1Router.use('/customer/shipments', customerShipmentsRouter);
+v1Router.use('/customer/tickets', customerTicketsRouter);
 v1Router.use('/customer/users', customerUsersRouter);
 v1Router.use('/health', healthRouter);
 v1Router.use('/notifications', notificationsRouter);
@@ -112,6 +117,7 @@ v1Router.use('/sales/auth', salesAuthRouter);
 v1Router.use('/sales/contracts', salesContractsRouter);
 v1Router.use('/sales/orders', salesOrdersRouter);
 v1Router.use('/sales/shipments', salesShipmentsRouter);
+v1Router.use('/sales/tickets', salesTicketsRouter);
 v1Router.use('/sales/quotations', salesQuotationsRouter);
 v1Router.use('/price-manager/ship-to-variances', shipToVarianceRouter);
 v1Router.use('/commercial-director/ship-to-variance-charges', commercialDirectorVarianceRouter);

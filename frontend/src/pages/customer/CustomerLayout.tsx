@@ -5,6 +5,7 @@ import {
   MapPin,
   PackageCheck,
   PackageSearch,
+  MessageSquareText,
   ShoppingBag,
   ShoppingCart,
   Truck,
@@ -81,6 +82,12 @@ const customerNavigation: Array<AppShellNavigationItem & { roles: CustomerRole[]
     to: '/customer/shipments',
     label: 'My Shipments',
     icon: <PackageCheck size={18} />,
+    roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
+  },
+  {
+    to: '/customer/tickets',
+    label: 'Service Requests',
+    icon: <MessageSquareText size={18} />,
     roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
   },
 ];

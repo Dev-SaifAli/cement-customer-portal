@@ -22,6 +22,9 @@ import { CustomerUsers } from '../pages/customer/CustomerUsers';
 import { CustomerFleet } from '../pages/customer/CustomerFleet';
 import { CustomerShipmentDetails } from '../pages/customer/CustomerShipmentDetails';
 import { CustomerShipments } from '../pages/customer/CustomerShipments';
+import { CustomerTicketDetailsPage } from '../pages/customer/CustomerTicketDetails';
+import { CustomerTicketNew } from '../pages/customer/CustomerTicketNew';
+import { CustomerTickets } from '../pages/customer/CustomerTickets';
 import type { CustomerRole } from '../services/customerAuthService';
 
 export function CustomerRoutes() {
@@ -41,6 +44,8 @@ export function CustomerRoutes() {
             <Route path="orders/:id" element={<CustomerOrderDetails />} />
             <Route path="shipments" element={<CustomerShipments />} />
             <Route path="shipments/:id" element={<CustomerShipmentDetails />} />
+            <Route path="tickets" element={<CustomerTickets />} />
+            <Route path="tickets/:id" element={<CustomerTicketDetailsPage />} />
             <Route element={<RequireCustomerRole roles={['CUSTOMER_ADMIN', 'PURCHASER']} />}>
               <Route path="locations" element={<CustomerLocations />} />
               <Route path="quotations" element={<CustomerQuotations />} />
@@ -48,6 +53,13 @@ export function CustomerRoutes() {
               <Route path="quotations/:id" element={<CustomerQuotationRoute />} />
               <Route path="contracts/:id/order" element={<CustomerCreateOrder />} />
               <Route path="orders/new" element={<CustomerDirectOrder />} />
+            </Route>
+            <Route
+              element={
+                <RequireCustomerRole roles={['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER']} />
+              }
+            >
+              <Route path="tickets/new" element={<CustomerTicketNew />} />
             </Route>
             <Route element={<RequireCustomerRole roles={['CUSTOMER_ADMIN']} />}>
               <Route path="fleet" element={<CustomerFleet />} />

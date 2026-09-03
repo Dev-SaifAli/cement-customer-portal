@@ -12,6 +12,8 @@ import { SalesDashboard } from '../pages/sales/SalesDashboard';
 import { SalesLogin } from '../pages/sales/SalesLogin';
 import { SalesOrdersPage } from '../pages/sales/SalesOrders';
 import { SalesOrderDetailsPage } from '../pages/sales/SalesOrderDetails';
+import { SalesTicketDetailsPage } from '../pages/sales/SalesTicketDetails';
+import { SalesTicketsPage } from '../pages/sales/SalesTickets';
 import { SalesQuotationDetailsPage } from '../pages/sales/SalesQuotationDetails';
 import { SalesQuotationsPage } from '../pages/sales/SalesQuotations';
 import { HaderShipments } from '../pages/hader/HaderShipments';
@@ -38,6 +40,8 @@ export function SalesRoutes() {
               <Route path="contracts/:id" element={<SalesContractDetailsPage />} />
               <Route path="orders" element={<SalesOrdersPage />} />
               <Route path="orders/:id" element={<SalesOrderDetailsPage />} />
+              <Route path="tickets" element={<SalesTicketsPage />} />
+              <Route path="tickets/:id" element={<SalesTicketDetailsPage />} />
               <Route path="shipments" element={<HaderShipments audience="sales" />} />
               <Route path="shipments/:id" element={<HaderShipmentDetails audience="sales" />} />
             </Route>

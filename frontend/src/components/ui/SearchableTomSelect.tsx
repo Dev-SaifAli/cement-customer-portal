@@ -13,6 +13,7 @@ export function SearchableTomSelect({
   ariaLabel,
   disabled = false,
   dropdownParent,
+  wrapperClassName,
   onChange,
 }: {
   value: string;
@@ -21,6 +22,7 @@ export function SearchableTomSelect({
   ariaLabel: string;
   disabled?: boolean;
   dropdownParent?: string;
+  wrapperClassName?: string;
   onChange: (value: string) => void;
 }) {
   const selectRef = useRef<HTMLSelectElement>(null);
@@ -47,6 +49,7 @@ export function SearchableTomSelect({
       create: false,
       options: optionsRef.current,
       placeholder,
+      wrapperClass: ['ts-wrapper app-tom-select', wrapperClassName].filter(Boolean).join(' '),
       ...(dropdownParent ? { dropdownParent } : {}),
       dropdownClass: 'ts-dropdown customer-tom-select-dropdown',
       render: {
@@ -89,7 +92,7 @@ export function SearchableTomSelect({
       instance.destroy();
       instanceRef.current = null;
     };
-  }, [dropdownParent, placeholder]);
+  }, [dropdownParent, placeholder, wrapperClassName]);
 
   useEffect(() => {
     const instance = instanceRef.current;
