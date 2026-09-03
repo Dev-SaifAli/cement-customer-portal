@@ -94,31 +94,27 @@ export function CustomerTickets() {
         )}
       </header>
 
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-[var(--customer-text)]">
-                {result.pagination.total} {result.pagination.total === 1 ? 'Request' : 'Requests'}
-              </p>
-            </div>
-            <div className="flex w-full justify-end sm:w-auto">
-              <TicketFilterBuilder
-                tickets={result.items}
-                appliedRules={appliedFilters}
-                onApply={(rules) => {
-                  setAppliedFilters(rules);
-                  setPage(1);
-                }}
-                onClear={() => {
-                  setAppliedFilters([]);
-                  setPage(1);
-                }}
-              />
-            </div>
-          </div>
-          {appliedFilters.length > 0 && (
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm font-semibold text-[var(--customer-text)]">
+          {result.pagination.total} {result.pagination.total === 1 ? 'Request' : 'Requests'}
+        </p>
+        <div className="flex w-full justify-end sm:w-auto">
+          <TicketFilterBuilder
+            tickets={result.items}
+            appliedRules={appliedFilters}
+            onApply={(rules) => {
+              setAppliedFilters(rules);
+              setPage(1);
+            }}
+            onClear={() => {
+              setAppliedFilters([]);
+              setPage(1);
+            }}
+          />
+        </div>
+      </div>
+      {appliedFilters.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
               {appliedFilters.map((filterRule) => (
                 <Badge
                   key={filterRule.id}
@@ -154,8 +150,6 @@ export function CustomerTickets() {
               </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
 
       {error ? (
         <ErrorNotice title="Unable to load service requests.">

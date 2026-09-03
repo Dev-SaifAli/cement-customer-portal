@@ -71,12 +71,6 @@ export const ticketFilterDefinitions: TicketFilterDefinition[] = [
     valueKind: 'date',
     conditions: ['before', 'after', 'between'],
   },
-  {
-    id: 'createdBy',
-    label: 'Created By',
-    valueKind: 'select',
-    conditions: ['equals'],
-  },
 ];
 
 export const salesTicketFilterDefinitions: TicketFilterDefinition[] = [
@@ -115,6 +109,12 @@ export const salesTicketFilterDefinitions: TicketFilterDefinition[] = [
     label: 'Created Date',
     valueKind: 'date',
     conditions: ['before', 'after'],
+  },
+  {
+    id: 'createdBy',
+    label: 'Created By',
+    valueKind: 'select',
+    conditions: ['equals'],
   },
 ];
 

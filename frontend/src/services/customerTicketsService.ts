@@ -79,7 +79,14 @@ export interface CustomerTicketFilterRule {
 }
 
 export interface SalesTicketFilterRule {
-  field: 'ticketNumber' | 'customer' | 'description' | 'status' | 'crmHandoff' | 'createdDate';
+  field:
+    | 'ticketNumber'
+    | 'customer'
+    | 'description'
+    | 'status'
+    | 'crmHandoff'
+    | 'createdDate'
+    | 'createdBy';
   condition: 'equals' | 'contains' | 'before' | 'after';
   value: string;
 }

@@ -76,29 +76,27 @@ export function SalesTicketsPage() {
         </div>
       </header>
 
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm font-semibold text-[var(--customer-text)]">
-              {result.pagination.total} {result.pagination.total === 1 ? 'Request' : 'Requests'}
-            </p>
-            <TicketFilterBuilder
-              tickets={result.items}
-              definitions={salesTicketFilterDefinitions}
-              getValueOptions={getSalesTicketFilterValueOptions}
-              appliedRules={appliedFilters}
-              onApply={(rules) => {
-                setAppliedFilters(rules);
-                setPage(1);
-              }}
-              onClear={() => {
-                setAppliedFilters([]);
-                setPage(1);
-              }}
-            />
-          </div>
-          {appliedFilters.length > 0 && (
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm font-semibold text-[var(--customer-text)]">
+          {result.pagination.total} {result.pagination.total === 1 ? 'Request' : 'Requests'}
+        </p>
+        <TicketFilterBuilder
+          tickets={result.items}
+          definitions={salesTicketFilterDefinitions}
+          getValueOptions={getSalesTicketFilterValueOptions}
+          appliedRules={appliedFilters}
+          onApply={(rules) => {
+            setAppliedFilters(rules);
+            setPage(1);
+          }}
+          onClear={() => {
+            setAppliedFilters([]);
+            setPage(1);
+          }}
+        />
+      </div>
+      {appliedFilters.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
               {appliedFilters.map((filterRule) => (
                 <Badge
                   key={filterRule.id}
@@ -134,8 +132,6 @@ export function SalesTicketsPage() {
               </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
 
       {error ? (
         <ErrorNotice title="Unable to load service requests.">
@@ -188,6 +184,10 @@ function getSalesTicketFilterValueOptions(field: TicketFilterRule['field'], tick
         values.set(value, value);
       }
     }
+    if (field === 'createdBy') {
+      const label = ticket.createdBy.name ?? ticket.createdBy.email;
+      if (label) values.set(ticket.createdBy.id, label);
+    }
   });
   return Array.from(values.entries()).map(([value, label]) => ({ value, label }));
 }
@@ -196,9 +196,15 @@ function toSalesApiFilters(filters: TicketFilterRule[]): SalesTicketFilterRule[]
   return filters.flatMap((filter) => {
     if (!filter.field || !filter.condition || !filter.value.trim()) return [];
     if (
-      !['ticketNumber', 'customer', 'description', 'status', 'crmHandoff', 'createdDate'].includes(
-        filter.field,
-      )
+      ![
+        'ticketNumber',
+        'customer',
+        'description',
+        'status',
+        'crmHandoff',
+        'createdDate',
+        'createdBy',
+      ].includes(filter.field)
     ) {
       return [];
     }
@@ -228,6 +234,10 @@ function formatChipValue(value: string, filterRule: TicketFilterRule, tickets: C
   if (filterRule.field === 'customer') {
     const matchingTicket = tickets.find((ticket) => ticket.customer.companyName === value);
     return matchingTicket?.customer.companyName ?? value;
+  }
+  if (filterRule.field === 'createdBy') {
+    const matchingTicket = tickets.find((ticket) => ticket.createdBy.id === value);
+    return matchingTicket?.createdBy.name ?? matchingTicket?.createdBy.email ?? value;
   }
   if (value === 'NOT_SENT') return 'Not Sent';
   return value

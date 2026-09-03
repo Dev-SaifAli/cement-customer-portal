@@ -267,9 +267,11 @@ export function SalesTicketTable({
         </Table>
       </div>
 
-      <div className="rounded-lg border border-[var(--customer-border,#e5e2ed)] bg-[var(--customer-surface,#ffffff)] px-4 py-2 text-xs text-[var(--customer-text-muted,#746d7f)]">
-        {selectedCount} selected
-      </div>
+      {selectedCount > 0 && (
+        <div className="rounded-lg border border-[var(--customer-border,#e5e2ed)] bg-[var(--customer-surface,#ffffff)] px-4 py-2 text-xs text-[var(--customer-text-muted,#746d7f)]">
+          {selectedCount} {selectedCount === 1 ? 'ticket' : 'tickets'} selected
+        </div>
+      )}
 
       <footer className="flex flex-col gap-3 rounded-lg border border-[var(--customer-border,#e5e2ed)] bg-[var(--customer-surface,#ffffff)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-[var(--customer-text-muted,#746d7f)]">

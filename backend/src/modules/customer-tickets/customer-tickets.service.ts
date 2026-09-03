@@ -629,6 +629,12 @@ function applySalesTicketFilters(
       return;
     }
 
+    if (filter.field === 'createdBy' && filter.condition === 'equals') {
+      values.push(filter.value);
+      clauses.push(`customer_tickets.customer_user_id = $${values.length}`);
+      return;
+    }
+
     if (filter.field === 'createdDate') {
       applyDateFilter('customer_tickets.created_at', filter, clauses, values);
     }

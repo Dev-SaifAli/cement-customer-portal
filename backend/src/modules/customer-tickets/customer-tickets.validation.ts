@@ -29,6 +29,7 @@ const salesTicketFilterFieldSchema = z.enum([
   'status',
   'crmHandoff',
   'createdDate',
+  'createdBy',
 ]);
 
 const customerTicketFilterConditionSchema = z.enum([
@@ -153,6 +154,7 @@ const salesTicketFilterSchema = z
       status: ['equals'],
       crmHandoff: ['equals'],
       createdDate: ['before', 'after'],
+      createdBy: ['equals'],
     };
 
     if (!allowedConditions[filter.field].includes(filter.condition)) {
