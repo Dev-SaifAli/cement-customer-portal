@@ -3,10 +3,10 @@ import {
   BriefcaseBusiness,
   ClipboardList,
   FileText,
-  LifeBuoy,
   MapPinned,
   PackageCheck,
   ShoppingBag,
+  Ticket,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell, type AppShellNavigationItem } from '../../components/app-shell/AppShell';
@@ -44,8 +44,8 @@ export function SalesLayout() {
     items.push(
       { to: '/sales/contracts', label: 'Contracts', icon: <BriefcaseBusiness size={18} /> },
       { to: '/sales/orders', label: 'Orders', icon: <ShoppingBag size={18} /> },
-      { to: '/sales/tickets', label: 'Service Requests / Tickets', icon: <LifeBuoy size={18} /> },
       { to: '/sales/shipments', label: 'Shipments', icon: <PackageCheck size={18} /> },
+      { to: '/sales/tickets', label: 'Tickets', icon: <Ticket size={18} /> },
     );
   }
 
