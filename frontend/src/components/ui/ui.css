@@ -41,6 +41,21 @@
   color: var(--color-text);
   background: var(--color-surface);
 }
+.ui-textarea {
+  min-height: 140px;
+  resize: vertical;
+}
+.ui-skeleton {
+  min-height: 1rem;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-border), transparent 35%);
+  animation: ui-skeleton-pulse 1.2s ease-in-out infinite;
+}
+@keyframes ui-skeleton-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
 .ui-field {
   display: grid;
   gap: var(--space-2);

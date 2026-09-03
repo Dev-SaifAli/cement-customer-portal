@@ -1,6 +1,7 @@
 import { Bell, Users } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { AppShell, type AppShellNavigationItem } from '../../components/app-shell/AppShell';
+import { NotificationBell } from '../../components/notifications/NotificationBell';
 import { useCustomerTheme } from '../../context/CustomerThemeContext';
 import { useSalesAuth } from '../../context/SalesAuthContext';
 
@@ -13,26 +14,16 @@ export function PortalAdminLayout() {
   const { user, logout } = useSalesAuth();
   const { preference, setPreference } = useCustomerTheme();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const handleLogout = async () => {
     await logout();
     navigate('/admin/login', { replace: true });
   };
 
-  const current = navigation.find(
-    ({ to }) => location.pathname === to || location.pathname.startsWith(`${to}/`),
-  );
-
   return (
     <AppShell
-      homePath="/portal-admin/users"
       portalLabel="Portal Administration"
       navigation={[{ label: 'Administration', items: navigation }]}
-      pageContext={{
-        title: current?.label ?? 'Portal Administration',
-        subtitle: 'Users, access and global communications',
-      }}
       user={{
         name: user?.name,
         email: user?.email,
@@ -42,6 +33,7 @@ export function PortalAdminLayout() {
       onThemeChange={setPreference}
       onLogout={handleLogout}
       collapseStorageKey="portal_admin_sidebar_collapsed"
+      headerActions={<NotificationBell audience="sales" />}
     />
   );
 }

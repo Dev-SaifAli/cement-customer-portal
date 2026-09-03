@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -73,7 +74,7 @@ export function SalesOrdersPage() {
             />
           </div>
           <div className="flex items-center gap-3">
-            <select
+            <NativeTomSelect
               value={status}
               onChange={(event) => {
                 setStatus(event.target.value as OrderStatus | '');
@@ -86,7 +87,7 @@ export function SalesOrdersPage() {
               <option value="PROCESSING">Processing</option>
               <option value="COMPLETED">Completed</option>
               <option value="CANCELLED">Cancelled</option>
-            </select>
+            </NativeTomSelect>
             <span className="whitespace-nowrap text-sm font-semibold text-[#64748b]">
               {pagination.total} Orders
             </span>
@@ -175,7 +176,7 @@ export function SalesOrdersPage() {
             </div>
             <div className="flex items-center justify-between border-t border-[#eceaf0] px-4 py-3">
               <span className="text-xs text-[#64748b]">
-                Showing {pagination.total ? (page - 1) * 10 + 1 : 0}–
+                Showing {pagination.total ? (page - 1) * 10 + 1 : 0}â€“
                 {Math.min(page * 10, pagination.total)} of {pagination.total}
               </span>
               <div className="flex gap-2">

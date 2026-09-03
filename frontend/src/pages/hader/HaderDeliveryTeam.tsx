@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { CalendarDays, ChevronLeft, ChevronRight, Search, Truck } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -313,7 +314,7 @@ export function HaderDeliveryTeam() {
             </div>
             <footer className="customer-border-soft flex items-center justify-between border-t px-4 py-3">
               <span className="customer-muted text-xs">
-                Showing {pagination?.total ? (page - 1) * 10 + 1 : 0}–
+                Showing {pagination?.total ? (page - 1) * 10 + 1 : 0}â€“
                 {Math.min(page * 10, pagination?.total ?? 0)} of {pagination?.total ?? 0}
               </span>
               {selectedIds.length > 0 && (
@@ -366,13 +367,13 @@ function Filter({
   children: React.ReactNode;
 }) {
   return (
-    <select
+    <NativeTomSelect
       value={value}
       onChange={(event) => onChange(event.target.value)}
       className="customer-input customer-border customer-text h-10 rounded-lg border px-3 text-sm"
     >
       {children}
-    </select>
+    </NativeTomSelect>
   );
 }
 function PageButton({

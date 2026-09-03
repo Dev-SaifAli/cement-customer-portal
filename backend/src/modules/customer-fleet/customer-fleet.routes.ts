@@ -1,13 +1,16 @@
 import express, { Router } from 'express';
 import { asyncHandler } from '../../middleware/async-handler.js';
-import { requireCustomerAuth } from '../customer-auth/customer-auth.middleware.js';
+import {
+  requireCustomerAuth,
+  requireCustomerRole,
+} from '../customer-auth/customer-auth.middleware.js';
 import { maxRegistrationDocumentSizeBytes } from '../registration-documents/registration-document.constants.js';
 import { customerFleetController } from './customer-fleet.controller.js';
 
 export const customerTrucksRouter = Router();
 export const customerDriversRouter = Router();
-customerTrucksRouter.use(requireCustomerAuth);
-customerDriversRouter.use(requireCustomerAuth);
+customerTrucksRouter.use(requireCustomerAuth, requireCustomerRole('CUSTOMER_ADMIN'));
+customerDriversRouter.use(requireCustomerAuth, requireCustomerRole('CUSTOMER_ADMIN'));
 
 customerTrucksRouter.get(
   '/',

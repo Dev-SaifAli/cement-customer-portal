@@ -2,290 +2,229 @@
   "document": {
     "title": "AlSafwa Cement Portal — User Guide and UAT",
     "subtitle": "Client-facing operating guide and user acceptance testing evidence",
-    "version": "1.0",
+    "version": "2.0",
     "owner": "AlSafwa Cement",
     "classification": "Client Use",
-    "preparedFor": "AlSafwa Cement Portal End Users"
+    "preparedFor": "AlSafwa Cement Portal End Users",
+    "baseUrl": "http://20.46.44.59"
   },
+  "roles": [
+    { "role": "Customer Administrator", "responsibility": "Manages the customer account, customer users, locations, and all currently implemented customer workflows." },
+    { "role": "Purchaser", "responsibility": "Creates quotations and orders and follows purchasing and fulfilment workflows permitted to the role." },
+    { "role": "Finance User", "responsibility": "Uses the currently implemented customer read-only areas; ERP-dependent finance modules remain pending." },
+    { "role": "Viewer", "responsibility": "Uses permitted read-only Customer Portal information without administrative or transactional actions." },
+    { "role": "Sales Representative", "responsibility": "Reviews registrations, quotations, contracts, and submitted customer orders." },
+    { "role": "Price Manager", "responsibility": "Reviews product-price exceptions and manages Ship-to Variance charge requests." },
+    { "role": "Commercial Director", "responsibility": "Approves or rejects raised Ship-to Variance extra-charge requests." },
+    { "role": "Pricing Administrator", "responsibility": "Maintains products, product and delivery prices, logistics configuration, pickup locations, and VAT configuration." },
+    { "role": "Hader Manager", "responsibility": "Coordinates delivery requests, shipments, dispatch, loading, delivery execution, and proof of delivery." },
+    { "role": "Portal Administrator", "responsibility": "Manages internal portal users and global portal notifications." }
+  ],
+  "loginRoutes": [
+    { "role": "Customer Administrator", "path": "/login", "note": "Shared Customer Portal login; access is determined by the assigned customer role." },
+    { "role": "Purchaser", "path": "/login", "note": "Shared Customer Portal login; access is determined by the assigned customer role." },
+    { "role": "Finance User", "path": "/login", "note": "Shared Customer Portal login; access is determined by the assigned customer role." },
+    { "role": "Viewer", "path": "/login", "note": "Shared Customer Portal login; access is determined by the assigned customer role." },
+    { "role": "Sales Representative", "path": "/sales/login", "note": "Shared internal login; the authenticated role determines the landing page and navigation." },
+    { "role": "Price Manager", "path": "/sales/login", "note": "Shared internal login; access is role-based." },
+    { "role": "Commercial Director", "path": "/sales/login", "note": "Shared internal login; access is role-based." },
+    { "role": "Pricing Administrator", "path": "/sales/login", "note": "Shared internal login; access is role-based." },
+    { "role": "Hader Manager", "path": "/sales/login", "note": "Shared internal login; access is role-based." },
+    { "role": "Portal Administrator", "path": "/admin/login", "note": "Dedicated Portal Administrator entry point using the existing internal authentication service." }
+  ],
   "implementedAreas": [
-    "Customer Registration & Onboarding",
-    "Customer Portal",
-    "Sales Representative",
-    "Pricing Administrator",
-    "Hader Manager",
-    "Price Manager",
-    "Commercial Director",
-    "Portal Administrator / User Management",
-    "End-to-End Workflows"
+    "Customer registration, Sales review, approval, and activation",
+    "Role-based Customer, Sales, Pricing, Hader, Commercial Director, and Portal Administrator access",
+    "Products, quotations, commercial review, customer decision, and document preview",
+    "Accepted quotation to contract creation and contract activation",
+    "Direct and contract order creation with Sales processing",
+    "Hader delivery request, shipment, assignment, loading, dispatch, delivery, POD, and closure",
+    "Ship-to Variance calculation, extra-charge request, and Commercial Director approval",
+    "Product, delivery, logistics, pickup-location, and VAT configuration",
+    "Internal and customer user management",
+    "Global in-portal notifications"
   ],
   "pendingAreas": [
-    "VAS Cloud Logistics API integration",
-    "System Parameters",
-    "Audit / Activity Logs",
-    "Global Notifications (subject to implementation verification)",
-    "Reports & Analytics (subject to implementation verification)",
     "Financial posting of approved Ship-to Variance charges",
     "Oracle Fusion integration",
-    "Invoices / Receivables / Statements (subject to implementation verification)"
+    "Invoices, receivables, and statements dependent on ERP integration",
+    "VAS Cloud Logistics live outbound API transmission (mapping and outbox foundation exists, but the external endpoint/authentication contract is not configured)",
+    "System Parameters administration",
+    "Centralized Audit / Activity Logs administration screen",
+    "Reports & Analytics",
+    "Live / Advanced GPS tracking",
+    "Service Requests / Complaints"
   ],
   "sections": [
     {
-      "id": "customer-registration-onboarding",
-      "title": "Customer Registration & Onboarding",
-      "audience": "Prospective customer and Customer Administrator",
-      "summary": "Create an organization registration, provide company and contact details, upload required documents, define delivery locations, nominate the Customer Administrator, and submit the application for Sales review.",
+      "id": "customer-registration",
+      "title": "Customer Registration",
+      "audience": "Prospective customer and Sales Representative",
+      "summary": "Register an organization, provide required business information, submit it for Sales review, and activate an approved customer account.",
       "steps": [
-        "Open the customer registration page and start a new application.",
-        "Enter the required company and contact information.",
-        "Upload the required company documents and provide valid future expiry dates.",
-        "Add delivery locations and select map locations where applicable.",
-        "Enter the Customer Administrator details.",
-        "Review the application and submit it for Sales review."
+        "Start the organization registration and complete company and contact information.",
+        "Upload required documents, add delivery locations, and set map coordinates.",
+        "Nominate the Customer Administrator, review the application, and submit it.",
+        "Sales reviews, approves, and activates the customer account through the authorized workflow."
       ],
-      "screenshots": [
-        {
-          "file": "01_customer_registration_start.png",
-          "caption": "Customer registration start page",
-          "instruction": "Select the registration action to begin a new organization application."
-        },
-        {
-          "file": "02_company_information.png",
-          "caption": "Company information",
-          "instruction": "Complete the required organization and company registration information."
-        },
-        {
-          "file": "03_contact_information.png",
-          "caption": "Contact information",
-          "instruction": "Provide the primary business contact details."
-        },
-        {
-          "file": "04_documents.png",
-          "caption": "Required company documents",
-          "instruction": "Upload the required documents and enter valid expiry dates where requested."
-        },
-        {
-          "file": "05_delivery_locations.png",
-          "caption": "Delivery locations",
-          "instruction": "Add the operational delivery locations associated with the registration."
-        },
-        {
-          "file": "06_set_map_location.png",
-          "caption": "Map location selection",
-          "instruction": "Use the map to select and confirm the correct delivery location."
-        },
-        {
-          "file": "07_customer_admin.png",
-          "caption": "Customer Administrator details",
-          "instruction": "Nominate the primary administrator who will manage the customer portal account."
-        },
-        {
-          "file": "08_registration_review_submit.png",
-          "caption": "Registration review and submission",
-          "instruction": "Review the entered information and submit the application for Sales review."
-        }
-      ]
-    },
-    {
-      "id": "sales-representative-onboarding",
-      "title": "Sales Representative",
-      "audience": "Sales Representative",
-      "summary": "Review submitted customer registration information, approve the registration, and activate the customer account using the authorized Sales workflow.",
-      "steps": [
-        "Open the submitted application from the Sales applications queue.",
-        "Review the company, contact, document, delivery-location, and administrator information.",
-        "Apply the appropriate Sales decision.",
-        "For an approved application, complete customer account activation using the existing activation action."
-      ],
-      "screenshots": [
-        {
-          "file": "09_sales_registration_review.png",
-          "caption": "Sales registration review",
-          "instruction": "Review the complete submitted registration before making a decision."
-        },
-        {
-          "file": "10_sales_approve.png",
-          "caption": "Sales approval action",
-          "instruction": "Approve the application when all required information has been verified."
-        },
-        {
-          "file": "11_approve_customer_account.png",
-          "caption": "Customer account activation",
-          "instruction": "Use the authorized activation action to enable the approved customer account."
-        },
-        {
-          "file": "12_customer_registration_result_application_status.png",
-          "caption": "Customer registration result and application status",
-          "instruction": "Confirm the customer-visible registration result after the Sales onboarding decision."
-        }
-      ]
+      "screenshotRange": [1, 12]
     },
     {
       "id": "customer-portal",
       "title": "Customer Portal",
-      "audience": "Activated customer users",
-      "summary": "Guidance for authenticated customer features. Detailed procedures will be added as real screenshots are captured and mapped.",
-      "steps": [],
-      "screenshots": []
+      "audience": "Customer Administrator, Purchaser, Finance User, and Viewer according to role permissions",
+      "summary": "Use the authenticated Customer Portal to view account information, products, quotations, direct orders, order details, and delivery locations according to the assigned role.",
+      "steps": [
+        "Sign in through the shared Customer Portal login.",
+        "Use the dashboard and role-aware navigation to open permitted modules.",
+        "Review product details and create quotation or direct-order requests where authorized.",
+        "Maintain mapped Ship-to locations before using them for delivery orders."
+      ],
+      "screenshotRange": [13, 28]
+    },
+    {
+      "id": "sales-quotations",
+      "title": "Sales / Quotations",
+      "audience": "Sales Representative and customer quotation participants",
+      "summary": "Review customer registrations and quotation requests, apply approved commercial pricing, send quotations to customers, and record the customer decision.",
+      "steps": [
+        "Sign in through the shared internal login and open the relevant Sales queue.",
+        "Review the quotation requirements and start the review when valid.",
+        "Apply the configured commercial pricing and required approval path.",
+        "Send the final quotation to the customer for acceptance or another supported decision."
+      ],
+      "screenshotRange": [29, 39]
+    },
+    {
+      "id": "contract",
+      "title": "Contract",
+      "audience": "Sales Representative and Customer Portal users with contract access",
+      "summary": "Convert an accepted quotation into a draft contract, review the inherited commercial snapshot, activate the contract, and make the active contract visible to the customer.",
+      "steps": [
+        "Open an accepted quotation and select Create Contract.",
+        "Enter only the permitted contract-specific information and confirm creation.",
+        "Review the draft contract and activate it when valid.",
+        "Confirm that the active contract is visible in the Customer Portal."
+      ],
+      "screenshotRange": [40, 46]
+    },
+    {
+      "id": "orders",
+      "title": "Orders",
+      "audience": "Authorized customer users and Sales Representative",
+      "summary": "Create orders from active contracts, review and submit them, monitor the customer order list, and allow Sales to begin processing submitted orders.",
+      "steps": [
+        "Open an active contract and start an order.",
+        "Enter the requested quantity in TON and select the permitted fulfilment details.",
+        "Review and confirm the order.",
+        "Sales opens the submitted order and starts processing after validation."
+      ],
+      "screenshotRange": [47, 53]
+    },
+    {
+      "id": "hader-delivery",
+      "title": "Hader Delivery",
+      "audience": "Hader Manager and authorized Hader operational users",
+      "summary": "Convert processing delivery orders into delivery requests and shipments, schedule resources, load the shipment, and dispatch it into the delivery workflow.",
+      "steps": [
+        "Open the delivery request and create the shipment.",
+        "Assign dispatch resources and schedule the shipment.",
+        "Use Loading Control to assign a compatible loading point and complete loading.",
+        "Dispatch the loaded shipment; dispatch does not mark it delivered."
+      ],
+      "screenshotRange": [54, 67]
+    },
+    {
+      "id": "pod",
+      "title": "Proof of Delivery (POD)",
+      "audience": "Authorized Hader Delivery Team users",
+      "summary": "Move a dispatched shipment through in-transit and delivered states, record proof of delivery for the delivered shipment, and close the shipment after valid POD exists.",
+      "steps": [
+        "Start delivery for a dispatched shipment.",
+        "Mark the in-transit shipment delivered when delivery is complete.",
+        "Record receiver, delivered quantity, delivery time, location, evidence, and permitted POD documents.",
+        "Close the shipment after POD is recorded."
+      ],
+      "screenshotRange": [68, 73]
+    },
+    {
+      "id": "ship-to-variance",
+      "title": "Ship-to Variance",
+      "audience": "Price Manager",
+      "summary": "Review shipments delivered to a different pricing city, compare the stored ordered and actual city prices, and either dismiss the variance or raise the calculated extra charge for approval.",
+      "steps": [
+        "Open the Ship-to Variance list and select a shipment.",
+        "Review the stored pricing comparison, difference per TON, and extra charge.",
+        "Raise a genuine positive extra charge for Commercial Director approval or dismiss it where appropriate."
+      ],
+      "screenshotRange": [74, 78]
     },
     {
       "id": "pricing-administrator",
       "title": "Pricing Administrator",
       "audience": "Pricing Administrator",
-      "summary": "Guidance for authorized product, pricing, and related administration. Detailed procedures will be added as real screenshots are captured and mapped.",
-      "steps": [],
-      "screenshots": []
-    },
-    {
-      "id": "hader-manager",
-      "title": "Hader Manager",
-      "audience": "Hader Manager",
-      "summary": "Guidance for authorized Hader delivery operations. Detailed procedures will be added as real screenshots are captured and mapped.",
-      "steps": [],
-      "screenshots": []
-    },
-    {
-      "id": "price-manager",
-      "title": "Price Manager",
-      "audience": "Price Manager",
-      "summary": "Guidance for authorized pricing review and variance workflows. Detailed procedures will be added as real screenshots are captured and mapped.",
-      "steps": [],
-      "screenshots": []
+      "summary": "Maintain product records, city-based product and delivery pricing, Hader city boundaries, logistics master data, pickup locations, and central VAT configuration.",
+      "steps": [
+        "Maintain active products and their customer-visible information.",
+        "Configure product and delivery list prices using the established per-TON basis.",
+        "Maintain permitted city, fleet, pickup-location, transporter, and VAT configuration.",
+        "Keep internal pricing and logistics costs restricted to authorized users."
+      ],
+      "screenshotRange": [79, 87]
     },
     {
       "id": "commercial-director",
       "title": "Commercial Director",
       "audience": "Commercial Director",
-      "summary": "Guidance for authorized commercial approval workflows. Detailed procedures will be added as real screenshots are captured and mapped.",
-      "steps": [],
-      "screenshots": []
+      "summary": "Review pending Ship-to Variance extra-charge requests and approve or reject them without altering the historical variance calculation.",
+      "steps": [
+        "Open the pending variance approvals queue.",
+        "Review the shipment, order, city-price comparison, and calculated charge.",
+        "Approve the request or reject it with the required reason."
+      ],
+      "screenshotRange": [88, 90]
     },
     {
       "id": "portal-administrator",
       "title": "Portal Administrator",
-      "audience": "Portal Administrator",
-      "summary": "Guidance for internal user administration and role-aware access management. Detailed procedures will be added as real screenshots are captured and mapped.",
-      "steps": [],
-      "screenshots": []
-    },
-    {
-      "id": "end-to-end-workflows",
-      "title": "End-to-End Workflows",
-      "audience": "Business process owners and UAT participants",
-      "summary": "Cross-role workflow guidance will be expanded only from verified application evidence.",
-      "steps": [],
-      "screenshots": []
+      "audience": "Portal Administrator and Customer Administrator for their respective user-management screens",
+      "summary": "Portal Administrators manage internal users through the protected administration area. Customer Administrators separately create and manage other users belonging to their own customer account.",
+      "steps": [
+        "Portal Administrator signs in through the dedicated administration login.",
+        "Create or maintain internal users with the existing roles and active status.",
+        "Customer Administrator uses Customer Portal User Management for other users in the same account.",
+        "Use Profile, not the Users list, for the currently authenticated customer user's own account."
+      ],
+      "screenshotRange": [91, 96]
     }
   ],
   "uatCases": [
-    {
-      "id": "UAT-REG-001",
-      "area": "Customer Registration & Onboarding",
-      "title": "Start a customer registration",
-      "role": "Prospective customer",
-      "preconditions": "The registration page is available and the user is not signed in.",
-      "steps": [
-        "Open the customer registration page.",
-        "Start a new organization registration."
-      ],
-      "expectedResult": "The registration workflow opens and allows the user to enter company information.",
-      "evidence": ["01_customer_registration_start.png"]
-    },
-    {
-      "id": "UAT-REG-002",
-      "area": "Customer Registration & Onboarding",
-      "title": "Complete company and contact information",
-      "role": "Prospective customer",
-      "preconditions": "A customer registration has been started.",
-      "steps": [
-        "Enter all required company information.",
-        "Enter all required contact information.",
-        "Continue to the documents step."
-      ],
-      "expectedResult": "Valid company and contact information is retained and the registration can continue.",
-      "evidence": ["02_company_information.png", "03_contact_information.png"]
-    },
-    {
-      "id": "UAT-REG-003",
-      "area": "Customer Registration & Onboarding",
-      "title": "Upload registration documents",
-      "role": "Prospective customer",
-      "preconditions": "The registration has reached the document step and valid files are available.",
-      "steps": [
-        "Upload the required company documents.",
-        "Enter valid future expiry dates where required.",
-        "Continue to the next step."
-      ],
-      "expectedResult": "The uploaded documents and their metadata remain associated with the registration.",
-      "evidence": ["04_documents.png"]
-    },
-    {
-      "id": "UAT-REG-004",
-      "area": "Customer Registration & Onboarding",
-      "title": "Add a delivery location and map position",
-      "role": "Prospective customer",
-      "preconditions": "The registration has reached the delivery-location step.",
-      "steps": [
-        "Enter a delivery location.",
-        "Open the map selector.",
-        "Select and confirm the correct map location."
-      ],
-      "expectedResult": "The delivery location and selected map position are retained in the registration.",
-      "evidence": ["05_delivery_locations.png", "06_set_map_location.png"]
-    },
-    {
-      "id": "UAT-REG-005",
-      "area": "Customer Registration & Onboarding",
-      "title": "Nominate administrator and submit registration",
-      "role": "Prospective customer",
-      "preconditions": "All preceding registration steps contain valid information.",
-      "steps": [
-        "Enter the Customer Administrator details.",
-        "Review the full registration.",
-        "Submit the application."
-      ],
-      "expectedResult": "The application is submitted for Sales review and receives an application reference.",
-      "evidence": ["07_customer_admin.png", "08_registration_review_submit.png"]
-    },
-    {
-      "id": "UAT-SAL-001",
-      "area": "Sales Representative",
-      "title": "Review and approve a customer registration",
-      "role": "Sales Representative",
-      "preconditions": "A valid customer registration is pending Sales review and the Sales user is authenticated.",
-      "steps": [
-        "Open the pending registration from the Sales applications queue.",
-        "Review the submitted information and documents.",
-        "Approve the application."
-      ],
-      "expectedResult": "The application is approved through the authorized Sales workflow.",
-      "evidence": ["09_sales_registration_review.png", "10_sales_approve.png"]
-    },
-    {
-      "id": "UAT-SAL-002",
-      "area": "Sales Representative",
-      "title": "Activate an approved customer account",
-      "role": "Sales Representative",
-      "preconditions": "The customer application is approved and ready for account activation.",
-      "steps": [
-        "Open the approved application.",
-        "Run the customer account activation action."
-      ],
-      "expectedResult": "The customer account is activated using the approved registration information.",
-      "evidence": ["11_approve_customer_account.png"]
-    },
-    {
-      "id": "UAT-CUS-001",
-      "area": "Customer Registration & Onboarding",
-      "title": "Check application status",
-      "role": "Prospective customer",
-      "preconditions": "The user has the submitted application reference and registered email.",
-      "steps": [
-        "Open the application status page.",
-        "Enter the application reference and registered email.",
-        "Submit the status enquiry."
-      ],
-      "expectedResult": "The current customer-visible application result is displayed.",
-      "evidence": ["12_customer_registration_result_application_status.png"]
-    }
+    { "id": "UAT-REG-001", "role": "Prospective Customer", "module": "Customer Registration", "scenario": "Complete and submit an organization registration.", "expectedResult": "A valid application reference is created and the application is submitted for Sales review." },
+    { "id": "UAT-REG-002", "role": "Sales Representative", "module": "Customer Registration", "scenario": "Review, approve, and activate a submitted registration.", "expectedResult": "The approved customer account is activated through the authorized Sales workflow." },
+    { "id": "UAT-CUS-001", "role": "Customer User", "module": "Login & Access", "scenario": "Sign in through the shared Customer Portal login.", "expectedResult": "The authenticated user reaches the Customer Portal and sees role-permitted navigation." },
+    { "id": "UAT-CUS-002", "role": "Authorized Customer User", "module": "Products", "scenario": "Browse products and open product details.", "expectedResult": "Only active customer-visible product information and permitted prices are displayed." },
+    { "id": "UAT-QUO-001", "role": "Customer Administrator / Purchaser", "module": "Quotations", "scenario": "Create and submit a quotation request.", "expectedResult": "The quotation is created with selected products and enters Pending Sales Review." },
+    { "id": "UAT-ORD-001", "role": "Customer Administrator / Purchaser", "module": "Direct Orders", "scenario": "Create, review, and submit a direct order.", "expectedResult": "The order is created with TON-based quantity, configured VAT, and Submitted status." },
+    { "id": "UAT-LOC-001", "role": "Customer Administrator / Purchaser", "module": "Delivery Locations", "scenario": "Save a Ship-to location with a valid map position.", "expectedResult": "Coordinates persist and the location can be used in delivery orders." },
+    { "id": "UAT-SAL-001", "role": "Sales Representative", "module": "Applications", "scenario": "Open the Sales applications list and review an application.", "expectedResult": "The selected customer application opens with its submitted details." },
+    { "id": "UAT-SAL-002", "role": "Sales Representative", "module": "Quotation Review", "scenario": "Review and price a customer quotation.", "expectedResult": "Configured list prices load and the quotation follows the required commercial approval path." },
+    { "id": "UAT-CUS-003", "role": "Customer Administrator / Purchaser", "module": "Quotation Decision", "scenario": "Review and accept a quotation ready for the customer.", "expectedResult": "The quotation status becomes Accepted and internal pricing components remain hidden." },
+    { "id": "UAT-CON-001", "role": "Sales Representative", "module": "Contracts", "scenario": "Create a contract from an accepted quotation.", "expectedResult": "One draft contract is created with a locked accepted commercial snapshot." },
+    { "id": "UAT-CON-002", "role": "Sales Representative", "module": "Contracts", "scenario": "Activate a valid draft contract.", "expectedResult": "The contract becomes Active without repeating quotation pricing approval." },
+    { "id": "UAT-CON-003", "role": "Customer User", "module": "Contracts", "scenario": "View an active customer contract.", "expectedResult": "The customer sees only its own active contract and combined customer-facing commercial rate." },
+    { "id": "UAT-ORD-002", "role": "Customer Administrator / Purchaser", "module": "Contract Orders", "scenario": "Create and submit an order from an active contract.", "expectedResult": "The order is submitted and remaining contract TON is validated and updated transactionally." },
+    { "id": "UAT-ORD-003", "role": "Sales Representative", "module": "Sales Orders", "scenario": "Start processing a valid submitted order.", "expectedResult": "Order status changes from Submitted to Processing and the action is recorded." },
+    { "id": "UAT-HAD-001", "role": "Hader Manager", "module": "Delivery Requests", "scenario": "Create a shipment from a valid delivery request.", "expectedResult": "A shipment is created using the existing order and delivery data." },
+    { "id": "UAT-HAD-002", "role": "Hader Manager", "module": "Dispatch", "scenario": "Assign resources, schedule, and dispatch a loaded shipment.", "expectedResult": "The shipment becomes Dispatched and is ready for Delivery Team action; it is not marked Delivered." },
+    { "id": "UAT-HAD-003", "role": "Hader Manager", "module": "Loading Control", "scenario": "Assign a compatible loading point and complete loading.", "expectedResult": "Loading completes using compatible silo or bagging-line capacity without treating capacity as stock." },
+    { "id": "UAT-POD-001", "role": "Delivery Team", "module": "Delivery", "scenario": "Start delivery and mark an in-transit shipment delivered.", "expectedResult": "The shipment moves through Dispatched, In Transit, and Delivered using authorized actions." },
+    { "id": "UAT-POD-002", "role": "Delivery Team", "module": "Proof of Delivery", "scenario": "Record POD and close a delivered shipment.", "expectedResult": "POD is stored once for the shipment and the shipment can then be closed." },
+    { "id": "UAT-VAR-001", "role": "Price Manager", "module": "Ship-to Variance", "scenario": "Raise a positive calculated extra charge.", "expectedResult": "The stored variance snapshot enters Pending Commercial Director Approval without changing original order pricing." },
+    { "id": "UAT-PRC-001", "role": "Pricing Administrator", "module": "Products & Pricing", "scenario": "Maintain product and city-based product prices.", "expectedResult": "The active product and authoritative per-TON city prices are saved and available to pricing lookups." },
+    { "id": "UAT-PRC-002", "role": "Pricing Administrator", "module": "Delivery Pricing", "scenario": "Maintain city delivery prices and boundaries.", "expectedResult": "Configured standard and white-cement delivery prices and city boundaries are available to authorized workflows." },
+    { "id": "UAT-PRC-003", "role": "Pricing Administrator", "module": "Administration", "scenario": "Maintain logistics master data, pickup locations, and VAT configuration.", "expectedResult": "Valid configuration saves through authorized administration APIs." },
+    { "id": "UAT-COM-001", "role": "Commercial Director", "module": "Variance Approval", "scenario": "Approve a pending Ship-to Variance extra charge.", "expectedResult": "The request becomes Approved with authenticated approver and timestamp; downstream financial posting remains pending." },
+    { "id": "UAT-ADM-001", "role": "Portal Administrator", "module": "User Management", "scenario": "Create and maintain an internal portal user.", "expectedResult": "The user is created with a hashed password, assigned role, and active status without exposing credentials." },
+    { "id": "UAT-CUA-001", "role": "Customer Administrator", "module": "Customer Users", "scenario": "Create and edit another user in the same customer account.", "expectedResult": "The user is tenant-scoped, securely created, and manageable without exposing the authenticated administrator in the Users list." }
   ]
 }

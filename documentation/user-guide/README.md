@@ -42,19 +42,15 @@ Open the HTML file in a browser for client review or use the browser's **Print â
    ```
 
 3. Preserve the filename after it has been referenced in UAT evidence.
-4. Add a screenshot mapping under the relevant section in `user-guide.config.json`:
+4. Extend the relevant section's numeric `screenshotRange` in `user-guide.config.json`:
 
    ```json
-   {
-     "file": "13_customer_login.png",
-     "caption": "Customer login",
-     "instruction": "Enter the authorized customer credentials and sign in."
-   }
+   "screenshotRange": [13, 28]
    ```
 
 5. Run `npm run docs:generate` again.
 
-The generator discovers supported `.png`, `.jpg`, `.jpeg`, and `.webp` files and sorts them by numeric filename prefix. A discovered file that has not been mapped is listed under **Evidence Awaiting Classification**. It is not presented as proof of completed functionality.
+The generator discovers supported `.png`, `.jpg`, `.jpeg`, and `.webp` files, sorts them by numeric filename prefix, preserves each filename, and creates a professional caption from it. A discovered file outside all configured ranges is listed under **Evidence Awaiting Classification**. It is not presented as proof of completed functionality.
 
 ## Add or update a guide section
 
@@ -65,7 +61,7 @@ Edit the `sections` collection in `user-guide.config.json`. Each section support
 - `audience`: intended user role;
 - `summary`: verified purpose of the area;
 - `steps`: ordered operating instructions;
-- `screenshots`: evidence mappings using exact filenames.
+- `screenshotRange`: inclusive numeric filename-prefix range assigned to the section.
 
 Sections without mapped screenshots are retained as controlled placeholders and clearly state that detailed evidence has not yet been mapped.
 
@@ -76,21 +72,14 @@ Add an entry to `uatCases` in `user-guide.config.json`:
 ```json
 {
   "id": "UAT-CUS-002",
-  "area": "Customer Portal",
-  "title": "Sign in to the Customer Portal",
   "role": "Activated customer user",
-  "preconditions": "An active authorized customer account exists.",
-  "steps": [
-    "Open the customer login page.",
-    "Enter valid credentials.",
-    "Submit the login form."
-  ],
-  "expectedResult": "The authenticated Customer Portal opens.",
-  "evidence": ["13_customer_login.png"]
+  "module": "Login & Access",
+  "scenario": "Sign in through the shared Customer Portal login.",
+  "expectedResult": "The authenticated Customer Portal opens with role-permitted navigation."
 }
 ```
 
-The evidence filename must exist. Invalid mappings stop generation with a clear message.
+New UAT cases default to `NOT TESTED` in the generated document. Invalid screenshot mappings stop generation with a clear message.
 
 ## Scope control
 

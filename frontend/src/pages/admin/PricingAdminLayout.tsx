@@ -1,6 +1,7 @@
 import { Banknote, MapPinned, Package, Settings, Truck, Warehouse } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { AppShell, type AppShellNavigationItem } from '../../components/app-shell/AppShell';
+import { NotificationBell } from '../../components/notifications/NotificationBell';
 import { useCustomerTheme } from '../../context/CustomerThemeContext';
 import { useSalesAuth } from '../../context/SalesAuthContext';
 import { getSalesRoleLabel } from '../../utils/salesRouting';
@@ -28,7 +29,6 @@ export function PricingAdminLayout() {
   const { user, logout } = useSalesAuth();
   const { preference, setPreference } = useCustomerTheme();
   const navigate = useNavigate();
-  const location = useLocation();
   const links = user?.role === 'PRICING_ADMIN' ? adminNav : adminNav.slice(0, 1);
 
   const handleLogout = async () => {
@@ -38,10 +38,8 @@ export function PricingAdminLayout() {
 
   return (
     <AppShell
-      homePath={links[0]?.to ?? '/admin/products'}
       portalLabel="Internal Administration"
       navigation={[{ items: links }]}
-      pageContext={getPageContext(location.pathname)}
       user={{
         name: user?.name,
         email: user?.email,
@@ -51,27 +49,7 @@ export function PricingAdminLayout() {
       onThemeChange={setPreference}
       onLogout={handleLogout}
       collapseStorageKey="pricing_admin_sidebar_collapsed"
+      headerActions={<NotificationBell audience="sales" />}
     />
   );
-}
-
-function getPageContext(pathname: string) {
-  if (
-    pathname === '/admin/delivery-drivers' ||
-    pathname.startsWith('/admin/delivery-drivers/')
-  ) {
-    return {
-      parent: 'Delivery Fleet',
-      title: 'Drivers',
-      subtitle: 'Products, delivery pricing and logistics data',
-    };
-  }
-  const item = adminNav.find(
-    ({ to, isActive }) =>
-      isActive?.(pathname) ?? (pathname === to || pathname.startsWith(`${to}/`)),
-  );
-  return {
-    title: item?.label ?? 'Internal Administration',
-    subtitle: 'Products, delivery pricing and logistics data',
-  };
 }

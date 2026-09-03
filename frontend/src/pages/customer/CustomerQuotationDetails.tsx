@@ -55,7 +55,7 @@ export function CustomerQuotationDetails({
 
   const destination =
     quotation.fulfilmentType === 'DELIVERY' ? quotation.shipToLocation : quotation.pickupLocation;
-  const canDecide = user.role === 'CUSTOMER_ADMIN' || user.role === 'PURCHASER';
+  const canDecide = user.role === 'CUSTOMER_ADMIN';
   const isReadyForCustomer = quotation.status === 'READY_FOR_CUSTOMER';
   const canTakeDecision = isReadyForCustomer && canDecide;
 
@@ -262,28 +262,28 @@ export function CustomerQuotationDetails({
       </section>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <section className="rounded-xl border border-[#e3e1e8] bg-white p-5">
-          <h2 className="text-sm font-bold text-[#54247a]">Commercial Notes</h2>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+        <section className="customer-card customer-border rounded-xl border p-5">
+          <h2 className="customer-primary text-sm font-bold">Commercial Notes</h2>
+          <p className="customer-secondary mt-3 whitespace-pre-wrap text-sm leading-6">
             {quotation.commercialNotes?.trim() || 'Not provided'}
           </p>
         </section>
-        <section className="rounded-xl border border-[#e3e1e8] bg-white p-5 text-sm">
+        <section className="customer-card customer-border rounded-xl border p-5 text-sm">
           <Total label="Subtotal" value={quotation.subtotal} />
           <Total
             label={`VAT (${formatVatPercent(quotation.vatRate)})`}
             value={quotation.vatAmount}
           />
-          <div className="mt-3 border-t border-[#e3e1e8] pt-3">
+          <div className="customer-border mt-3 border-t pt-3">
             <Total label="Grand Total" value={quotation.grandTotal} strong />
           </div>
         </section>
       </div>
 
       {canTakeDecision && (
-        <section className="rounded-xl border border-[#e3e1e8] bg-white p-4">
-          <h2 className="text-sm font-bold text-[#54247a]">What would you like to do?</h2>
-          <p className="mt-1 text-xs text-slate-600">
+        <section className="customer-card customer-border rounded-xl border p-4">
+          <h2 className="customer-primary text-sm font-bold">What would you like to do?</h2>
+          <p className="customer-secondary mt-1 text-xs">
             Please choose one action regarding this quotation.
           </p>
           <div className="mt-4 grid gap-3 lg:grid-cols-3">
@@ -309,7 +309,7 @@ export function CustomerQuotationDetails({
               onClick={() => setDecision('clarification')}
             />
           </div>
-          <p className="mt-3 flex items-center gap-2 text-[11px] text-slate-500">
+          <p className="customer-muted mt-3 flex items-center gap-2 text-[11px]">
             <ShieldCheck size={14} /> Your action will be recorded and communicated to our Sales
             team.
           </p>
@@ -368,7 +368,7 @@ function Total({
 }) {
   return (
     <div
-      className={`flex items-center justify-between py-1.5 ${strong ? 'text-base font-bold text-[#54247a]' : 'text-slate-700'}`}
+      className={`flex items-center justify-between py-1.5 ${strong ? 'customer-primary text-base font-bold' : 'customer-secondary'}`}
     >
       <span>{label}</span>
       <span>{formatMoney(value)} SAR</span>
@@ -400,9 +400,12 @@ function DecisionCard({
   tone: 'green' | 'red' | 'amber';
 }) {
   const tones = {
-    green: 'border-emerald-200 bg-emerald-50/50 text-emerald-800 hover:border-emerald-400',
-    red: 'border-red-200 bg-red-50/50 text-red-800 hover:border-red-400',
-    amber: 'border-amber-200 bg-amber-50/50 text-amber-800 hover:border-amber-400',
+    green:
+      'border-[var(--customer-success)] bg-[var(--customer-success-soft)] text-[var(--customer-success)]',
+    red:
+      'border-[var(--customer-danger)] bg-[var(--customer-danger-soft)] text-[var(--customer-danger)]',
+    amber:
+      'border-[var(--customer-warning)] bg-[var(--customer-warning-soft)] text-[var(--customer-warning)]',
   };
   return (
     <button
@@ -410,12 +413,12 @@ function DecisionCard({
       onClick={onClick}
       className={`flex min-h-28 items-start gap-3 rounded-lg border p-4 text-left transition ${tones[tone]}`}
     >
-      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white shadow-sm">
+      <span className="customer-card mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow-sm">
         {icon}
       </span>
       <span>
         <span className="block text-sm font-bold">{title}</span>
-        <span className="mt-1 block text-xs leading-5 text-slate-600">{description}</span>
+        <span className="mt-1 block text-xs leading-5 opacity-80">{description}</span>
       </span>
     </button>
   );
@@ -444,13 +447,27 @@ function DecisionDialog({
     : decision === 'reject'
       ? 'Reject Quotation?'
       : 'Request Clarification';
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !submitting) onCancel();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onCancel, submitting]);
+
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4">
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !submitting) onCancel();
+      }}
+    >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="decision-title"
-        className="w-full max-w-lg rounded-xl border border-[#e3e1e8] bg-white p-5 shadow-2xl"
+        className="customer-card customer-border w-full max-w-lg rounded-xl border p-5 shadow-2xl"
       >
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f6f2fa] text-[#54247a]">
@@ -466,7 +483,7 @@ function DecisionDialog({
             <h2 id="decision-title" className="text-lg font-bold">
               {title}
             </h2>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="customer-secondary mt-1 text-sm">
               {isAccept
                 ? 'You are confirming the commercial terms shown in this quotation.'
                 : decision === 'reject'
@@ -477,7 +494,7 @@ function DecisionDialog({
         </div>
         {!isAccept && (
           <div className="mt-4">
-            <label htmlFor="decision-message" className="text-xs font-semibold text-slate-700">
+            <label htmlFor="decision-message" className="customer-secondary text-xs font-semibold">
               {decision === 'reject' ? 'Reason' : 'Message'} <span className="text-red-600">*</span>
             </label>
             <textarea
@@ -486,7 +503,7 @@ function DecisionDialog({
               value={message}
               maxLength={1000}
               onChange={(event) => onMessageChange(event.target.value)}
-              className="mt-1.5 min-h-28 w-full resize-y rounded-lg border border-[#d8d4de] px-3 py-2 text-sm outline-none focus:border-[#54247a] focus:ring-2 focus:ring-[#54247a]/15"
+              className="customer-input customer-border customer-text mt-1.5 min-h-28 w-full resize-y rounded-lg border px-3 py-2 text-sm outline-none focus:border-[var(--customer-primary)] focus:ring-2 focus:ring-[var(--customer-primary)]"
             />
           </div>
         )}

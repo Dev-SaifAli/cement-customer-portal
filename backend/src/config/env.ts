@@ -23,9 +23,25 @@ const optionalString = z.preprocess(
   z.string().trim().min(1).optional(),
 );
 const optionalUrl = z.preprocess(emptyStringToUndefined, z.url().optional());
+const commaSeparatedList = z.preprocess(
+  emptyStringToUndefined,
+  z
+    .string()
+    .transform((value) =>
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    )
+    .optional(),
+);
 const optionalPositiveInteger = z.preprocess(
   emptyStringToUndefined,
   z.coerce.number().int().positive().optional(),
+);
+const optionalPort = z.preprocess(
+  emptyStringToUndefined,
+  z.coerce.number().int().min(1).max(65535).optional(),
 );
 
 const schema = z
@@ -34,6 +50,7 @@ const schema = z
     COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
     PORT: z.coerce.number().int().positive().default(3000),
     APP_URL: z.url().default('http://localhost:5173'),
+    CORS_ALLOWED_ORIGINS: commaSeparatedList,
     API_URL: z.url().default('http://localhost:3000/api/v1'),
     DATABASE_URL: z.string().optional(),
     PG_HOST: z.string().default('localhost'),
@@ -71,6 +88,16 @@ const schema = z
     VAS_ORDER_ENDPOINT: optionalString,
     VAS_COMPANY_CODE: optionalString,
     VAS_TIMEOUT_MS: optionalPositiveInteger,
+    EMAIL_ENABLED: booleanFromString.default(false),
+    SMTP_HOST: optionalString,
+    SMTP_PORT: optionalPort,
+    SMTP_SECURE: booleanFromString.default(false),
+    SMTP_USER: optionalString,
+    SMTP_PASSWORD: optionalString,
+    EMAIL_FROM: optionalString,
+    SALES_TEAM_EMAIL: optionalString,
+    CRM_ENABLED: booleanFromString.default(false),
+    WHATSAPP_ENABLED: booleanFromString.default(false),
   })
   .superRefine((env, context) => {
     if (env.NODE_ENV === 'production' && (!env.JWT_SECRET || !env.SESSION_SECRET)) {
@@ -92,6 +119,22 @@ const schema = z
             code: 'custom',
             path: [name],
             message: `${name} is required when VAS_ENABLED is true`,
+          });
+        }
+      }
+    }
+    if (env.EMAIL_ENABLED) {
+      const requiredConfiguration = [
+        ['SMTP_HOST', env.SMTP_HOST],
+        ['SMTP_PORT', env.SMTP_PORT],
+        ['EMAIL_FROM', env.EMAIL_FROM],
+      ] as const;
+      for (const [name, value] of requiredConfiguration) {
+        if (value === undefined) {
+          context.addIssue({
+            code: 'custom',
+            path: [name],
+            message: `${name} is required when EMAIL_ENABLED is true`,
           });
         }
       }

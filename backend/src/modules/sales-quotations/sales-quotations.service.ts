@@ -16,6 +16,9 @@ import { pickupLocationsService } from '../pickup-locations/pickup-locations.ser
 import { taxRateService } from '../tax-configurations/tax-rate.service.js';
 
 const pageSize = 10;
+const itemCountExpression = `(select count(*)::integer
+  from customer_quotation_items filter_items
+  where filter_items.quotation_id = quotations.id)`;
 const pickupLocations = [
   { id: 'ALSAFWA_PLANT_MAIN', name: 'AlSafwa Cement Plant', city: 'Jeddah', region: 'Makkah' },
 ];
@@ -90,7 +93,8 @@ const quotationSelect = `
          registrations.delivery_locations,
          contracts.id as contract_id,
          contracts.reference as contract_reference,
-         contracts.status as contract_status
+         contracts.status as contract_status,
+         ${itemCountExpression}::text as item_count
   from customer_quotations quotations
   inner join customer_accounts accounts on accounts.id = quotations.customer_account_id
   left join ksa_cities pricing_cities on pricing_cities.id = quotations.pricing_city_id
@@ -108,9 +112,46 @@ export class SalesQuotationsService {
 
     if (query.reference) add('quotations.reference ilike ?', `%${query.reference}%`);
     if (query.customer) add('accounts.company_name ilike ?', `%${query.customer}%`);
-    if (query.submittedDate) add('quotations.submitted_at::date = ?::date', query.submittedDate);
-    if (query.fulfilmentType) add('quotations.fulfilment_type = ?', query.fulfilmentType);
-    if (query.status) add('quotations.status = ?', query.status);
+    if (query.submittedDate) {
+      addComparison(
+        conditions,
+        values,
+        'quotations.submitted_at::date',
+        query.submittedOperator ?? 'on',
+        query.submittedDate,
+        query.submittedTo,
+        true,
+      );
+    }
+    if (query.fulfilmentType) {
+      add(
+        `quotations.fulfilment_type ${query.fulfilmentOperator === 'notEquals' ? '<>' : '='} ?`,
+        query.fulfilmentType,
+      );
+    }
+    if (query.status) {
+      add(`quotations.status ${query.statusOperator === 'notEquals' ? '<>' : '='} ?`, query.status);
+    }
+    if (query.itemCount !== undefined) {
+      addComparison(
+        conditions,
+        values,
+        itemCountExpression,
+        query.itemCountOperator ?? 'equals',
+        query.itemCount,
+        query.itemCountTo,
+      );
+    }
+    if (query.total !== undefined) {
+      addComparison(
+        conditions,
+        values,
+        'coalesce(quotations.grand_total, 0)',
+        query.totalOperator ?? 'equals',
+        query.total,
+        query.totalTo,
+      );
+    }
     if (user.role === 'HADER_MANAGER') add('quotations.status = ?', 'PENDING_HADER_APPROVAL');
     if (user.role === 'PRICE_MANAGER') add('quotations.status = ?', 'PENDING_PRICE_APPROVAL');
 
@@ -150,13 +191,63 @@ export class SalesQuotationsService {
         reference: row.reference,
         customer: row.customer_company_name,
         submittedAt: iso(row.submitted_at),
-        itemCount: itemCount.get(row.id) ?? 0,
+        itemCount: itemCount.get(row.id) ?? Number(row.item_count ?? 0),
         fulfilmentType: row.fulfilment_type,
         total: nullableNumber(row.grand_total),
         status: row.status,
       })),
       pagination: { page: query.page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
+  }
+
+  async getFilterOptions(
+    query: {
+      field:
+        'reference' | 'customer' | 'status' | 'fulfilment' | 'itemCount' | 'total' | 'submitted';
+      search?: string | undefined;
+      limit: number;
+    },
+    user: SalesUser,
+  ) {
+    const expressions = {
+      reference: 'quotations.reference',
+      customer: 'accounts.company_name',
+      status: 'quotations.status::text',
+      fulfilment: 'quotations.fulfilment_type::text',
+      itemCount: `${itemCountExpression}::text`,
+      total: 'quotations.grand_total::text',
+      submitted: 'quotations.submitted_at::date::text',
+    } as const;
+    const expression = expressions[query.field];
+    const values: unknown[] = [];
+    const conditions = [
+      `quotations.status <> 'DRAFT'`,
+      `${expression} is not null`,
+      `btrim(${expression}) <> ''`,
+    ];
+    const add = (sql: string, value: unknown) => {
+      values.push(value);
+      conditions.push(sql.replace('?', `$${values.length}`));
+    };
+    if (user.role === 'HADER_MANAGER') add('quotations.status = ?', 'PENDING_HADER_APPROVAL');
+    if (user.role === 'PRICE_MANAGER') add('quotations.status = ?', 'PENDING_PRICE_APPROVAL');
+    if (query.search) add(`lower(${expression}) like ?`, `%${query.search.toLowerCase()}%`);
+    values.push(query.limit);
+
+    const result = await pool.query<{ value: string }>(
+      `select distinct ${expression} as value
+       from customer_quotations quotations
+       inner join customer_accounts accounts on accounts.id = quotations.customer_account_id
+       where ${conditions.join(' and ')}
+       order by value asc
+       limit $${values.length}`,
+      values,
+    );
+
+    return result.rows.map((row) => ({
+      value: row.value,
+      label: formatFilterOptionLabel(query.field, row.value),
+    }));
   }
 
   async getById(id: string, user: SalesUser) {
@@ -876,12 +967,18 @@ function approvalReason(quotation: QuotationRow) {
   return 'Delivery price was modified.';
 }
 
-async function resolveDestination(quotation: QuotationRow): Promise<Record<string, unknown> | null> {
+async function resolveDestination(
+  quotation: QuotationRow,
+): Promise<Record<string, unknown> | null> {
   if (quotation.fulfilment_type === 'PICKUP') {
     const legacy = pickupLocations.find((location) => location.id === quotation.pickup_location_id);
     if (legacy) return legacy;
     if (!quotation.pickup_location_id) return null;
-    try { return await pickupLocationsService.get(quotation.pickup_location_id); } catch { return null; }
+    try {
+      return await pickupLocationsService.get(quotation.pickup_location_id);
+    } catch {
+      return null;
+    }
   }
   return (
     (quotation.delivery_locations ?? []).find(
@@ -915,6 +1012,55 @@ function nullableNumber(value: string | number | null | undefined) {
   if (value === null || value === undefined || value === '') return null;
   const result = Number(value);
   return Number.isFinite(result) ? result : null;
+}
+function addComparison(
+  conditions: string[],
+  values: unknown[],
+  expression: string,
+  operator: 'equals' | 'greaterThan' | 'lessThan' | 'between' | 'on' | 'before' | 'after',
+  value: unknown,
+  secondValue?: unknown,
+  dateValue = false,
+) {
+  const parameter = (nextValue: unknown) => {
+    values.push(nextValue);
+    return `$${values.length}${dateValue ? '::date' : ''}`;
+  };
+  const first = parameter(value);
+  if (operator === 'between' && secondValue !== undefined) {
+    const second = parameter(secondValue);
+    conditions.push(`${expression} between ${first} and ${second}`);
+    return;
+  }
+  const sqlOperator = {
+    equals: '=',
+    on: '=',
+    greaterThan: '>',
+    after: '>',
+    lessThan: '<',
+    before: '<',
+    between: '=',
+  }[operator];
+  conditions.push(`${expression} ${sqlOperator} ${first}`);
+}
+function formatFilterOptionLabel(
+  field: 'reference' | 'customer' | 'status' | 'fulfilment' | 'itemCount' | 'total' | 'submitted',
+  value: string,
+) {
+  if (field === 'status') {
+    return value
+      .toLowerCase()
+      .split('_')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+  if (field === 'fulfilment') return value === 'PICKUP' ? 'Pick-Up' : 'Delivery';
+  if (field === 'itemCount') return `${value} ${value === '1' ? 'Item' : 'Items'}`;
+  if (field === 'total') {
+    const number = Number(value);
+    return Number.isFinite(number) ? `${number.toFixed(2)} SAR` : value;
+  }
+  return value;
 }
 function money(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;

@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { ChevronLeft, ChevronRight, PackageOpen, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -61,7 +62,7 @@ export function CustomerOrders() {
             />
           </div>
           <div className="flex items-center gap-3">
-            <select
+            <NativeTomSelect
               value={orderType}
               onChange={(event) => {
                 setOrderType(event.target.value as 'DIRECT' | 'CONTRACT' | '');
@@ -72,8 +73,8 @@ export function CustomerOrders() {
               <option value="">All Order Types</option>
               <option value="DIRECT">Direct</option>
               <option value="CONTRACT">Contract</option>
-            </select>
-            <select
+            </NativeTomSelect>
+            <NativeTomSelect
               value={status}
               onChange={(event) => {
                 setStatus(event.target.value as OrderStatus | '');
@@ -86,7 +87,7 @@ export function CustomerOrders() {
               <option value="PROCESSING">Processing</option>
               <option value="COMPLETED">Completed</option>
               <option value="CANCELLED">Cancelled</option>
-            </select>
+            </NativeTomSelect>
             <span className="customer-secondary whitespace-nowrap text-sm font-semibold">
               {pagination?.total ?? 0} Orders
             </span>
@@ -158,7 +159,7 @@ export function CustomerOrders() {
             </div>
             <div className="customer-border-soft flex items-center justify-between border-t px-4 py-3">
               <span className="customer-muted text-xs">
-                Showing {pagination?.total ? (page - 1) * 10 + 1 : 0}–
+                Showing {pagination?.total ? (page - 1) * 10 + 1 : 0}â€“
                 {Math.min(page * 10, pagination?.total ?? 0)} of {pagination?.total ?? 0}
               </span>
               <div className="flex items-center gap-2">

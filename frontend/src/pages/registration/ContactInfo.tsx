@@ -209,7 +209,7 @@ const ContactInfo: React.FC<ContactInfoProps> = ({ onBack, onContinue }) => {
                       updateField('phoneNumber', getSaudiPhoneLocalDigits(e.target.value))
                     }
                     placeholder="5XX XXX XXX"
-                    className="min-w-0 flex-1 px-4 text-[15px] outline-none"
+                    className="min-w-0 flex-1 bg-white px-4 text-[15px] text-gray-900 outline-none placeholder:text-gray-400"
                   />
                 </div>
 

@@ -133,7 +133,7 @@ function requireFleetUser(request: CustomerAuthenticatedRequest) {
   const user = request.customerUser;
   if (!user)
     throw new AppError('Customer authentication is required.', 401, 'CUSTOMER_AUTH_REQUIRED');
-  if (user.role !== 'CUSTOMER_ADMIN' && user.role !== 'PURCHASER') {
+  if (user.role !== 'CUSTOMER_ADMIN') {
     throw new AppError(
       'Fleet management access is required.',
       403,

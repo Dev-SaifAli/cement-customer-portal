@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { CalendarDays, ChevronLeft, ChevronRight, PackageOpen, Search } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -77,7 +78,7 @@ export function CustomerShipments() {
             />
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <select
+            <NativeTomSelect
               value={status}
               onChange={(event) => {
                 setStatus(event.target.value as CustomerShipmentStatus | '');
@@ -91,7 +92,7 @@ export function CustomerShipments() {
                   {statusLabel(value)}
                 </option>
               ))}
-            </select>
+            </NativeTomSelect>
             <label className="customer-input customer-border flex h-10 items-center gap-2 rounded-lg border px-3">
               <CalendarDays size={16} className="customer-muted" />
               <input
@@ -253,7 +254,7 @@ function Pagination({
   return (
     <div className="customer-border-soft flex items-center justify-between border-t px-4 py-3">
       <span className="customer-muted text-xs">
-        Showing {pagination?.total ? (page - 1) * 10 + 1 : 0}–
+        Showing {pagination?.total ? (page - 1) * 10 + 1 : 0}â€“
         {Math.min(page * 10, pagination?.total ?? 0)} of {pagination?.total ?? 0}
       </span>
       <div className="flex items-center gap-2">

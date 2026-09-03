@@ -5,13 +5,13 @@ import {
   MapPin,
   PackageCheck,
   PackageSearch,
+  MessageSquareText,
   ShoppingBag,
   ShoppingCart,
   Truck,
-  UserCircle,
   Users,
 } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { AppShell, type AppShellNavigationItem } from '../../components/app-shell/AppShell';
 import { NotificationBell } from '../../components/notifications/NotificationBell';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
@@ -24,12 +24,6 @@ const customerNavigation: Array<AppShellNavigationItem & { roles: CustomerRole[]
     label: 'Dashboard',
     icon: <LayoutDashboard size={18} />,
     end: true,
-    roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
-  },
-  {
-    to: '/customer/profile',
-    label: 'Profile',
-    icon: <UserCircle size={18} />,
     roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
   },
   {
@@ -82,7 +76,7 @@ const customerNavigation: Array<AppShellNavigationItem & { roles: CustomerRole[]
     to: '/customer/fleet',
     label: 'My Trucks & Drivers',
     icon: <Truck size={18} />,
-    roles: ['CUSTOMER_ADMIN', 'PURCHASER'],
+    roles: ['CUSTOMER_ADMIN'],
   },
   {
     to: '/customer/shipments',
@@ -90,13 +84,18 @@ const customerNavigation: Array<AppShellNavigationItem & { roles: CustomerRole[]
     icon: <PackageCheck size={18} />,
     roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
   },
+  {
+    to: '/customer/tickets',
+    label: 'Service Requests',
+    icon: <MessageSquareText size={18} />,
+    roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
+  },
 ];
 
 export function CustomerLayout() {
-  const { account, logout, user } = useCustomerAuth();
+  const { logout, user } = useCustomerAuth();
   const { preference, setPreference } = useCustomerTheme();
   const navigate = useNavigate();
-  const location = useLocation();
   const visibleNavigation = customerNavigation.filter(
     (item) => user?.role && item.roles.includes(user.role),
   );
@@ -108,53 +107,27 @@ export function CustomerLayout() {
 
   return (
     <AppShell
-      homePath="/customer/dashboard"
       portalLabel="Customer Portal"
       navigation={[{ items: visibleNavigation }]}
-      pageContext={getPageContext(location.pathname)}
       user={{
         name: user?.name,
         email: user?.email,
-        roleLabel: account?.companyName ?? 'Customer Portal',
+        roleLabel: formatCustomerRole(user?.role),
       }}
       themePreference={preference}
       onThemeChange={setPreference}
       onLogout={handleLogout}
       collapseStorageKey="customer_sidebar_collapsed"
       headerActions={<NotificationBell audience="customer" />}
+      profilePath="/customer/profile"
     />
   );
 }
 
-function getPageContext(pathname: string) {
-  if (pathname.startsWith('/customer/quotations/')) {
-    return {
-      parent: 'Quotations',
-      title: pathname.endsWith('/new') ? 'New Quotation' : 'Quotation Details',
-    };
-  }
-  if (pathname === '/customer/quotations') return { title: 'Quotations' };
-  if (pathname.startsWith('/customer/contracts/')) {
-    if (pathname.endsWith('/order')) {
-      return { parent: 'Contracts / Contract Details', title: 'Create Order' };
-    }
-    return { parent: 'Contracts', title: 'Contract Details' };
-  }
-  if (pathname === '/customer/contracts') return { title: 'Contracts' };
-  if (pathname === '/customer/orders/new') return { parent: 'Orders', title: 'New Direct Order' };
-  if (pathname.startsWith('/customer/orders/')) return { parent: 'Orders', title: 'Order Details' };
-  if (pathname === '/customer/orders') return { title: 'Orders' };
-  if (pathname.startsWith('/customer/shipments/')) return { parent: 'My Shipments', title: 'Shipment Details' };
-  if (pathname === '/customer/shipments') return { title: 'My Shipments' };
-  if (pathname.startsWith('/customer/products/')) return { parent: 'Products', title: 'Product Details' };
-
-  const labels: Record<string, string> = {
-    '/customer/dashboard': 'Dashboard',
-    '/customer/profile': 'Profile',
-    '/customer/locations': 'Delivery Locations',
-    '/customer/fleet': 'My Trucks & Drivers',
-    '/customer/users': 'Users',
-    '/customer/products': 'Products',
-  };
-  return { title: labels[pathname] ?? 'Customer Portal' };
+function formatCustomerRole(role: CustomerRole | null | undefined) {
+  if (role === 'CUSTOMER_ADMIN') return 'Customer Administrator';
+  if (role === 'PURCHASER') return 'Purchaser';
+  if (role === 'FINANCE_USER') return 'Finance User';
+  if (role === 'VIEWER') return 'Viewer';
+  return 'Customer Portal User';
 }

@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { Link } from 'react-router-dom';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -64,7 +65,7 @@ export function HaderLoadingControl() {
       </div>
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap gap-3 border-b border-slate-200 p-4">
-          <select
+          <NativeTomSelect
             value={status}
             onChange={(e) => {
               setStatus(e.target.value);
@@ -76,8 +77,8 @@ export function HaderLoadingControl() {
             {['WAITING', 'NOTIFIED', 'AT_GATE', 'LOADING', 'LOADED'].map((v) => (
               <option key={v}>{v}</option>
             ))}
-          </select>
-          <select
+          </NativeTomSelect>
+          <NativeTomSelect
             value={product}
             onChange={(e) => {
               setProduct(e.target.value);
@@ -91,7 +92,7 @@ export function HaderLoadingControl() {
                 {p.code} — {p.name}
               </option>
             ))}
-          </select>
+          </NativeTomSelect>
         </div>
         {error ? (
           <State message={error} action={() => void load()} />

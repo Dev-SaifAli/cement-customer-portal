@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import {
   CalendarDays,
   ChevronLeft,
@@ -162,7 +163,7 @@ export function CustomerQuotations() {
             placeholder="Reference"
             onChange={(value) => updateFilter('reference', value)}
           />
-          <select
+          <NativeTomSelect
             value={filters.status}
             onChange={(event) =>
               updateFilter('status', event.target.value as typeof filters.status)
@@ -176,13 +177,13 @@ export function CustomerQuotations() {
                 {statusPresentation[status].label}
               </option>
             ))}
-          </select>
+          </NativeTomSelect>
           <FilterDateInput
             label="Requested date"
             value={filters.requestedDate}
             onChange={(value) => updateFilter('requestedDate', value)}
           />
-          <select
+          <NativeTomSelect
             value={filters.fulfilmentType}
             onChange={(event) =>
               updateFilter('fulfilmentType', event.target.value as typeof filters.fulfilmentType)
@@ -193,7 +194,7 @@ export function CustomerQuotations() {
             <option value="">All Fulfilment</option>
             <option value="DELIVERY">Delivery</option>
             <option value="PICKUP">Pick-Up</option>
-          </select>
+          </NativeTomSelect>
         </div>
 
         {error ? (
@@ -251,7 +252,7 @@ export function CustomerQuotations() {
                     </th>
                     <th className="px-3 py-2 text-center text-slate-300">—</th>
                     <th className="hidden px-3 py-2 lg:table-cell">
-                      <select
+                      <NativeTomSelect
                         value={filters.fulfilmentType}
                         onChange={(event) =>
                           updateFilter(
@@ -265,7 +266,7 @@ export function CustomerQuotations() {
                         <option value="">All</option>
                         <option value="DELIVERY">Delivery</option>
                         <option value="PICKUP">Pick-Up</option>
-                      </select>
+                      </NativeTomSelect>
                     </th>
                     <th className="hidden px-3 py-2 2xl:table-cell">
                       <FilterTextInput
@@ -275,7 +276,7 @@ export function CustomerQuotations() {
                       />
                     </th>
                     <th className="px-3 py-2">
-                      <select
+                      <NativeTomSelect
                         value={filters.status}
                         onChange={(event) =>
                           updateFilter('status', event.target.value as typeof filters.status)
@@ -289,7 +290,7 @@ export function CustomerQuotations() {
                             {statusPresentation[status].label}
                           </option>
                         ))}
-                      </select>
+                      </NativeTomSelect>
                     </th>
                   </tr>
                 </thead>
@@ -326,7 +327,7 @@ export function CustomerQuotations() {
         {!error && !loading && result.pagination.total > 0 && (
           <footer className="flex flex-col gap-3 border-t border-[#e3e1e8] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
             <p className="text-xs text-[#64748b]">
-              Showing {showingFrom}–{showingTo} of {result.pagination.total}
+              Showing {showingFrom}â€“{showingTo} of {result.pagination.total}
             </p>
             <nav className="flex items-center gap-1" aria-label="Quotation pagination">
               <PaginationButton

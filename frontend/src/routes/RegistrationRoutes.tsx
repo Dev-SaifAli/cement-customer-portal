@@ -20,6 +20,7 @@ import DeliveryLocations from '../pages/registration/DeliveryLocations';
 import Documents from '../pages/registration/Documents';
 import RegistrationStart from '../pages/registration/RegistrationStart';
 import ReviewSubmit from '../pages/registration/ReviewSubmit';
+import { AppLoadingScreen } from '../components/ui/AppLoadingScreen';
 
 type RegistrationStep =
   'contact' | 'documents' | 'deliveryLocations' | 'customerAdmin' | 'review' | 'submitted';
@@ -39,7 +40,7 @@ function GuardedRegistrationRoute({
     : null;
   const storedSubmittedApplication = getStoredSubmittedApplication();
 
-  if (isLoadingDraft) return null;
+  if (isLoadingDraft) return <AppLoadingScreen label="Loading your registration" />;
 
   if (step === 'contact' && !isCompanyValid(data.company)) {
     return <Navigate to="/register/company" replace />;

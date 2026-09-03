@@ -3,6 +3,19 @@ import { notificationsService } from './notifications.service.js';
 const customerCommercialRoles = ['CUSTOMER_ADMIN', 'PURCHASER'] as const;
 
 export const notificationEvents = {
+  registrationSubmitted(applicationId: string, reference: string) {
+    return notificationsService.publishSafely({
+      recipients: { kind: 'SALES_ROLES', roles: ['SALES_REP'] },
+      type: 'REGISTRATION_SUBMITTED',
+      title: 'New customer registration',
+      message: `${reference} is ready for Sales review.`,
+      entityType: 'APPLICATION',
+      entityId: applicationId,
+      actionUrl: `/sales/applications/${applicationId}`,
+      eventKey: `registration-submitted:${applicationId}`,
+    });
+  },
+
   quotationSubmitted(quotationId: string, reference: string) {
     return notificationsService.publishSafely({
       recipients: { kind: 'SALES_ROLES', roles: ['SALES_REP'] },
@@ -99,7 +112,10 @@ export const notificationEvents = {
 
   deliveryRequestCreated(deliveryRequestId: string, orderNumber: string) {
     return notificationsService.publishSafely({
-      recipients: { kind: 'SALES_ROLES', roles: ['HADER_OPERATIONS', 'DISPATCH_USER'] },
+      recipients: {
+        kind: 'SALES_ROLES',
+        roles: ['HADER_MANAGER', 'HADER_OPERATIONS', 'DISPATCH_USER'],
+      },
       type: 'DELIVERY_REQUEST_CREATED',
       title: 'New delivery request',
       message: `A delivery request for ${orderNumber} is ready for Hader review.`,

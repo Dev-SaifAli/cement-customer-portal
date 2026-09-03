@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import {
   AlertCircle,
   ArrowLeft,
@@ -413,7 +414,7 @@ export function CustomerDirectOrder() {
                   </div>
                 </Field>
                 <Field label="Ship-to Address" required>
-                  <select
+                  <NativeTomSelect
                     value={shipToLocationId}
                     onChange={(event) => setShipToLocationId(event.target.value)}
                     className={fieldClass}
@@ -429,10 +430,10 @@ export function CustomerDirectOrder() {
                         {!hasMapCoordinates(location) ? ' — Map location required' : ''}
                       </option>
                     ))}
-                  </select>
+                  </NativeTomSelect>
                   {hasUnmappedLocations && (
                     <p className="customer-secondary mt-2 text-xs leading-5">
-                      Locations marked “Map location required” cannot be used for delivery orders.{' '}
+                      Locations marked –Map location requiredâ€ cannot be used for delivery orders.{' '}
                       <Link
                         to="/customer/locations"
                         className="font-bold text-[var(--customer-primary)] hover:underline"
@@ -471,7 +472,7 @@ export function CustomerDirectOrder() {
             ) : (
               <div className="mt-5">
                 <Field label="Pickup Location" required>
-                  <select
+                  <NativeTomSelect
                     value={pickupLocationId}
                     onChange={(event) => setPickupLocationId(event.target.value)}
                     className={fieldClass}
@@ -482,7 +483,7 @@ export function CustomerDirectOrder() {
                         {location.name} — {location.city}
                       </option>
                     ))}
-                  </select>
+                  </NativeTomSelect>
                 </Field>
               </div>
             )}

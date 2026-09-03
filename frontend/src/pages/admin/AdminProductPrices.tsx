@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import {
   AlertCircle,
   Check,
@@ -235,7 +236,7 @@ function AdminProductPricesContent({ deliveryOnly }: { deliveryOnly: boolean }) 
               className="grid gap-3 lg:grid-cols-[2fr_1fr_1fr_auto]"
             >
               <Field label="Product" error={productErrors.product}>
-                <select
+                <NativeTomSelect
                   className={input}
                   value={productId}
                   onChange={(event) => {
@@ -249,10 +250,10 @@ function AdminProductPricesContent({ deliveryOnly }: { deliveryOnly: boolean }) 
                       {item.productCode} — {item.productName}
                     </option>
                   ))}
-                </select>
+                </NativeTomSelect>
               </Field>
               <Field label="KSA City" error={productErrors.city}>
-                <select
+                <NativeTomSelect
                   className={input}
                   value={cityId}
                   onChange={(event) => {
@@ -266,7 +267,7 @@ function AdminProductPricesContent({ deliveryOnly }: { deliveryOnly: boolean }) 
                       {item.name}
                     </option>
                   ))}
-                </select>
+                </NativeTomSelect>
               </Field>
               <Field label="List Price" suffix="SAR / TON" error={productErrors.price}>
                 <input
@@ -305,7 +306,7 @@ function AdminProductPricesContent({ deliveryOnly }: { deliveryOnly: boolean }) 
               className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto]"
             >
               <Field label="Hader City" error={deliveryErrors.city}>
-                <select
+                <NativeTomSelect
                   className={input}
                   value={deliveryCityId}
                   onChange={(event) => {
@@ -319,7 +320,7 @@ function AdminProductPricesContent({ deliveryOnly }: { deliveryOnly: boolean }) 
                       {item.name}
                     </option>
                   ))}
-                </select>
+                </NativeTomSelect>
               </Field>
               <Field
                 label="Standard Delivery Price"
@@ -466,7 +467,7 @@ function ProductTable({
             setValue={(value) => setDraft({ ...draft, packaging: value })}
             options={unique((data?.productPrices ?? []).map((row) => row.packagingType))}
           />
-          <select
+          <NativeTomSelect
             className={compactInput}
             value={draft.cityId}
             onChange={(event) => setDraft({ ...draft, cityId: event.target.value })}
@@ -477,7 +478,7 @@ function ProductTable({
                 {item.name}
               </option>
             ))}
-          </select>
+          </NativeTomSelect>
           <FilterSelect
             label="UOM"
             value={draft.uom}
@@ -623,7 +624,7 @@ function DeliveryTable({
             Customer-facing rates only. Transporter costs are not displayed.
           </p>
         </div>
-        <select
+        <NativeTomSelect
           className={`${compactInput} sm:w-52`}
           value={cityId}
           onChange={(event) => {
@@ -637,7 +638,7 @@ function DeliveryTable({
               {city.name}
             </option>
           ))}
-        </select>
+        </NativeTomSelect>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[760px] text-sm">
@@ -857,7 +858,7 @@ function FilterSelect({
   options: string[];
 }) {
   return (
-    <select
+    <NativeTomSelect
       className={compactInput}
       value={value}
       onChange={(event) => setValue(event.target.value)}
@@ -866,7 +867,7 @@ function FilterSelect({
       {options.map((option) => (
         <option key={option}>{option}</option>
       ))}
-    </select>
+    </NativeTomSelect>
   );
 }
 function SortHead({
@@ -937,7 +938,7 @@ function Footer({
   return (
     <div className="customer-border-soft customer-muted flex flex-col gap-2 border-t px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between">
       <span>
-        {selected ? `${selected} selected · ` : ''}Showing {total ? (page - 1) * pageSize + 1 : 0}–
+        {selected ? `${selected} selected · ` : ''}Showing {total ? (page - 1) * pageSize + 1 : 0}â€“
         {Math.min(page * pageSize, total)} of {total}
       </span>
       <div className="flex items-center gap-1">

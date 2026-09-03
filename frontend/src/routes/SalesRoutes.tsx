@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useSalesAuth } from '../context/SalesAuthContext';
 import { SessionRestoreError } from '../components/auth/SessionRestoreError';
+import { AppLoadingScreen } from '../components/ui/AppLoadingScreen';
 import { CustomerThemeProvider } from '../context/CustomerThemeContext';
 import { SalesLayout } from '../pages/sales/SalesLayout';
 import { SalesApplicationDetailsPage } from '../pages/sales/SalesApplicationDetails';
@@ -11,6 +12,8 @@ import { SalesDashboard } from '../pages/sales/SalesDashboard';
 import { SalesLogin } from '../pages/sales/SalesLogin';
 import { SalesOrdersPage } from '../pages/sales/SalesOrders';
 import { SalesOrderDetailsPage } from '../pages/sales/SalesOrderDetails';
+import { SalesTicketDetailsPage } from '../pages/sales/SalesTicketDetails';
+import { SalesTicketsPage } from '../pages/sales/SalesTickets';
 import { SalesQuotationDetailsPage } from '../pages/sales/SalesQuotationDetails';
 import { SalesQuotationsPage } from '../pages/sales/SalesQuotations';
 import { HaderShipments } from '../pages/hader/HaderShipments';
@@ -37,6 +40,8 @@ export function SalesRoutes() {
               <Route path="contracts/:id" element={<SalesContractDetailsPage />} />
               <Route path="orders" element={<SalesOrdersPage />} />
               <Route path="orders/:id" element={<SalesOrderDetailsPage />} />
+              <Route path="tickets" element={<SalesTicketsPage />} />
+              <Route path="tickets/:id" element={<SalesTicketDetailsPage />} />
               <Route path="shipments" element={<HaderShipments audience="sales" />} />
               <Route path="shipments/:id" element={<HaderShipmentDetails audience="sales" />} />
             </Route>
@@ -85,7 +90,7 @@ function RequireSalesRoles({
 }) {
   const { user, loading, restoreError, refresh } = useSalesAuth();
 
-  if (loading) return null;
+  if (loading) return <AppLoadingScreen label="Restoring your secure session" />;
   if (restoreError && !user) return <SessionRestoreError onRetry={() => void refresh()} />;
   if (!user) return <Navigate to="/sales/login" replace />;
   if (!roles.includes(user.role)) return <Navigate to={getSalesLandingPath(user.role)} replace />;
@@ -95,7 +100,7 @@ function RequireSalesRoles({
 function SalesRoleLanding() {
   const { user, loading, restoreError, refresh } = useSalesAuth();
 
-  if (loading) return null;
+  if (loading) return <AppLoadingScreen label="Restoring your secure session" />;
   if (restoreError && !user) return <SessionRestoreError onRetry={() => void refresh()} />;
   return <Navigate to={user ? getSalesLandingPath(user.role) : '/sales/login'} replace />;
 }
@@ -104,13 +109,7 @@ function RequireSalesAuth() {
   const { user, loading, restoreError, refresh } = useSalesAuth();
   const location = useLocation();
 
-  if (loading) {
-    return (
-      <div className="customer-portal customer-page-bg customer-secondary flex min-h-screen items-center justify-center font-['Manrope',system-ui,sans-serif]">
-        Restoring Sales session...
-      </div>
-    );
-  }
+  if (loading) return <AppLoadingScreen label="Restoring your secure session" />;
 
   if (restoreError && !user) {
     return <SessionRestoreError onRetry={() => void refresh()} />;

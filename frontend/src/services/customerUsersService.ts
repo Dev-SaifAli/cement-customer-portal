@@ -19,6 +19,8 @@ export interface CreateCustomerUserPayload {
   name: string;
   email: string;
   phone: string;
+  password: string;
+  confirmPassword: string;
   role: CustomerRole;
   isActive: boolean;
 }
@@ -41,7 +43,6 @@ interface CreateCustomerUserResponse {
   success: boolean;
   data: {
     user: CustomerUser;
-    temporaryPassword: string;
   };
 }
 

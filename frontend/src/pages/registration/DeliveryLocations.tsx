@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
@@ -671,7 +672,7 @@ function RegistrationProgress() {
                   }
                 `}
                 >
-                  {step.completed ? '✓' : step.number}
+                  {step.completed ? 'âœ“' : step.number}
                 </div>
 
                 <span
@@ -802,7 +803,7 @@ function LocationCard({
         <div className="flex gap-2">
           <UserRound size={17} className="shrink-0 mt-0.5" />
           <span>
-            {location.contactPerson} • {location.contactPhone}
+            {location.contactPerson} â€¢ {location.contactPhone}
           </span>
         </div>
 
@@ -993,7 +994,7 @@ function FormSelect({
         {required && <span className="text-red-600 ml-1">*</span>}
       </label>
 
-      <select
+      <NativeTomSelect
         value={value}
         autoComplete={autoComplete}
         onChange={(e) => onChange(e.target.value)}
@@ -1014,7 +1015,7 @@ function FormSelect({
             {option}
           </option>
         ))}
-      </select>
+      </NativeTomSelect>
 
       {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
     </div>

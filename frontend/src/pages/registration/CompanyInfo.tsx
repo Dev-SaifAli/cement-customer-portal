@@ -1,5 +1,6 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, ChevronDown, Info } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { BrandHeader } from '../../components/registration/BrandHeader';
 import { SaveDraftButton } from '../../components/registration/SaveDraftButton';
@@ -259,28 +260,18 @@ const CompanyInfo: React.FC<CompanyInfoProps> = ({ onBack, onContinue }) => {
                   Region / Province <Required />
                 </label>
 
-                <div className="relative">
-                  <select
-                    value={form.region}
-                    onChange={(e) => updateField('region', e.target.value)}
-                    className={`${inputClass('region')} appearance-none pr-10 ${
-                      !form.region ? 'text-gray-400' : ''
-                    }`}
-                  >
-                    <option value="">Select Region</option>
-
-                    {regions.map((region) => (
-                      <option key={region} value={region}>
-                        {region}
-                      </option>
-                    ))}
-                  </select>
-
-                  <ChevronDown
-                    size={19}
-                    className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-500"
-                  />
-                </div>
+                <NativeTomSelect
+                  allowEmptyOption={false}
+                  value={form.region}
+                  onChange={(e) => updateField('region', e.target.value)}
+                  className={`registration-region-select${errors.region ? ' registration-region-select-error' : ''}`}
+                  dropdownClassName="registration-region-dropdown"
+                  aria-label="Region or Province"
+                  placeholder=""
+                  searchPlaceholder="Search region..."
+                >
+                  {regions.map((region) => <option key={region} value={region}>{region}</option>)}
+                </NativeTomSelect>
 
                 {errors.region && <ErrorMessage message={errors.region} />}
               </div>
@@ -293,20 +284,13 @@ const CompanyInfo: React.FC<CompanyInfoProps> = ({ onBack, onContinue }) => {
                   Country <Required />
                 </label>
 
-                <div className="relative">
-                  <select
-                    value={form.country}
-                    onChange={(e) => updateField('country', e.target.value)}
-                    className={`${inputClass('country')} appearance-none pr-10`}
-                  >
-                    <option value="Saudi Arabia">Saudi Arabia</option>
-                  </select>
-
-                  <ChevronDown
-                    size={19}
-                    className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-500"
-                  />
-                </div>
+                <input
+                  type="text"
+                  value="Saudi Arabia"
+                  className={inputClass('country')}
+                  aria-label="Country"
+                  readOnly
+                />
               </div>
 
               <div>

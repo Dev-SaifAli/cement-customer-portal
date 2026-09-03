@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { SessionRestoreError } from '../components/auth/SessionRestoreError';
+import { AppLoadingScreen } from '../components/ui/AppLoadingScreen';
 import { CustomerThemeProvider } from '../context/CustomerThemeContext';
 import { useSalesAuth } from '../context/SalesAuthContext';
 import { AdminUsers } from '../pages/admin/AdminUsers';
@@ -30,9 +31,7 @@ function RequirePortalAdministrator() {
   const { user, loading, restoreError, refresh } = useSalesAuth();
   const location = useLocation();
 
-  if (loading) {
-    return <div className="customer-page-bg customer-secondary flex min-h-screen items-center justify-center">Restoring administration session...</div>;
-  }
+  if (loading) return <AppLoadingScreen label="Restoring your secure session" />;
   if (restoreError && !user) return <SessionRestoreError onRetry={() => void refresh()} />;
   if (!user) return <Navigate to="/admin/login" replace state={{ from: location }} />;
   if (user.role !== 'PORTAL_ADMINISTRATOR') return <Navigate to={getSalesLandingPath(user.role)} replace />;

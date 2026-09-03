@@ -6,7 +6,7 @@ import {
   PackageCheck,
   Route,
 } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   AppShell,
   type AppShellNavigationItem,
@@ -21,7 +21,6 @@ export function HaderLayout() {
   const { user, logout } = useSalesAuth();
   const { preference, setPreference } = useCustomerTheme();
   const navigate = useNavigate();
-  const location = useLocation();
   const loadingOnly = user?.role === 'LOADING_USER';
   const deliveryOnly = user?.role === 'DELIVERY_TEAM_USER';
   const haderManager = user?.role === 'HADER_MANAGER';
@@ -70,10 +69,8 @@ export function HaderLayout() {
 
   return (
     <AppShell
-      homePath="/hader/delivery-requests"
       portalLabel="Hader Team"
       navigation={navigation}
-      pageContext={getPageContext(location.pathname)}
       user={{
         name: user?.name,
         email: user?.email,
@@ -86,20 +83,4 @@ export function HaderLayout() {
       headerActions={<NotificationBell audience="sales" />}
     />
   );
-}
-
-function getPageContext(pathname: string) {
-  const contexts = [
-    ['/hader/delivery-requests', 'Delivery Requests', 'Review customer delivery requests'],
-    ['/hader/shipments', 'Shipments', 'Shipment preparation and delivery visibility'],
-    ['/hader/dispatch', 'Dispatch Board', 'Plan and manage shipment dispatch'],
-    ['/hader/loading-control', 'Loading Control', 'Manage shipment loading operations'],
-    ['/hader/loading-points', 'Silos & Bagging Lines', 'Loading point configuration'],
-    ['/hader/delivery-team', 'Delivery Team', 'Delivery execution and proof of delivery'],
-    ['/admin/hader-cities', 'Hader Cities', 'Delivery cities and boundaries'],
-  ] as const;
-  const context = contexts.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`));
-  return context
-    ? { title: context[1], subtitle: context[2] }
-    : { title: 'Hader Delivery Operations', subtitle: 'Delivery requests and shipment preparation' };
 }

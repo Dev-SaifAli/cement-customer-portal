@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { Eye, FileUp, Pencil, Plus, Power, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useSalesAuth } from '../../context/SalesAuthContext';
@@ -126,7 +127,7 @@ export function AdminLogisticsPage({ kind }: { kind: LogisticsKind }) {
           </div>
           <div className="flex items-center gap-3">
             {kind !== 'transporter-costs' && (
-              <select
+              <NativeTomSelect
                 value={status}
                 onChange={(e) => {
                   setStatus(e.target.value);
@@ -140,7 +141,7 @@ export function AdminLogisticsPage({ kind }: { kind: LogisticsKind }) {
                     {label(x)}
                   </option>
                 ))}
-              </select>
+              </NativeTomSelect>
             )}
             <span className="text-sm text-[#64748b]">{data.pagination.total} records</span>
           </div>
@@ -204,7 +205,7 @@ export function AdminLogisticsPage({ kind }: { kind: LogisticsKind }) {
         </div>
         <div className="flex items-center justify-between border-t border-[#e3e1e8] px-4 py-3 text-sm text-[#64748b]">
           <span>
-            Showing {data.items.length ? (page - 1) * 10 + 1 : 0}–
+            Showing {data.items.length ? (page - 1) * 10 + 1 : 0}â€“
             {Math.min(page * 10, data.pagination.total)} of {data.pagination.total}
           </span>
           <div className="flex gap-2">
@@ -438,7 +439,7 @@ function Field({
         {field.required && <span className="text-red-500"> *</span>}
       </span>
       {field.options ? (
-        <select
+        <NativeTomSelect
           required={field.required}
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -450,7 +451,7 @@ function Field({
               {o.label}
             </option>
           ))}
-        </select>
+        </NativeTomSelect>
       ) : (
         <input
           required={field.required}

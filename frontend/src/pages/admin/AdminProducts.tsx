@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import {
   ChevronLeft,
   ChevronRight,
@@ -614,7 +615,7 @@ function FilterDrawer({ filters, setFilters, addFilter, clear, apply, close }: {
                 {index > 0 && (
                   <div className="mb-2 flex items-center gap-3">
                     <span className="customer-border-soft h-px flex-1 border-t" />
-                    <select
+                    <NativeTomSelect
                       aria-label={`Logical operator for filter ${index + 1}`}
                       className={`${filterInput} w-20 flex-none font-semibold`}
                       value={filter.join}
@@ -624,7 +625,7 @@ function FilterDrawer({ filters, setFilters, addFilter, clear, apply, close }: {
                     >
                       <option value="AND">AND</option>
                       <option value="OR">OR</option>
-                    </select>
+                    </NativeTomSelect>
                     <span className="customer-border-soft h-px flex-1 border-t" />
                   </div>
                 )}

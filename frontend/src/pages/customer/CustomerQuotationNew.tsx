@@ -1,3 +1,4 @@
+import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import {
   AlertCircle,
   CalendarDays,
@@ -127,6 +128,7 @@ export function CustomerQuotationNew() {
   const documentTitle = quotation?.reference ?? 'New Quotation';
   const currentSnapshot = useMemo(() => serializeForm(form), [form]);
   const isDirty = currentSnapshot !== lastSavedSnapshot;
+  const isSavedDraft = !isSubmitted && Boolean(quotationId) && !isDirty;
   const allRowsSelected =
     form.items.length > 0 && form.items.every((item) => selectedRows.has(item.key));
 
@@ -261,24 +263,6 @@ export function CustomerQuotationNew() {
     }
   }, [form, isValid, navigate, quotationId]);
 
-  useEffect(() => {
-    const handleKeyboardSave = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 's' || isSubmitted)
-        return;
-
-      event.preventDefault();
-      if (!isDirty && quotationId) {
-        setShowSubmitConfirmation(true);
-        return;
-      }
-
-      void saveDraft();
-    };
-
-    window.addEventListener('keydown', handleKeyboardSave);
-    return () => window.removeEventListener('keydown', handleKeyboardSave);
-  }, [isDirty, isSubmitted, quotationId, saveDraft]);
-
   if (!canManageQuotation) {
     return (
       <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
@@ -336,13 +320,15 @@ export function CustomerQuotationNew() {
         <header className="flex min-h-[58px] flex-col gap-3 border-b border-[#eceaf0] px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             <h1 className="text-lg font-semibold text-[#1a1b23]">{documentTitle}</h1>
-            <StatusDot label={formatQuotationStatus(quotation?.status)} submitted={isSubmitted} />
+            <StatusDot
+              label={isSubmitted ? formatQuotationStatus(quotation?.status) : isSavedDraft ? 'Saved' : 'Draft'}
+              submitted={isSubmitted}
+            />
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             {!isSubmitted && (
               <div className="hidden items-center gap-4 text-xs font-medium text-[#64748b] md:flex">
-                <span>Ctrl + S to save draft</span>
                 <span className="inline-flex items-center gap-1.5">
                   <span
                     className={`h-1.5 w-1.5 rounded-full ${isDirty ? 'bg-amber-500' : 'bg-emerald-500'}`}
@@ -358,11 +344,20 @@ export function CustomerQuotationNew() {
             {!isSubmitted && (
               <button
                 type="button"
-                onClick={() => void submitQuotation()}
+                onClick={() => {
+                  if (isSavedDraft) setShowSubmitConfirmation(true);
+                  else void saveDraft();
+                }}
                 disabled={saving || submitting}
                 className="inline-flex h-9 items-center justify-center rounded-lg bg-[#54247a] px-5 text-sm font-semibold text-white transition hover:bg-[#472066] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit'}
+                {saving || submitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : isSavedDraft ? (
+                  'Submit'
+                ) : (
+                  'Save'
+                )}
               </button>
             )}
             <div className="relative">
@@ -450,7 +445,7 @@ export function CustomerQuotationNew() {
               </Field>
 
               <Field label="Fulfilment">
-                <select
+                <NativeTomSelect
                   value={form.fulfilmentType}
                   disabled={isSubmitted}
                   onChange={(event) =>
@@ -460,7 +455,7 @@ export function CustomerQuotationNew() {
                 >
                   <option value="DELIVERY">Delivery</option>
                   <option value="PICKUP">Pick-Up</option>
-                </select>
+                </NativeTomSelect>
               </Field>
 
               {form.fulfilmentType === 'DELIVERY' ? (
@@ -475,7 +470,7 @@ export function CustomerQuotationNew() {
                             : ''
                         }
                       >
-                        <select
+                        <NativeTomSelect
                           value={form.shipToLocationId}
                           disabled={isSubmitted}
                           onChange={(event) => updateForm({ shipToLocationId: event.target.value })}
@@ -487,7 +482,7 @@ export function CustomerQuotationNew() {
                               {location.name} - {location.city}, {location.region}
                             </option>
                           ))}
-                        </select>
+                        </NativeTomSelect>
                       </Field>
                     </div>
                     {hasCoordinates && selectedShipTo && (
@@ -510,7 +505,7 @@ export function CustomerQuotationNew() {
                       showValidation && !form.pickupLocationId ? 'Pickup location is required.' : ''
                     }
                   >
-                    <select
+                    <NativeTomSelect
                       value={form.pickupLocationId}
                       disabled={isSubmitted}
                       onChange={(event) => updateForm({ pickupLocationId: event.target.value })}
@@ -522,7 +517,7 @@ export function CustomerQuotationNew() {
                           {location.name} - {location.city}
                         </option>
                       ))}
-                    </select>
+                    </NativeTomSelect>
                   </Field>
                 </div>
               )}
@@ -1077,8 +1072,21 @@ function ConfirmationDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !busy) onCancel();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [busy, onCancel]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !busy) onCancel();
+      }}
+    >
       <div
         role="dialog"
         aria-modal="true"

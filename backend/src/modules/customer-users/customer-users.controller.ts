@@ -10,6 +10,7 @@ import {
 export class CustomerUsersController {
   async index(request: CustomerAuthenticatedRequest, response: Response) {
     const customerUser = getAuthenticatedCustomerUser(request);
+    requireCustomerAdmin(customerUser);
     const users = await customerUsersService.list(customerUser);
 
     response.status(200).json({ success: true, data: { users } });
@@ -27,6 +28,7 @@ export class CustomerUsersController {
 
   async show(request: CustomerAuthenticatedRequest, response: Response) {
     const customerUser = getAuthenticatedCustomerUser(request);
+    requireCustomerAdmin(customerUser);
     const user = await customerUsersService.getById(customerUser, getUserId(request));
 
     response.status(200).json({ success: true, data: { user } });

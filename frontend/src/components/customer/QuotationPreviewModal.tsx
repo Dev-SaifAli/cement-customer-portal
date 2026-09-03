@@ -98,16 +98,21 @@ export function QuotationPreviewModal({
   }, [onClose]);
 
   return (
-    <div className="quotation-preview-overlay quotation-print-layer fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-3 sm:p-5">
+    <div
+      className="quotation-preview-overlay quotation-print-layer fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-3 sm:p-5"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="quotation-preview-title"
-        className="quotation-preview-shell flex h-full max-h-[calc(100vh-24px)] w-full max-w-[1200px] flex-col overflow-hidden rounded-xl border border-[#d9d5de] bg-white shadow-2xl sm:max-h-[calc(100vh-40px)]"
+        className="quotation-preview-shell customer-card customer-border flex h-full max-h-[calc(100vh-24px)] w-full max-w-[1200px] flex-col overflow-hidden rounded-xl border shadow-2xl sm:max-h-[calc(100vh-40px)]"
       >
-        <header className="quotation-preview-toolbar flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-[#e3e1e8] bg-white px-4 sm:px-5">
+        <header className="quotation-preview-toolbar customer-card customer-border-soft flex min-h-14 shrink-0 items-center justify-between gap-3 border-b px-4 sm:px-5">
           <div className="min-w-0">
-            <h2 id="quotation-preview-title" className="text-sm font-bold text-[#17151c]">
+            <h2 id="quotation-preview-title" className="customer-text text-sm font-bold">
               Quotation Preview
             </h2>
             {downloadError && (
@@ -118,7 +123,7 @@ export function QuotationPreviewModal({
             <button
               type="button"
               onClick={() => void print()}
-              className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+              className="customer-text inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-semibold transition hover:bg-[var(--customer-hover)]"
             >
               <Printer size={15} /> <span className="hidden sm:inline">Print</span>
             </button>
@@ -126,7 +131,7 @@ export function QuotationPreviewModal({
               type="button"
               onClick={() => void download()}
               disabled={downloading}
-              className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+              className="customer-text inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-semibold transition hover:bg-[var(--customer-hover)] disabled:opacity-60"
             >
               {downloading ? (
                 <Loader2 size={15} className="animate-spin" />
@@ -140,7 +145,7 @@ export function QuotationPreviewModal({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              className="customer-muted inline-flex h-9 w-9 items-center justify-center rounded-lg transition hover:bg-[var(--customer-hover)] hover:text-[var(--customer-text)]"
               aria-label="Close quotation preview"
             >
               <X size={18} />
@@ -148,7 +153,7 @@ export function QuotationPreviewModal({
           </div>
         </header>
 
-        <div className="quotation-preview-canvas flex-1 overflow-auto bg-[#eef0f3] p-4 sm:p-7">
+        <div className="quotation-preview-canvas customer-page-bg flex-1 overflow-auto p-4 sm:p-7">
           <div className="mx-auto w-fit shadow-[0_8px_30px_rgba(15,23,42,0.16)]">
             <QuotationDocument
               ref={documentRef}
