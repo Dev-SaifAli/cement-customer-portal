@@ -15,7 +15,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  Separator,
   Skeleton,
 } from '../../components/ui/shadcn';
 import { useToast } from '../../components/ui/ToastProvider';
@@ -110,11 +109,7 @@ export function SalesTicketDetailsPage() {
                 </h1>
                 <TicketStatusBadge status={ticket.status} />
                 <CrmHandoffBadge status={ticket.crmHandoffStatus} />
-                <span className="text-sm text-[var(--customer-text-muted)]">·</span>
-                <time
-                  title={getLatestTimestamp(ticket.createdAt, ticket.updatedAt).toLocaleString()}
-                  className="text-sm font-medium text-[var(--customer-text-muted)]"
-                >
+                <time className="text-sm font-medium text-[var(--customer-text-muted)]">
                   {formatRelativeTime(getLatestTimestamp(ticket.createdAt, ticket.updatedAt))}
                 </time>
               </div>
@@ -161,36 +156,6 @@ export function SalesTicketDetailsPage() {
                   </CardContent>
                 </Card>
               )}
-            </main>
-
-            <aside className="space-y-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle>Ticket Information</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <InfoRow label="Customer" value={ticket.customer.companyName ?? 'Customer'} />
-                  <InfoRow
-                    label="Customer User"
-                    value={ticket.customerUser.name ?? ticket.customerUser.email ?? 'Customer User'}
-                  />
-                  <InfoRow label="User Role" value={formatRole(ticket.customerUser.role)} />
-                  <Separator />
-                  <InfoRow label="Status" value={<TicketStatusBadge status={ticket.status} />} />
-                  <InfoRow
-                    label="CRM Handoff"
-                    value={<CrmHandoffBadge status={ticket.crmHandoffStatus} />}
-                  />
-                  <InfoRow
-                    label="Created By"
-                    value={ticket.createdBy.name ?? ticket.createdBy.email ?? 'Customer User'}
-                  />
-                  <InfoRow
-                    label="Last Activity"
-                    value={formatRelativeTime(getLatestTimestamp(ticket.createdAt, ticket.updatedAt))}
-                  />
-                </CardContent>
-              </Card>
 
               <Card>
                 <CardHeader className="pb-3">
@@ -212,6 +177,22 @@ export function SalesTicketDetailsPage() {
                       No activity recorded.
                     </p>
                   )}
+                </CardContent>
+              </Card>
+            </main>
+
+            <aside className="space-y-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle>Customer Information</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <InfoRow label="Customer" value={ticket.customer.companyName ?? 'Customer'} />
+                  <InfoRow
+                    label="Customer User"
+                    value={ticket.customerUser.name ?? ticket.customerUser.email ?? 'Customer User'}
+                  />
+                  <InfoRow label="User Role" value={formatRole(ticket.customerUser.role)} />
                 </CardContent>
               </Card>
             </aside>
@@ -278,7 +259,6 @@ function ActivityItem({ event, isLast }: { event: CustomerTicketEvent; isLast: b
       </span>
       <div className="min-w-0">
         <p className="text-sm font-semibold text-[var(--customer-text)]">{activityTitle(event)}</p>
-        <p className="text-xs text-[var(--customer-text-muted)]">{activityActor(event)}</p>
         <time className="mt-1 block text-xs font-medium text-[var(--customer-text-muted)]">
           {formatRelativeTime(createdAt)}
         </time>
@@ -294,12 +274,6 @@ function activityTitle(event: CustomerTicketEvent) {
   if (event.type === 'TICKET_CLOSED') return 'Closed';
   if (event.newStatus === 'OPEN') return 'Opened';
   return 'Ticket Activity';
-}
-
-function activityActor(event: CustomerTicketEvent) {
-  if (!event.actor) return 'System activity';
-  const name = event.actor.name ?? (event.actor.kind === 'SALES' ? 'Sales user' : 'Customer user');
-  return event.actor.kind === 'SALES' ? `By ${name}` : `By ${name}`;
 }
 
 function activityIcon(event: CustomerTicketEvent) {
