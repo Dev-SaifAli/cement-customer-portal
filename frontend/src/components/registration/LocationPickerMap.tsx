@@ -1,12 +1,16 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { AlertCircle, LocateFixed, MapPin, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, LocateFixed, MapPin, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import markerIconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIconUrl from 'leaflet/dist/images/marker-icon.png';
 import markerShadowUrl from 'leaflet/dist/images/marker-shadow.png';
-import { mapConfig, type Coordinates } from '../../config/map';
+import { isValidCoordinates, mapConfig, type Coordinates } from '../../config/map';
+import {
+  reverseGeocodeLocation,
+  type NormalizedLocationData,
+} from '../../services/locationReverseGeocodingService';
 
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIconRetinaUrl,
@@ -18,7 +22,7 @@ type LocationPickerMapProps = {
   initialCoordinates?: Coordinates | undefined;
   locationLabel?: string | undefined;
   onCancel: () => void;
-  onConfirm: (coordinates: Coordinates) => void;
+  onConfirm: (location: NormalizedLocationData) => void;
 };
 
 export function LocationPickerMap({
@@ -30,16 +34,54 @@ export function LocationPickerMap({
   const [selectedCoordinates, setSelectedCoordinates] = useState<Coordinates | null>(
     initialCoordinates ?? null,
   );
+  const [selectedLocation, setSelectedLocation] = useState<NormalizedLocationData | null>(
+    initialCoordinates ?? null,
+  );
   const [mapCenter, setMapCenter] = useState<Coordinates>(
     initialCoordinates ?? mapConfig.defaultCenter,
   );
   const [geoStatus, setGeoStatus] = useState('');
+  const [lookupStatus, setLookupStatus] = useState('');
+  const [reverseGeocoding, setReverseGeocoding] = useState(false);
   const [locating, setLocating] = useState(false);
 
   const center = useMemo<[number, number]>(
     () => [mapCenter.latitude, mapCenter.longitude],
     [mapCenter],
   );
+
+  useEffect(() => {
+    if (!selectedCoordinates || !isValidCoordinates(selectedCoordinates)) {
+      setSelectedLocation(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setReverseGeocoding(true);
+    setLookupStatus('');
+
+    void reverseGeocodeLocation(selectedCoordinates, controller.signal)
+      .then((location) => {
+        setSelectedLocation(location);
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setSelectedLocation(selectedCoordinates);
+        setLookupStatus(
+          'Address lookup is unavailable. Coordinates are selected, and you can complete the address fields manually.',
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setReverseGeocoding(false);
+      });
+
+    return () => controller.abort();
+  }, [selectedCoordinates]);
+
+  const selectCoordinates = (coordinates: Coordinates) => {
+    setSelectedCoordinates(coordinates);
+    setSelectedLocation(coordinates);
+  };
 
   const handleUseCurrentLocation = () => {
     setGeoStatus('');
@@ -60,7 +102,7 @@ export function LocationPickerMap({
         };
 
         setMapCenter(coordinates);
-        setSelectedCoordinates(coordinates);
+        selectCoordinates(coordinates);
         setLocating(false);
       },
       (error) => {
@@ -147,7 +189,7 @@ export function LocationPickerMap({
                 attribution={mapConfig.tileLayer.attribution}
                 url={mapConfig.tileLayer.url}
               />
-              <MapInteractionHandler onSelect={setSelectedCoordinates} />
+              <MapInteractionHandler onSelect={selectCoordinates} />
               <MapCenterSync center={center} zoom={mapConfig.selectedZoom} />
               {selectedCoordinates && (
                 <Marker
@@ -157,7 +199,7 @@ export function LocationPickerMap({
                     dragend: (event) => {
                       const marker = event.target as L.Marker;
                       const next = marker.getLatLng();
-                      setSelectedCoordinates({
+                      selectCoordinates({
                         latitude: toCoordinatePrecision(next.lat),
                         longitude: toCoordinatePrecision(next.lng),
                       });
@@ -169,6 +211,35 @@ export function LocationPickerMap({
           </div>
         </div>
 
+        {(selectedLocation || reverseGeocoding || lookupStatus) && (
+          <div className="border-t border-[#e5dfe5] bg-[#fbfafb] px-5 py-4 sm:px-6">
+            <div className="rounded-xl border border-[#e4dbe7] bg-white p-4">
+              <div className="flex items-start gap-2">
+                {reverseGeocoding ? (
+                  <span className="mt-1 h-3 w-3 shrink-0 animate-pulse rounded-full bg-[#54247a]" />
+                ) : lookupStatus ? (
+                  <AlertCircle size={17} className="mt-0.5 shrink-0 text-amber-600" />
+                ) : (
+                  <CheckCircle2 size={17} className="mt-0.5 shrink-0 text-emerald-600" />
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[#3f3940]">
+                    {reverseGeocoding
+                      ? 'Looking up selected address...'
+                      : lookupStatus
+                        ? 'Address lookup unavailable'
+                        : 'Selected address'}
+                  </p>
+                  {selectedLocation?.formattedAddress && !reverseGeocoding ? (
+                    <p className="mt-1 text-sm text-[#625c62]">{selectedLocation.formattedAddress}</p>
+                  ) : null}
+                  {lookupStatus ? <p className="mt-1 text-sm text-amber-700">{lookupStatus}</p> : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col-reverse gap-3 border-t border-[#e5dfe5] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
           <button
             type="button"
@@ -179,11 +250,11 @@ export function LocationPickerMap({
           </button>
           <button
             type="button"
-            onClick={() => selectedCoordinates && onConfirm(selectedCoordinates)}
-            disabled={!selectedCoordinates}
+            onClick={() => selectedLocation && onConfirm(selectedLocation)}
+            disabled={!selectedLocation || reverseGeocoding}
             className="rounded-md bg-[#54247a] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#472066] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Use This Location
+            {reverseGeocoding ? 'Looking up address...' : 'Use This Location'}
           </button>
         </div>
       </div>

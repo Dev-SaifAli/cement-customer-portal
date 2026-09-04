@@ -12,6 +12,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { LocationPickerMap } from '../../components/registration/LocationPickerMap';
 import { SearchableTomSelect } from '../../components/ui/SearchableTomSelect';
 import { listHaderBoundaryCities } from '../../services/haderZoneService';
+import type { NormalizedLocationData } from '../../services/locationReverseGeocodingService';
 import {
   createPickupLocation,
   getPickupLocation,
@@ -320,7 +321,12 @@ export function AdminPickupLocationDocument() {
           locationLabel={form.name || 'pickup location'}
           onCancel={() => setMapOpen(false)}
           onConfirm={(point) => {
-            setForm({ ...form, ...point });
+            setForm(applySelectedLocation(form, point, cities));
+            setFields((current) => ({
+              ...current,
+              address: '',
+              postalCode: '',
+            }));
             setMapOpen(false);
           }}
         />
@@ -350,6 +356,48 @@ function Field({
       {error && <span className="mt-1 block text-xs text-[#b42318]">{error}</span>}
     </label>
   );
+}
+
+function applySelectedLocation(
+  current: PickupLocationInput,
+  location: NormalizedLocationData,
+  cities: Array<{ id: string; name: string }>,
+): PickupLocationInput {
+  const matchedCity = location.city
+    ? findMatchingCity(location.city, cities)
+    : undefined;
+
+  return {
+    ...current,
+    name: location.locationName ?? current.name,
+    latitude: location.latitude,
+    longitude: location.longitude,
+    cityId: matchedCity?.id ?? current.cityId,
+    address: location.street ?? location.formattedAddress ?? current.address,
+    postalCode: location.postalCode?.replace(/\D/g, '').slice(0, 5) || current.postalCode,
+  };
+}
+
+function findMatchingCity(cityName: string, cities: Array<{ id: string; name: string }>) {
+  const normalizedCity = normalizeLocationText(cityName);
+
+  return (
+    cities.find((city) => normalizeLocationText(city.name) === normalizedCity) ??
+    cities.find((city) => {
+      const normalizedOption = normalizeLocationText(city.name);
+      return normalizedOption.includes(normalizedCity) || normalizedCity.includes(normalizedOption);
+    })
+  );
+}
+
+function normalizeLocationText(value: string) {
+  return value
+    .normalize('NFKD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/\b(city|tehsil|district|governorate|province|region)\b/giu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
 type PickupLocationField = 'name' | 'cityId' | 'address' | 'postalCode' | 'status';

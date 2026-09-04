@@ -14,25 +14,34 @@ export function SearchableTomSelect({
   disabled = false,
   dropdownParent,
   wrapperClassName,
+  autoComplete,
   onChange,
+  onBlur,
 }: {
   value: string;
   options: SearchableSelectOption[];
   placeholder: string;
   ariaLabel: string;
   disabled?: boolean;
-  dropdownParent?: string;
-  wrapperClassName?: string;
+  dropdownParent?: string | undefined;
+  wrapperClassName?: string | undefined;
+  autoComplete?: string | undefined;
   onChange: (value: string) => void;
+  onBlur?: (() => void) | undefined;
 }) {
   const selectRef = useRef<HTMLSelectElement>(null);
   const instanceRef = useRef<TomSelect | null>(null);
   const onChangeRef = useRef(onChange);
+  const onBlurRef = useRef(onBlur);
   const optionsRef = useRef(options);
 
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    onBlurRef.current = onBlur;
+  }, [onBlur]);
 
   useEffect(() => {
     optionsRef.current = options;
@@ -59,6 +68,9 @@ export function SearchableTomSelect({
       },
       onChange(nextValue: string | number) {
         onChangeRef.current(String(nextValue));
+      },
+      onBlur() {
+        onBlurRef.current?.();
       },
       onDropdownOpen(dropdown: HTMLDivElement) {
         const control = instanceRef.current?.control;
@@ -97,16 +109,21 @@ export function SearchableTomSelect({
   useEffect(() => {
     const instance = instanceRef.current;
     if (!instance) return;
-    const selectedValue = instance.getValue();
+    const selectedValue = value.trim();
+    const nextOptions =
+      selectedValue && !options.some((option) => option.value === selectedValue)
+        ? [{ value: selectedValue, label: selectedValue }, ...options]
+        : options;
+
     instance.clearOptions(() => true);
-    instance.addOptions(options);
-    if (selectedValue && options.some((option) => option.value === selectedValue)) {
+    instance.addOptions(nextOptions);
+    if (selectedValue) {
       instance.setValue(selectedValue, true);
-    } else if (selectedValue) {
+    } else {
       instance.clear(true);
     }
     instance.refreshOptions(false);
-  }, [options]);
+  }, [options, value]);
 
   useEffect(() => {
     instanceRef.current?.setValue(value, true);
@@ -118,7 +135,15 @@ export function SearchableTomSelect({
     disabled ? instance.disable() : instance.enable();
   }, [disabled]);
 
-  return <select ref={selectRef} aria-label={ariaLabel} defaultValue={value} disabled={disabled} />;
+  return (
+    <select
+      ref={selectRef}
+      aria-label={ariaLabel}
+      autoComplete={autoComplete}
+      defaultValue={value}
+      disabled={disabled}
+    />
+  );
 }
 
 const customerThemeVariables = [
