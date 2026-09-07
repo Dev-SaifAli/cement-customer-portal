@@ -1014,6 +1014,7 @@ async function createAutoApprovedDirectOrderContract(
   const customerRate = round(context.customerRatePerTon, 2);
   const productPrice = round(context.productListPrice, 2);
   const deliveryPrice = context.shipTo ? round(context.deliveryPrice, 2) : null;
+  const contractVatRate = round(context.vatRate / 100, 6);
   const itemSnapshot = {
     orderId,
     productId: context.product.id,
@@ -1102,7 +1103,7 @@ async function createAutoApprovedDirectOrderContract(
       context.city.id,
       context.quantityTons,
       context.subtotal,
-      context.vatRate,
+      contractVatRate,
       context.vatAmount,
       context.grandTotal,
       payload.notes ?? null,
@@ -1125,6 +1126,8 @@ async function createAutoApprovedDirectOrderContract(
        original_uom,
        original_quantity,
        equivalent_tons,
+       commercial_quantity_tons,
+       packaging_quantity,
        approved_product_price_per_ton,
        discount_mode,
        discount_value,
@@ -1134,7 +1137,10 @@ async function createAutoApprovedDirectOrderContract(
        amount,
        display_order
      )
-     values ($1, null, $2, $3, $4, $5, $6, $7, $8, $9, null, null, null, $10, $11, $12, 0)`,
+     values (
+       $1, null, $2, $3, $4, $5, $6, $7, $8, $8, $9,
+       $10, null, null, null, $11, $12, $13, 0
+     )`,
     [
       contractId,
       context.product.id,
@@ -1144,6 +1150,7 @@ async function createAutoApprovedDirectOrderContract(
       context.product.uom,
       context.equivalentPackagingUnits ?? context.quantityTons,
       context.quantityTons,
+      context.equivalentPackagingUnits,
       productPrice,
       deliveryPrice,
       customerRate,
