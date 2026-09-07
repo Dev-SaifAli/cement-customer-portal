@@ -4,8 +4,10 @@ import {
   Boxes,
   ChevronLeft,
   ChevronRight,
+  FileText,
   PackageSearch,
   RefreshCw,
+  ShoppingCart,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -176,6 +178,9 @@ export function CustomerProducts() {
 }
 
 function ProductCard({ product }: { product: CustomerProduct }) {
+  const productQuery = `product=${encodeURIComponent(product.id)}`;
+  const priceAvailable = hasListPrice(product);
+
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-[#decbe5] hover:bg-[#fdfafd]">
       <Link
@@ -215,8 +220,36 @@ function ProductCard({ product }: { product: CustomerProduct }) {
       <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-slate-100 pt-4">
         <ProductMeta label="Packaging" value={product.packagingType} />
         <ProductMeta label="UOM" value={product.uom} />
-        <ProductMeta label="Price" value="Price on Request" />
+        <ProductMeta label="Price / Ton" value={formatPricePerTon(product)} />
       </dl>
+
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <Link
+          to={`/customer/quotations/new?${productQuery}`}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[#decbe5] bg-white px-3 text-sm font-bold text-[#54247a] transition hover:bg-[#f6f2fa] focus:outline-none focus:ring-2 focus:ring-[#54247a]/20"
+        >
+          <FileText size={15} />
+          Request RFQ
+        </Link>
+        {priceAvailable ? (
+          <Link
+            to={`/customer/orders/new?${productQuery}`}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#54247a] px-3 text-sm font-bold text-white transition hover:bg-[#6b3296] focus:outline-none focus:ring-2 focus:ring-[#54247a]/20"
+          >
+            <ShoppingCart size={15} />
+            Order Now
+          </Link>
+        ) : (
+          <button
+            type="button"
+            disabled
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-100 px-3 text-sm font-bold text-slate-400"
+          >
+            <ShoppingCart size={15} />
+            Order Now
+          </button>
+        )}
+      </div>
     </article>
   );
 }
@@ -228,6 +261,21 @@ function ProductMeta({ label, value }: { label: string; value: string }) {
       <dd className="mt-1 text-sm font-bold text-slate-800">{value}</dd>
     </div>
   );
+}
+
+function hasListPrice(
+  product: CustomerProduct,
+): product is CustomerProduct & { priceDisplay: 'LIST_PRICE'; listPricePerTon: number } {
+  return product.priceDisplay === 'LIST_PRICE' && Number.isFinite(product.listPricePerTon);
+}
+
+function formatPricePerTon(product: CustomerProduct) {
+  if (!hasListPrice(product)) return 'Price unavailable';
+
+  return `${product.listPricePerTon.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} ${product.priceCurrency} / ton`;
 }
 
 function FilterInput({

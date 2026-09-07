@@ -58,7 +58,11 @@ import {
   getCustomerLocations,
   type CustomerLocation,
 } from '../../services/customerLocationsService';
-import { getCustomerProducts, type CustomerProduct } from '../../services/customerProductsService';
+import {
+  getCustomerProduct,
+  getCustomerProducts,
+  type CustomerProduct,
+} from '../../services/customerProductsService';
 import {
   createCustomerQuotation,
   getCustomerQuotation,
@@ -72,7 +76,7 @@ import {
 } from '../../services/customerQuotationsService';
 import { createClientId } from '../../utils/createClientId';
 import { packagingQuantityForTons } from '../../utils/commercialQuantity';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 type FormItem = {
   key: string;
@@ -118,6 +122,8 @@ const createInitialForm = (): FormState => ({
 export function CustomerQuotationNew() {
   const navigate = useNavigate();
   const { id: routeQuotationId } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const preselectedProductId = searchParams.get('product')?.trim() ?? '';
   const { account, user } = useCustomerAuth();
   const toast = useToast();
   const canManageQuotation = Boolean(user?.role && writableRoles.has(user.role));
@@ -215,6 +221,26 @@ export function CustomerQuotationNew() {
           }
         }
 
+        if (!quotationToLoad && preselectedProductId) {
+          const preselectedProduct = await getCustomerProduct(preselectedProductId).catch(
+            () => null,
+          );
+          if (preselectedProduct) {
+            nextForm = {
+              ...nextForm,
+              items: [
+                {
+                  ...initialItem(),
+                  product: preselectedProduct,
+                  quantity: '1',
+                },
+              ],
+            };
+            setProductResults([preselectedProduct]);
+            setActiveSection('items');
+          }
+        }
+
         setForm(nextForm);
         setLastSavedSnapshot(serializeForm(nextForm));
       } catch {
@@ -225,7 +251,7 @@ export function CustomerQuotationNew() {
     };
 
     void loadFoundation();
-  }, [routeQuotationId]);
+  }, [preselectedProductId, routeQuotationId]);
 
   useEffect(() => {
     if (!activePickerKey) return;
@@ -1727,6 +1753,9 @@ function fromQuotation(quotation: CustomerQuotation): FormState {
         ...item.product,
         displayOrder: 0,
         priceDisplay: 'PRICE_ON_REQUEST',
+        listPricePerTon: null,
+        priceCurrency: 'SAR',
+        priceUnit: 'TON',
         isActive: true,
         createdAt: quotation.createdAt,
         updatedAt: quotation.updatedAt,
