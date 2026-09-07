@@ -14,6 +14,7 @@ import type {
 } from './customer-quotations.validation.js';
 import type pg from 'pg';
 import { pickupLocationsService } from '../pickup-locations/pickup-locations.service.js';
+import { nextDocumentReference } from '../document-numbering/document-numbering.service.js';
 
 const writableRoles = new Set<CustomerUser['role']>(['CUSTOMER_ADMIN', 'PURCHASER']);
 const customerQuotationPageSize = 10;
@@ -652,12 +653,7 @@ export class CustomerQuotationsService {
   }
 
   private async nextReference(client: pg.PoolClient) {
-    const result = await client.query<{ sequence: string }>(
-      `select nextval('customer_quotation_reference_seq')::text as sequence`,
-    );
-    const sequence = String(result.rows[0]?.sequence ?? '1').padStart(6, '0');
-
-    return `QT-${new Date().getFullYear()}-${sequence}`;
+    return nextDocumentReference(client, 'customer_quotation_reference_seq', 'RFQ');
   }
 }
 

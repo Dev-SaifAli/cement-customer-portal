@@ -1,6 +1,14 @@
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
 
-export type OrderStatus = 'DRAFT' | 'SUBMITTED' | 'PROCESSING' | 'COMPLETED' | 'CANCELLED';
+export type OrderStatus =
+  | 'DRAFT'
+  | 'SUBMITTED'
+  | 'PENDING_APPROVAL'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'PROCESSING'
+  | 'COMPLETED'
+  | 'CANCELLED';
 
 export interface PickupTruckSnapshot {
   id: string;

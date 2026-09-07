@@ -137,6 +137,127 @@ describe('admin pricing API', () => {
     });
   });
 
+  it('allows a Pricing Administrator to read approval settings', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [salesUser('PRICING_ADMIN')] })
+      .mockResolvedValueOnce({
+        rows: [{ value: 'AUTO_APPROVE', updated_at: '2026-09-05T08:00:00.000Z' }],
+      });
+
+    const response = await request(createApp())
+      .get('/api/v1/admin/product-prices/approval-settings')
+      .set('Authorization', authorization());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.approvalSettings.listPriceDirectOrderApproval).toMatchObject({
+      key: 'LIST_PRICE_DIRECT_ORDER_APPROVAL',
+      value: 'AUTO_APPROVE',
+      updatedAt: '2026-09-05T08:00:00.000Z',
+    });
+  });
+
+  it('does not allow non-Pricing Admin users to read approval settings', async () => {
+    query.mockResolvedValueOnce({ rows: [salesUser('SALES_REP')] });
+
+    const response = await request(createApp())
+      .get('/api/v1/admin/product-prices/approval-settings')
+      .set('Authorization', authorization());
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('PRICING_CONFIGURATION_FORBIDDEN');
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns Auto Approve when the approval setting row is missing', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [salesUser('PRICING_ADMIN')] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const response = await request(createApp())
+      .get('/api/v1/admin/product-prices/approval-settings')
+      .set('Authorization', authorization());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.approvalSettings.listPriceDirectOrderApproval).toMatchObject({
+      key: 'LIST_PRICE_DIRECT_ORDER_APPROVAL',
+      value: 'AUTO_APPROVE',
+      updatedAt: null,
+    });
+  });
+
+  it('allows a Pricing Administrator to change Auto Approve to Must Approve', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [salesUser('PRICING_ADMIN')] })
+      .mockResolvedValueOnce({
+        rows: [{ value: 'MUST_APPROVE', updated_at: '2026-09-05T08:30:00.000Z' }],
+      });
+
+    const response = await request(createApp())
+      .put('/api/v1/admin/product-prices/approval-settings/list-price-direct-order')
+      .set('Authorization', authorization())
+      .send({ value: 'MUST_APPROVE' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.setting).toMatchObject({
+      key: 'LIST_PRICE_DIRECT_ORDER_APPROVAL',
+      value: 'MUST_APPROVE',
+    });
+    expect(query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('insert into application_settings'),
+      ['LIST_PRICE_DIRECT_ORDER_APPROVAL', 'MUST_APPROVE', salesUserId],
+    );
+  });
+
+  it('allows a Pricing Administrator to change Must Approve to Auto Approve', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [salesUser('PRICING_ADMIN')] })
+      .mockResolvedValueOnce({
+        rows: [{ value: 'AUTO_APPROVE', updated_at: '2026-09-05T08:45:00.000Z' }],
+      });
+
+    const response = await request(createApp())
+      .put('/api/v1/admin/product-prices/approval-settings/list-price-direct-order')
+      .set('Authorization', authorization())
+      .send({ value: 'AUTO_APPROVE' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.setting).toMatchObject({
+      key: 'LIST_PRICE_DIRECT_ORDER_APPROVAL',
+      value: 'AUTO_APPROVE',
+    });
+    expect(query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('insert into application_settings'),
+      ['LIST_PRICE_DIRECT_ORDER_APPROVAL', 'AUTO_APPROVE', salesUserId],
+    );
+  });
+
+  it('rejects invalid approval setting values', async () => {
+    query.mockResolvedValueOnce({ rows: [salesUser('PRICING_ADMIN')] });
+
+    const response = await request(createApp())
+      .put('/api/v1/admin/product-prices/approval-settings/list-price-direct-order')
+      .set('Authorization', authorization())
+      .send({ value: 'ALWAYS_APPROVE' });
+
+    expect(response.status).toBe(400);
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not allow non-Pricing Admin users to change approval settings', async () => {
+    query.mockResolvedValueOnce({ rows: [salesUser('SALES_REP')] });
+
+    const response = await request(createApp())
+      .put('/api/v1/admin/product-prices/approval-settings/list-price-direct-order')
+      .set('Authorization', authorization())
+      .send({ value: 'MUST_APPROVE' });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('PRICING_CONFIGURATION_FORBIDDEN');
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps approval managers from changing baseline pricing', async () => {
     query.mockResolvedValueOnce({ rows: [salesUser('PRICE_MANAGER')] });
     const productResponse = await request(createApp())

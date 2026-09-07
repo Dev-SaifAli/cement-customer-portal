@@ -49,6 +49,16 @@ export interface PricingConfiguration {
   deliveryPrices: HaderDeliveryPrice[];
 }
 
+export type ListPriceDirectOrderApprovalMode = 'AUTO_APPROVE' | 'MUST_APPROVE';
+
+export interface ApprovalSettings {
+  listPriceDirectOrderApproval: {
+    key: 'LIST_PRICE_DIRECT_ORDER_APPROVAL';
+    value: ListPriceDirectOrderApprovalMode;
+    updatedAt: string | null;
+  };
+}
+
 interface ApiErrorBody {
   message?: string;
   error?: { message?: string; code?: string };
@@ -105,6 +115,26 @@ export async function setHaderCity(cityId: string, isHaderEnabled: boolean) {
     { method: 'PUT', body: JSON.stringify({ isHaderEnabled }) },
   );
   return response.data.city;
+}
+
+export async function getApprovalSettings() {
+  const response = await request<{ success: boolean; data: { approvalSettings: ApprovalSettings } }>(
+    '/admin/product-prices/approval-settings',
+  );
+  return response.data.approvalSettings;
+}
+
+export async function saveListPriceDirectOrderApproval(
+  value: ListPriceDirectOrderApprovalMode,
+) {
+  const response = await request<{
+    success: boolean;
+    data: { setting: ApprovalSettings['listPriceDirectOrderApproval'] };
+  }>('/admin/product-prices/approval-settings/list-price-direct-order', {
+    method: 'PUT',
+    body: JSON.stringify({ value }),
+  });
+  return response.data.setting;
 }
 
 async function request<T>(path: string, options: RequestInit = {}) {

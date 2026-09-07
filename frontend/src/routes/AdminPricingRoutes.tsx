@@ -11,6 +11,7 @@ import { AdminHaderCities } from '../pages/admin/AdminHaderCities';
 import { AdminLogisticsPage } from '../pages/admin/AdminLogisticsPage';
 import { AdminPickupLocations } from '../pages/admin/AdminPickupLocations';
 import { AdminPickupLocationDocument } from '../pages/admin/AdminPickupLocationDocument';
+import { AdminApprovalSettings } from '../pages/admin/AdminApprovalSettings';
 import { PricingAdminLayout } from '../pages/admin/PricingAdminLayout';
 import { HaderLayout } from '../pages/hader/HaderLayout';
 import { getSalesLandingPath } from '../utils/salesRouting';
@@ -31,6 +32,7 @@ export function AdminPricingRoutes() {
                 <Route path="products/:id" element={<AdminProductDocument />} />
                 <Route path="delivery-prices" element={<AdminProductPrices deliveryOnly />} />
                 <Route path="tax-configuration" element={<AdminTaxConfiguration />} />
+                <Route path="approval-settings" element={<AdminApprovalSettings />} />
                 <Route path="pickup-locations" element={<AdminPickupLocations />} />
                 <Route path="pickup-locations/create" element={<AdminPickupLocationDocument />} />
                 <Route path="pickup-locations/:id" element={<AdminPickupLocationDocument />} />

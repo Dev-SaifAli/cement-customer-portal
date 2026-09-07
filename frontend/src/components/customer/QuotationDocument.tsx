@@ -54,7 +54,7 @@ export const QuotationDocument = forwardRef<HTMLDivElement, QuotationDocumentPro
             </div>
             <div className="text-right">
               <p className="text-[10px] font-bold tracking-[0.08em] text-slate-600">
-                QUOTATION REQUEST
+                REQUEST FOR QUOTE (RFQ)
               </p>
               <p className="mt-1 text-lg font-extrabold text-[#17151c]">
                 {quotation.reference ?? 'Reference pending'}
@@ -63,7 +63,7 @@ export const QuotationDocument = forwardRef<HTMLDivElement, QuotationDocumentPro
           </header>
 
           <section className="mt-5 grid grid-cols-[150px_1fr] gap-x-3 gap-y-1.5 text-[10px]">
-            <DocumentLabel label="Quotation Reference" value={quotation.reference} />
+            <DocumentLabel label="RFQ Reference" value={quotation.reference} />
             <DocumentLabel
               label="Status"
               value={formatStatus(quotation.status)}

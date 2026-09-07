@@ -106,8 +106,9 @@ export class OrdersRepository {
       values.push(filters.status);
       clauses.push(`orders.status = $${values.length}`);
     }
-    if (filters.orderType === 'DIRECT') clauses.push('orders.contract_id is null');
-    if (filters.orderType === 'CONTRACT') clauses.push('orders.contract_id is not null');
+    if (filters.orderType === 'DIRECT') clauses.push("orders.order_number like 'DO%'");
+    if (filters.orderType === 'CONTRACT')
+      clauses.push("orders.contract_id is not null and orders.order_number not like 'DO%'");
     if (filters.search) {
       values.push(`%${filters.search.toLowerCase()}%`);
       clauses.push(`(
@@ -196,7 +197,7 @@ export class OrdersRepository {
   }
 
   async addProcessingStartedEvent(
-    order: Pick<OrderProcessingCandidate, 'id' | 'order_number'>,
+    order: Pick<OrderProcessingCandidate, 'id' | 'order_number' | 'status'>,
     salesUserId: string,
     client: PoolClient,
   ) {
@@ -204,9 +205,10 @@ export class OrdersRepository {
       `insert into order_events (
          order_id, event_type, previous_status, new_status,
          changed_by_sales_user_id, event_data
-       ) values ($1, 'ORDER_PROCESSING_STARTED', 'SUBMITTED', 'PROCESSING', $2, $3::jsonb)`,
+       ) values ($1, 'ORDER_PROCESSING_STARTED', $2, 'PROCESSING', $3, $4::jsonb)`,
       [
         order.id,
+        order.status,
         salesUserId,
         JSON.stringify({ orderReference: order.order_number, actorType: 'SALES' }),
       ],
@@ -266,11 +268,12 @@ const orderSelectWithShipmentSql = `select orders.*,
  ) shipment_summary on true`;
 
 function mapOrderReadRow(row: OrderReadRow) {
+  const isDirectOrder = row.order_number.startsWith('DO');
   return {
     id: row.id,
     orderNumber: row.order_number,
     contract: row.contract_id ? { id: row.contract_id, reference: row.contract_reference } : null,
-    orderType: row.contract_id ? ('CONTRACT' as const) : ('DIRECT' as const),
+    orderType: isDirectOrder ? ('DIRECT' as const) : ('CONTRACT' as const),
     customer: { id: row.customer_account_id, companyName: row.company_name },
     status: row.status,
     fulfilmentType: row.fulfilment_type,

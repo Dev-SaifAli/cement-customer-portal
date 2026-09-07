@@ -84,6 +84,9 @@ export function CustomerOrders() {
             >
               <option value="">All Statuses</option>
               <option value="SUBMITTED">Submitted</option>
+              <option value="PENDING_APPROVAL">Pending Approval</option>
+              <option value="APPROVED">Approved</option>
+              <option value="REJECTED">Rejected</option>
               <option value="PROCESSING">Processing</option>
               <option value="COMPLETED">Completed</option>
               <option value="CANCELLED">Cancelled</option>
@@ -202,6 +205,9 @@ function Status({ value }: { value: OrderStatus }) {
   const colors: Record<OrderStatus, string> = {
     DRAFT: 'bg-slate-400',
     SUBMITTED: 'bg-amber-500',
+    PENDING_APPROVAL: 'bg-amber-500',
+    APPROVED: 'bg-emerald-500',
+    REJECTED: 'bg-red-500',
     PROCESSING: 'bg-blue-500',
     COMPLETED: 'bg-emerald-500',
     CANCELLED: 'bg-red-500',
@@ -209,7 +215,10 @@ function Status({ value }: { value: OrderStatus }) {
   return (
     <span className="customer-text inline-flex items-center gap-2 text-xs font-semibold">
       <span className={`h-2 w-2 rounded-full ${colors[value]}`} />
-      {value.charAt(0) + value.slice(1).toLowerCase()}
+      {value
+        .split('_')
+        .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+        .join(' ')}
     </span>
   );
 }

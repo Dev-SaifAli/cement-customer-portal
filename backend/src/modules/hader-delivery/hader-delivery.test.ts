@@ -93,7 +93,7 @@ describe('Hader delivery APIs', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.data.items[0]).toMatchObject({
-      requestNumber: 'DR-2026-000001',
+      requestNumber: 'DR26000001',
       status: 'PENDING',
       contract: null,
       order: { number: 'ORD-2026-000001' },
@@ -142,8 +142,8 @@ describe('Hader delivery APIs', () => {
         return Promise.resolve({ rows: [deliveryRequestRow(orderId, 'APPROVED')] });
       if (sql.includes('select id from shipments where')) return Promise.resolve({ rows: [] });
       if (sql.includes('sum(quantity_ton)')) return Promise.resolve({ rows: [{ total: '0' }] });
-      if (sql.includes("nextval('shipment_number_seq')"))
-        return Promise.resolve({ rows: [{ sequence: '1' }] });
+      if (sql.includes('insert into contract_shipment_number_counters'))
+        return Promise.resolve({ rows: [{ suffix: 1 }] });
       if (sql.includes('insert into shipments'))
         return Promise.resolve({ rows: [{ id: shipmentId }] });
       if (sql.includes("update orders set status='PROCESSING'"))
@@ -160,14 +160,14 @@ describe('Hader delivery APIs', () => {
       });
 
     expect(response.status).toBe(201);
-    expect(response.body.data.shipment.shipmentNumber).toBe('SHP-2026-000001');
+    expect(response.body.data.shipment.shipmentNumber).toBe('CT26000001_1');
     expect(clientQuery).toHaveBeenCalledWith(
       expect.stringContaining("update orders set status='PROCESSING'"),
       [orderId],
     );
     expect(clientQuery).toHaveBeenCalledWith(
       expect.stringContaining("'SHIPMENT_CREATED','SUBMITTED','PROCESSING'"),
-      [orderId, userId, JSON.stringify({ shipmentId, shipmentNumber: 'SHP-2026-000001' })],
+      [orderId, userId, JSON.stringify({ shipmentId, shipmentNumber: 'CT26000001_1' })],
     );
   });
 
@@ -209,11 +209,11 @@ describe('Hader delivery APIs', () => {
 function deliveryRequestRow(orderId: string, status: string) {
   return {
     id: requestId,
-    request_number: 'DR-2026-000001',
+    request_number: 'DR26000001',
     order_id: orderId,
     order_number: 'ORD-2026-000001',
     contract_id: '77777777-7777-4777-8777-777777777777',
-    contract_reference: 'CT-2026-000001',
+    contract_reference: 'CT26000001',
     customer_account_id: '44444444-4444-4444-8444-444444444444',
     company_name: 'Customer Company',
     contact_name: 'Customer Admin',
@@ -245,7 +245,7 @@ function shipmentRow(shipmentId: string, orderId: string) {
   return {
     ...deliveryRequestRow(orderId, 'CONVERTED_TO_SHIPMENT'),
     shipment_id: shipmentId,
-    shipment_number: 'SHP-2026-000001',
+    shipment_number: 'CT26000001_1',
     shipment_quantity_ton: '100.000',
     shipment_status: 'CREATED',
     scheduled_date: null,

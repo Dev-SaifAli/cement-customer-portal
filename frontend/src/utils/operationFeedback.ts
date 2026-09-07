@@ -31,6 +31,7 @@ export function installOperationFeedback() {
 
 function feedbackMessage(method: string, path: string) {
   if (ignoredPaths.some((entry) => path.includes(entry))) return null;
+  if (isCustomerQuotationSaveOrSubmit(method, path)) return null;
   if (path.endsWith('/read') || path.endsWith('/read-all')) return null;
   if (path.includes('/registrations/') && !path.endsWith('/submit')) return null;
   if (path.endsWith('/price') || path.endsWith('/calculate') || path.endsWith('/validate')) return null;
@@ -45,6 +46,12 @@ function feedbackMessage(method: string, path: string) {
   if (method === 'PATCH' || method === 'PUT') return 'Changes saved successfully.';
   if (method === 'POST' && !path.includes('/pricing') && !path.includes('/preview')) return 'Created successfully.';
   return null;
+}
+
+function isCustomerQuotationSaveOrSubmit(method: string, path: string) {
+  const isCustomerQuotationPath = /\/customer\/quotations(?:\/[^/]+)?$/.test(path);
+  const isCustomerQuotationSubmit = /\/customer\/quotations\/[^/]+\/submit$/.test(path);
+  return isCustomerQuotationSubmit || (isCustomerQuotationPath && (method === 'POST' || method === 'PATCH'));
 }
 
 function publishOnce(message: string) {

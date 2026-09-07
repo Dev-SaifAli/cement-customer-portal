@@ -8,6 +8,9 @@ interface CustomerContractRow {
   reference: string | null;
   quotation_id: string | null;
   quotation_reference: string | null;
+  source_document_type: 'DIRECT_ORDER' | 'RFQ' | null;
+  source_document_number: string | null;
+  source_direct_order_id: string | null;
   customer_account_id: string;
   product_code: string | null;
   product_name: string | null;
@@ -147,6 +150,14 @@ function mapCustomerContractSummary(row: CustomerContractRow) {
       ? {
           id: row.quotation_id,
           reference: row.quotation_reference,
+        }
+      : null,
+    sourceDocument: row.source_document_type
+      ? {
+          type: row.source_document_type,
+          number: row.source_document_number,
+          directOrderId: row.source_direct_order_id,
+          quotationId: row.quotation_id,
         }
       : null,
     productCode: row.product_code,

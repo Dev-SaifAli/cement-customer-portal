@@ -1,5 +1,9 @@
 import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
+import {
+  applicationSettingsService,
+  type ListPriceDirectOrderApprovalMode,
+} from '../application-settings/application-settings.service.js';
 import type { SalesUser } from '../sales-auth/sales-auth.types.js';
 import type { UpsertDeliveryPrice, UpsertProductPrice } from './admin-pricing.validation.js';
 
@@ -98,6 +102,13 @@ export class AdminPricingService {
       })),
       productPrices: productPrices.rows.map(mapProductPrice),
       deliveryPrices: deliveryPrices.rows.map(mapDeliveryPrice),
+    };
+  }
+
+  async getApprovalSettings() {
+    return {
+      listPriceDirectOrderApproval:
+        await applicationSettingsService.getListPriceDirectOrderApprovalSetting(),
     };
   }
 
@@ -214,6 +225,13 @@ export class AdminPricingService {
       throw new AppError('Active pricing city was not found.', 404, 'PRICING_CITY_NOT_FOUND');
     }
     return mapCity(city);
+  }
+
+  async setListPriceDirectOrderApproval(
+    value: ListPriceDirectOrderApprovalMode,
+    user: SalesUser,
+  ) {
+    return applicationSettingsService.setListPriceDirectOrderApprovalMode(value, user.id);
   }
 }
 

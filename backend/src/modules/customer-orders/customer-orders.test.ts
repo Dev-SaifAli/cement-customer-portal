@@ -27,6 +27,7 @@ const customerAccountId = '22222222-2222-4222-8222-222222222222';
 const contractId = '33333333-3333-4333-8333-333333333333';
 const productId = '44444444-4444-4444-8444-444444444444';
 const orderId = '55555555-5555-4555-8555-555555555555';
+const directOrderContractId = '12121212-1212-4121-8121-121212121212';
 const cityId = '66666666-6666-4666-8666-666666666666';
 const clientRequestId = '99999999-9999-4999-8999-999999999999';
 const truckId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -66,7 +67,7 @@ const authenticatedCustomerUserRow = {
 
 const activeContractRow = {
   id: contractId,
-  reference: 'CT-2026-000025',
+  reference: 'CT26000025',
   customer_account_id: customerAccountId,
   status: 'ACTIVE',
   product_id: productId,
@@ -180,7 +181,7 @@ function configureTransaction(
         rows: [
           {
             id: orderId,
-            order_number: 'ORD-2026-000007',
+            order_number: 'ORD26000007',
             contract_id: contractId,
             customer_account_id: customerAccountId,
             ship_to_location_id: 'SHIP-TO-01',
@@ -278,15 +279,18 @@ function directOrderQuery(sql: string) {
   return null;
 }
 
-function directOrderReadRow() {
+function directOrderReadRow(overrides: Record<string, unknown> = {}) {
+  const wasAutoApproved = clientQuery.mock.calls.some(
+    ([sql]) => String(sql).includes('insert into contracts'),
+  );
   return {
     id: orderId,
-    order_number: 'ORD-2026-000008',
-    contract_id: null,
-    contract_reference: null,
+    order_number: 'DO26000008',
+    contract_id: wasAutoApproved ? directOrderContractId : null,
+    contract_reference: wasAutoApproved ? 'CT26000025' : null,
     customer_account_id: customerAccountId,
     company_name: 'Activated Cement Customer',
-    status: 'SUBMITTED',
+    status: wasAutoApproved ? 'APPROVED' : 'PENDING_APPROVAL',
     fulfilment_type: 'DELIVERY',
     requested_quantity_tons: '20.000',
     remaining_contract_quantity_snapshot: null,
@@ -321,6 +325,7 @@ function directOrderReadRow() {
     contract_uom: '50KG_BAG',
     unit_weight_kg: '50.000',
     packaging_quantity: '400.000',
+    ...overrides,
   };
 }
 
@@ -350,7 +355,7 @@ describe('customer order from contract API', () => {
 
     expect(response.status).toBe(201);
     expect(response.body.data.order).toMatchObject({
-      orderNumber: 'ORD-2026-000007',
+      orderNumber: 'ORD26000007',
       contractId,
       status: 'SUBMITTED',
       requestedQuantityTons: 10,
@@ -621,9 +626,9 @@ describe('customer order from contract API', () => {
           rows: [
             {
               id: orderId,
-              order_number: 'ORD-2026-000007',
+              order_number: 'ORD26000007',
               contract_id: contractId,
-              contract_reference: 'CT-2026-000025',
+              contract_reference: 'CT26000025',
               customer_account_id: customerAccountId,
               company_name: 'Activated Cement Customer',
               status: 'SUBMITTED',
@@ -659,7 +664,7 @@ describe('customer order from contract API', () => {
     const response = await createOrderRequest();
 
     expect(response.status).toBe(201);
-    expect(response.body.data.order.orderNumber).toBe('ORD-2026-000007');
+    expect(response.body.data.order.orderNumber).toBe('ORD26000007');
     expect(clientQuery).not.toHaveBeenCalledWith(
       expect.stringContaining('update contracts'),
       expect.anything(),
@@ -765,6 +770,10 @@ describe('customer direct order API', () => {
       if (sql.includes("nextval('order_reference_seq')"))
         return Promise.resolve({ rows: [{ sequence: '8' }] });
       if (sql.includes('insert into orders')) return Promise.resolve({ rows: [{ id: orderId }] });
+      if (sql.includes("nextval('contract_reference_seq')"))
+        return Promise.resolve({ rows: [{ sequence: '1' }] });
+      if (sql.includes('insert into contracts'))
+        return Promise.resolve({ rows: [{ id: directOrderContractId }] });
       return Promise.resolve({ rows: [] });
     });
 
@@ -784,8 +793,9 @@ describe('customer direct order API', () => {
 
     expect(response.status).toBe(201);
     expect(response.body.data.order).toMatchObject({
-      contract: null,
+      contract: { reference: 'CT26000025' },
       orderType: 'DIRECT',
+      status: 'APPROVED',
       requestedQuantityTons: 20,
       product: {
         unitWeightKg: 50,
@@ -803,13 +813,77 @@ describe('customer direct order API', () => {
       expect.stringContaining('update contracts'),
       expect.anything(),
     );
+    expect(clientQuery).toHaveBeenCalledWith(
+      expect.stringContaining("source_document_type,\n       source_document_number,\n       source_direct_order_id"),
+      expect.arrayContaining([
+        'CT26000001',
+        customerAccountId,
+        productId,
+        'SHIP-TO-01',
+        195,
+        40,
+        'DO26000008',
+        orderId,
+      ]),
+    );
     const eventCall = clientQuery.mock.calls.find(([sql]) =>
       String(sql).includes('insert into order_events'),
     );
     expect(eventCall?.[0]).toContain('DIRECT_ORDER_CREATED');
-    expect(eventCall?.[0]).toContain('ORDER_SUBMITTED');
     expect(eventCall?.[1]).toEqual(
-      expect.arrayContaining([orderId, customerUserId, expect.stringContaining('ORD-2026-000008')]),
+      expect.arrayContaining(['APPROVED', expect.stringContaining('DIRECT_ORDER_APPROVED')]),
+    );
+    expect(eventCall?.[1]).toEqual(
+      expect.arrayContaining([orderId, customerUserId, expect.stringContaining('DO26000008')]),
+    );
+  });
+
+  it('keeps a new list-price direct order pending when approval mode is Must Approve', async () => {
+    poolQuery.mockImplementation((sql: string) => {
+      if (sql.includes('from customer_users'))
+        return Promise.resolve({ rows: [authenticatedCustomerUserRow] });
+      if (sql.includes('from orders')) return Promise.resolve({ rows: [directOrderReadRow()] });
+      return Promise.resolve({ rows: [] });
+    });
+    connect.mockResolvedValue({ query: clientQuery, release });
+    clientQuery.mockImplementation((sql: string) => {
+      const pricingResult = directOrderQuery(sql);
+      if (pricingResult) return pricingResult;
+      if (sql.includes("nextval('order_reference_seq')"))
+        return Promise.resolve({ rows: [{ sequence: '8' }] });
+      if (sql.includes('insert into orders')) return Promise.resolve({ rows: [{ id: orderId }] });
+      if (sql.includes('from application_settings')) {
+        return Promise.resolve({
+          rows: [{ value: 'MUST_APPROVE', updated_at: '2026-09-05T08:00:00.000Z' }],
+        });
+      }
+      return Promise.resolve({ rows: [] });
+    });
+
+    const response = await request(createApp())
+      .post('/api/v1/customer/orders')
+      .set({ Cookie: `customer_session=${createValidCustomerToken()}` })
+      .send({
+        clientRequestId: directRequestId,
+        productId,
+        quantityTons: 20,
+        fulfilmentType: 'DELIVERY',
+        shipToLocationId: 'SHIP-TO-01',
+        pickupLocationId: null,
+        requestedDeliveryDate: '2026-09-01',
+        notes: 'Call before arrival',
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.data.order).toMatchObject({
+      orderNumber: 'DO26000008',
+      contract: null,
+      orderType: 'DIRECT',
+      status: 'PENDING_APPROVAL',
+    });
+    expect(clientQuery).not.toHaveBeenCalledWith(
+      expect.stringContaining('insert into contracts'),
+      expect.anything(),
     );
   });
 });

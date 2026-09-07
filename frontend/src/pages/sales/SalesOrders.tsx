@@ -84,6 +84,9 @@ export function SalesOrdersPage() {
             >
               <option value="">All Statuses</option>
               <option value="SUBMITTED">Submitted</option>
+              <option value="PENDING_APPROVAL">Pending Approval</option>
+              <option value="APPROVED">Approved</option>
+              <option value="REJECTED">Rejected</option>
               <option value="PROCESSING">Processing</option>
               <option value="COMPLETED">Completed</option>
               <option value="CANCELLED">Cancelled</option>

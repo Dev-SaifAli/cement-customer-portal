@@ -59,7 +59,7 @@ function processingCandidate(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function orderReadRow(status = 'PROCESSING') {
+function orderReadRow(status = 'PROCESSING', overrides: Record<string, unknown> = {}) {
   return {
     id: orderId,
     order_number: 'ORD-2026-000001',
@@ -101,6 +101,31 @@ function orderReadRow(status = 'PROCESSING') {
     delivery_request_id: status === 'PROCESSING' ? '66666666-6666-4666-8666-666666666666' : null,
     delivery_request_number: status === 'PROCESSING' ? 'DR-2026-000001' : null,
     delivery_request_status: status === 'PROCESSING' ? 'PENDING' : null,
+    ...overrides,
+  };
+}
+
+function directApprovalCandidate(overrides: Record<string, unknown> = {}) {
+  return {
+    ...processingCandidate({ status: 'PENDING_APPROVAL' }),
+    contract_id: null,
+    order_number: 'DO26000008',
+    created_by_customer_user_id: '77777777-7777-4777-8777-777777777777',
+    approved_customer_rate_per_ton: '235.00',
+    amount: '4700.00',
+    vat_rate: '15.00',
+    vat_amount: '705.00',
+    grand_total: '5405.00',
+    delivery_notes: 'Call before arrival',
+    product_id: productId,
+    product_code: 'CEM-OPC-50KG',
+    product_name: 'Ordinary Portland Cement',
+    packaging: 'Bag',
+    contract_uom: '50KG_BAG',
+    unit_weight_kg: '50.000',
+    packaging_quantity: '400.000',
+    existing_contract_id: null,
+    ...overrides,
   };
 }
 
@@ -123,7 +148,7 @@ describe('Sales order review and processing API', () => {
     expect(response.status).toBe(200);
     expect(response.body.data.order).toMatchObject({
       orderNumber: 'ORD-2026-000001',
-      orderType: 'DIRECT',
+      orderType: 'CONTRACT',
       status: 'SUBMITTED',
       requestedQuantityTons: 20,
     });
@@ -296,9 +321,132 @@ describe('Sales order review and processing API', () => {
     expect(response.body.error.code).toBe('ORDER_ALREADY_PROCESSING');
   });
 
+  it('allows Sales to approve a pending list-price Direct Order and create one Contract', async () => {
+    query.mockResolvedValueOnce({ rows: [salesUserRow] });
+    connect.mockResolvedValueOnce({ query: clientQuery, release });
+    clientQuery.mockImplementation((sql: string) => {
+      if (sql.includes('for update of orders'))
+        return Promise.resolve({ rows: [directApprovalCandidate()] });
+      if (sql.includes('select id from contracts where source_direct_order_id'))
+        return Promise.resolve({ rows: [] });
+      if (sql.includes("nextval('contract_reference_seq')"))
+        return Promise.resolve({ rows: [{ sequence: '1' }] });
+      if (sql.includes('insert into contracts'))
+        return Promise.resolve({ rows: [{ id: '88888888-8888-4888-8888-888888888888' }] });
+      return Promise.resolve({ rows: [] });
+    });
+    query.mockResolvedValueOnce({
+      rows: [
+        orderReadRow('APPROVED', {
+          order_number: 'DO26000008',
+          contract_id: '88888888-8888-4888-8888-888888888888',
+          contract_reference: 'CT26000001',
+        }),
+      ],
+    });
+
+    const response = await request(createApp())
+      .post(`/api/v1/sales/orders/${orderId}/approve-direct-order`)
+      .set('Authorization', authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.order).toMatchObject({
+      orderNumber: 'DO26000008',
+      orderType: 'DIRECT',
+      status: 'APPROVED',
+      contract: { reference: 'CT26000001' },
+    });
+    expect(clientQuery).toHaveBeenCalledWith(
+      expect.stringContaining("set status = 'APPROVED'"),
+      [orderId],
+    );
+    expect(clientQuery).toHaveBeenCalledWith(
+      expect.stringContaining('insert into contracts'),
+      expect.arrayContaining(['CT26000001', customerAccountId, productId, 'DO26000008', orderId]),
+    );
+    expect(clientQuery).toHaveBeenCalledWith(
+      expect.stringContaining('insert into order_events'),
+      expect.arrayContaining([orderId, salesUserId]),
+    );
+  });
+
+  it('does not create a duplicate Contract when an approved Direct Order is approved again', async () => {
+    query.mockResolvedValueOnce({ rows: [salesUserRow] });
+    connect.mockResolvedValueOnce({ query: clientQuery, release });
+    clientQuery.mockImplementation((sql: string) => {
+      if (sql.includes('for update of orders')) {
+        return Promise.resolve({
+          rows: [
+            directApprovalCandidate({
+              status: 'APPROVED',
+              existing_contract_id: '88888888-8888-4888-8888-888888888888',
+            }),
+          ],
+        });
+      }
+      return Promise.resolve({ rows: [] });
+    });
+    query.mockResolvedValueOnce({
+      rows: [
+        orderReadRow('APPROVED', {
+          order_number: 'DO26000008',
+          contract_id: '88888888-8888-4888-8888-888888888888',
+          contract_reference: 'CT26000001',
+        }),
+      ],
+    });
+
+    const response = await request(createApp())
+      .post(`/api/v1/sales/orders/${orderId}/approve-direct-order`)
+      .set('Authorization', authHeader());
+
+    expect(response.status).toBe(200);
+    expect(
+      clientQuery.mock.calls.filter(([sql]) => String(sql).includes('insert into contracts')),
+    ).toHaveLength(0);
+  });
+
+  it('allows Sales to reject a pending list-price Direct Order without creating a Contract', async () => {
+    query.mockResolvedValueOnce({ rows: [salesUserRow] });
+    connect.mockResolvedValueOnce({ query: clientQuery, release });
+    clientQuery.mockImplementation((sql: string) => {
+      if (sql.includes('for update of orders'))
+        return Promise.resolve({ rows: [directApprovalCandidate()] });
+      return Promise.resolve({ rows: [] });
+    });
+    query.mockResolvedValueOnce({
+      rows: [orderReadRow('REJECTED', { order_number: 'DO26000008' })],
+    });
+
+    const response = await request(createApp())
+      .post(`/api/v1/sales/orders/${orderId}/reject-direct-order`)
+      .set('Authorization', authHeader())
+      .send({ reason: 'Customer requested cancellation.' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.order.status).toBe('REJECTED');
+    expect(clientQuery).toHaveBeenCalledWith(
+      expect.stringContaining("set status = 'REJECTED'"),
+      [orderId],
+    );
+    expect(
+      clientQuery.mock.calls.some(([sql]) => String(sql).includes('insert into contracts')),
+    ).toBe(false);
+  });
+
   it('does not accept a customer session on the Sales processing endpoint', async () => {
     const response = await request(createApp())
       .post(`/api/v1/sales/orders/${orderId}/start-processing`)
+      .set('Cookie', 'customer_session=customer-token');
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe('SALES_AUTH_REQUIRED');
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it('does not accept a customer session on the Direct Order approval endpoint', async () => {
+    const response = await request(createApp())
+      .post(`/api/v1/sales/orders/${orderId}/approve-direct-order`)
       .set('Cookie', 'customer_session=customer-token');
 
     expect(response.status).toBe(401);

@@ -1,9 +1,28 @@
 import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
+import { useToast } from '../../components/ui/ToastProvider';
+import {
+  Badge,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Switch,
+  Textarea,
+} from '../../components/ui/shadcn';
 import {
   AlertCircle,
   CalendarDays,
   Check,
-  ChevronDown,
+  Copy,
   Download,
   Eye,
   ExternalLink,
@@ -12,11 +31,19 @@ import {
   MoreVertical,
   Plus,
   Printer,
-  Search,
   Trash2,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { ProductImage } from '../../components/customer/ProductImage';
 import {
   QuotationPreviewModal,
@@ -51,9 +78,6 @@ type FormItem = {
   key: string;
   product: CustomerProduct | null;
   quantity: string;
-  palletRequired: boolean;
-  palletType: string;
-  palletQuantity: string;
 };
 
 type FormState = {
@@ -61,6 +85,9 @@ type FormState = {
   pickupLocationId: string;
   shipToLocationId: string;
   requestedDate: string;
+  palletRequired: boolean;
+  palletType: string;
+  palletQuantity: string;
   notes: string;
   items: FormItem[];
 };
@@ -68,14 +95,12 @@ type FormState = {
 const draftStorageKey = 'alsafwa_customer_quotation_draft_id';
 const writableRoles = new Set(['CUSTOMER_ADMIN', 'PURCHASER']);
 const today = new Date().toISOString().slice(0, 10);
+const palletTypeOptions = ['Standard Wooden Pallet', 'Euro Pallet', 'Plastic Pallet'];
 
 const initialItem = (): FormItem => ({
   key: createClientId(),
   product: null,
   quantity: '',
-  palletRequired: false,
-  palletType: '',
-  palletQuantity: '',
 });
 
 const createInitialForm = (): FormState => ({
@@ -83,6 +108,9 @@ const createInitialForm = (): FormState => ({
   pickupLocationId: '',
   shipToLocationId: '',
   requestedDate: '',
+  palletRequired: false,
+  palletType: '',
+  palletQuantity: '',
   notes: '',
   items: [initialItem()],
 });
@@ -91,6 +119,7 @@ export function CustomerQuotationNew() {
   const navigate = useNavigate();
   const { id: routeQuotationId } = useParams<{ id: string }>();
   const { account, user } = useCustomerAuth();
+  const toast = useToast();
   const canManageQuotation = Boolean(user?.role && writableRoles.has(user.role));
   const [form, setForm] = useState<FormState>(createInitialForm);
   const [quotationId, setQuotationId] = useState<string | null>(null);
@@ -108,29 +137,50 @@ export function CustomerQuotationNew() {
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [savedMessage, setSavedMessage] = useState('');
   const [showValidation, setShowValidation] = useState(false);
+  const [palletQuantityTouched, setPalletQuantityTouched] = useState(false);
+  const [palletQuantityInputError, setPalletQuantityInputError] = useState('');
   const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [previewAction, setPreviewAction] = useState<QuotationPreviewAction | null>(null);
   const [previewQuotation, setPreviewQuotation] = useState<CustomerQuotation | null>(null);
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState('');
-  const firstInvalidRef = useRef<HTMLDivElement>(null);
+  const requestedDateInputRef = useRef<HTMLInputElement>(null);
+  const operationInFlightRef = useRef(false);
+  const [activeSection, setActiveSection] = useState('details');
 
   const selectedShipTo = deliveryLocations.find(
     (location) => location.id === form.shipToLocationId,
+  );
+  const selectedPickup = pickupLocations.find(
+    (location) => location.id === form.pickupLocationId,
   );
   const hasCoordinates =
     typeof selectedShipTo?.latitude === 'number' && typeof selectedShipTo.longitude === 'number';
   const validationErrors = useMemo(() => validateForm(form), [form]);
   const isValid = validationErrors.length === 0;
   const isSubmitted = Boolean(quotation && quotation.status !== 'DRAFT');
-  const documentTitle = quotation?.reference ?? 'New Quotation';
+  const documentTitle = quotation?.reference ?? 'New RFQ';
   const currentSnapshot = useMemo(() => serializeForm(form), [form]);
   const isDirty = currentSnapshot !== lastSavedSnapshot;
   const isSavedDraft = !isSubmitted && Boolean(quotationId) && !isDirty;
+  const primaryActionLabel = isSavedDraft ? 'Submit' : 'Save';
+  const statusBadgeLabel = isSubmitted
+    ? formatQuotationStatus(quotation?.status)
+    : quotationId
+      ? 'Saved'
+      : 'Draft';
+  const formBusy = saving || submitting;
   const allRowsSelected =
     form.items.length > 0 && form.items.every((item) => selectedRows.has(item.key));
+  const palletTypeError =
+    showValidation && form.palletRequired && !form.palletType.trim()
+      ? 'Select a pallet type.'
+      : '';
+  const palletQuantityError =
+    form.palletRequired && (showValidation || palletQuantityTouched || palletQuantityInputError)
+      ? getPalletQuantityError(form.palletQuantity, palletQuantityInputError)
+      : '';
 
   useEffect(() => {
     const loadFoundation = async () => {
@@ -168,7 +218,7 @@ export function CustomerQuotationNew() {
         setForm(nextForm);
         setLastSavedSnapshot(serializeForm(nextForm));
       } catch {
-        setError('Unable to load quotation setup. Please try again.');
+        setError('Unable to load RFQ setup. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -195,18 +245,45 @@ export function CustomerQuotationNew() {
     return () => window.clearTimeout(timer);
   }, [activePickerKey, productSearch]);
 
+  useEffect(() => {
+    if (!isDirty || isSubmitted) return;
+
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [isDirty, isSubmitted]);
+
+  const revealValidationError = useCallback(() => {
+    const firstError = validationErrors[0];
+    const itemError = firstError && form.items.some((item, index) =>
+      Object.values(getItemErrors(item, index)).includes(firstError),
+    );
+    const section = itemError ? 'items' : 'details';
+    setActiveSection(section);
+    window.requestAnimationFrame(() => {
+      const panel = document.getElementById(`rfq-${section}`);
+      const control = panel?.querySelector<HTMLElement>('[aria-invalid="true"]:not(select)');
+      (control ?? panel)?.focus({ preventScroll: true });
+      panel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [form.items, validationErrors]);
+
   const saveDraft = useCallback(async () => {
     setError('');
-    setSavedMessage('');
     setShowValidation(true);
 
+    if (saving || submitting || operationInFlightRef.current) return null;
+
     if (!isValid) {
-      window.requestAnimationFrame(() =>
-        firstInvalidRef.current?.scrollIntoView({ behavior: 'smooth' }),
-      );
+      revealValidationError();
       return null;
     }
 
+    operationInFlightRef.current = true;
     setSaving(true);
     try {
       const payload = toPayload(form);
@@ -218,55 +295,65 @@ export function CustomerQuotationNew() {
       setQuotation(saved);
       localStorage.setItem(draftStorageKey, saved.id);
       setLastSavedSnapshot(serializeForm(form));
-      setSavedMessage('Saved just now');
+      toast.success('RFQ saved successfully');
+      playFeedbackSound('/sounds/rfq-save.mp3');
       return saved;
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save quotation draft.');
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save RFQ draft.');
+      toast.error('Unable to save RFQ');
       return null;
     } finally {
       setSaving(false);
+      operationInFlightRef.current = false;
     }
-  }, [form, isValid, quotationId]);
+  }, [form, isValid, quotationId, saving, submitting, toast, revealValidationError]);
 
   const submitQuotation = useCallback(async () => {
     setError('');
-    setSavedMessage('');
     setShowValidation(true);
-    setShowSubmitConfirmation(false);
+
+    if (saving || submitting || operationInFlightRef.current) return;
 
     if (!isValid) {
-      window.requestAnimationFrame(() =>
-        firstInvalidRef.current?.scrollIntoView({ behavior: 'smooth' }),
-      );
+      revealValidationError();
       return;
     }
 
+    operationInFlightRef.current = true;
     setSubmitting(true);
     try {
-      const payload = toPayload(form);
-      const saved = quotationId
-        ? await updateCustomerQuotation(quotationId, payload)
-        : await createCustomerQuotation(payload);
-      const submitted = await submitCustomerQuotation(saved.id);
+      if (!quotationId || isDirty) {
+        setShowSubmitConfirmation(false);
+        setError('Please save the RFQ before submitting.');
+        toast.error('Unable to submit RFQ');
+        return;
+      }
+
+      const submitted = await submitCustomerQuotation(quotationId);
 
       setQuotationId(submitted.id);
       setQuotation(submitted);
       setLastSavedSnapshot(serializeForm(form));
       localStorage.removeItem(draftStorageKey);
+      setShowSubmitConfirmation(false);
+      toast.success('RFQ submitted successfully');
+      playFeedbackSound('/sounds/rfq-submit.mp3');
       navigate(`/customer/quotations/${submitted.id}`, { replace: true });
     } catch (submitError) {
       setError(
-        submitError instanceof Error ? submitError.message : 'Unable to submit quotation request.',
+        submitError instanceof Error ? submitError.message : 'Unable to submit RFQ request.',
       );
+      toast.error('Unable to submit RFQ');
     } finally {
       setSubmitting(false);
+      operationInFlightRef.current = false;
     }
-  }, [form, isValid, navigate, quotationId]);
+  }, [form, isDirty, isValid, navigate, quotationId, saving, submitting, toast, revealValidationError]);
 
   if (!canManageQuotation) {
     return (
       <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
-        Your role does not have permission to create quotations.
+        Your role does not have permission to create RFQs.
       </section>
     );
   }
@@ -274,7 +361,6 @@ export function CustomerQuotationNew() {
   if (loading) return <QuotationSkeleton />;
 
   const updateItem = (key: string, patch: Partial<FormItem>) => {
-    setSavedMessage('');
     setForm((current) => ({
       ...current,
       items: current.items.map((item) => (item.key === key ? { ...item, ...patch } : item)),
@@ -282,13 +368,11 @@ export function CustomerQuotationNew() {
   };
 
   const addRow = () => {
-    setSavedMessage('');
     setForm((current) => ({ ...current, items: [...current.items, initialItem()] }));
   };
 
   const removeSelectedRows = () => {
     if (selectedRows.size === 0) return;
-    setSavedMessage('');
     setForm((current) => {
       const remaining = current.items.filter((item) => !selectedRows.has(item.key));
       return { ...current, items: remaining.length > 0 ? remaining : [initialItem()] };
@@ -296,9 +380,68 @@ export function CustomerQuotationNew() {
     setSelectedRows(new Set());
   };
 
+  const removeRow = (key: string) => {
+    setForm((current) => {
+      const remaining = current.items.filter((item) => item.key !== key);
+      return { ...current, items: remaining.length > 0 ? remaining : [initialItem()] };
+    });
+    setSelectedRows((current) => {
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
+  };
+
   const updateForm = (patch: Partial<FormState>) => {
-    setSavedMessage('');
+    if ('palletQuantity' in patch) setPalletQuantityInputError('');
     setForm((current) => ({ ...current, ...patch }));
+  };
+
+  const openRequestedDatePicker = () => {
+    const input = requestedDateInputRef.current;
+    if (!input || input.disabled) return;
+
+    input.focus();
+    try {
+      (input as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
+    } catch {
+      // Some browsers only allow showPicker during direct user activation; focus keeps native input access.
+    }
+  };
+
+  const updatePalletRequired = (checked: boolean) => {
+    setPalletQuantityTouched(false);
+    setPalletQuantityInputError('');
+    updateForm(
+      checked
+        ? { palletRequired: true }
+        : { palletRequired: false, palletType: '', palletQuantity: '' },
+    );
+  };
+
+  const updatePalletQuantity = (value: string) => {
+    if (!digitsOnly(value)) {
+      setPalletQuantityInputError('Enter a valid whole number of pallets.');
+      return;
+    }
+    setPalletQuantityInputError('');
+    updateForm({ palletQuantity: value });
+  };
+
+  const handlePalletQuantityKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (isPermittedTextInputKey(event)) return;
+    if (!/^\d$/.test(event.key)) {
+      event.preventDefault();
+      setPalletQuantityInputError('Enter a valid whole number of pallets.');
+    }
+  };
+
+  const handlePalletQuantityPaste = (event: ClipboardEvent<HTMLInputElement>) => {
+    const pastedValue = event.clipboardData.getData('text');
+    if (!digitsOnly(pastedValue)) {
+      event.preventDefault();
+      setPalletQuantityInputError('Enter a valid whole number of pallets.');
+    }
   };
 
   const openPreview = async (action: QuotationPreviewAction) => {
@@ -314,58 +457,83 @@ export function CustomerQuotationNew() {
     setPreviewAction(action);
   };
 
+  const handleKeyboardShortcuts = (event: KeyboardEvent<HTMLDivElement>) => {
+    const shortcutKey = event.key.toLowerCase();
+    const isModifierShortcut = event.ctrlKey || event.metaKey;
+
+    if (isModifierShortcut && shortcutKey === 's') {
+      event.preventDefault();
+      if (isSubmitted || saving || submitting) return;
+      if (isSavedDraft) setShowSubmitConfirmation(true);
+      else void saveDraft();
+      return;
+    }
+
+    if (isModifierShortcut && event.key === 'Enter') {
+      event.preventDefault();
+      if (isSubmitted || saving || submitting) return;
+      setShowValidation(true);
+      if (isSavedDraft && isValid) setShowSubmitConfirmation(true);
+      return;
+    }
+
+    if (event.altKey && shortcutKey === 'a') {
+      event.preventDefault();
+      if (isSubmitted || saving || submitting) return;
+      addRow();
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      setMoreMenuOpen(false);
+      setActivePickerKey(null);
+    }
+  };
+
   return (
-    <div className="mx-auto w-full max-w-[1500px] space-y-3">
-      <section className="overflow-visible rounded-lg border border-[#e3e1e8] bg-white">
-        <header className="flex min-h-[58px] flex-col gap-3 border-b border-[#eceaf0] px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto w-full max-w-[1500px] bg-[var(--customer-surface)] text-[var(--customer-text)] [&_button:focus-visible]:outline [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-[var(--customer-primary)]" onKeyDown={handleKeyboardShortcuts}>
+      <section className={`overflow-visible transition-opacity ${formBusy ? 'opacity-75' : 'opacity-100'}`} aria-busy={formBusy}>
+        <header className="flex min-h-[58px] flex-col gap-3 border-b border-[var(--customer-border)] px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <h1 className="text-lg font-semibold text-[#1a1b23]">{documentTitle}</h1>
-            <StatusDot
-              label={isSubmitted ? formatQuotationStatus(quotation?.status) : isSavedDraft ? 'Saved' : 'Draft'}
-              submitted={isSubmitted}
-            />
+            <h1 className="text-lg font-semibold text-[var(--customer-text)]">{documentTitle}</h1>
+            <Badge
+              variant="outline"
+              className={statusBadgeLabel === 'Draft'
+                ? 'border-[var(--customer-danger)] bg-[var(--customer-danger-soft)] text-[var(--customer-danger)]'
+                : 'border-[var(--customer-border)] bg-[var(--customer-primary-soft)] text-[var(--customer-primary)]'}
+            >
+              {statusBadgeLabel}
+            </Badge>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             {!isSubmitted && (
-              <div className="hidden items-center gap-4 text-xs font-medium text-[#64748b] md:flex">
-                <span className="inline-flex items-center gap-1.5">
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${isDirty ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                  />
-                  {saving
-                    ? 'Saving...'
-                    : isDirty
-                      ? 'Unsaved changes'
-                      : savedMessage || (quotationId ? 'Saved' : 'Not saved yet')}
-                </span>
-              </div>
-            )}
-            {!isSubmitted && (
-              <button
+              <Button
                 type="button"
                 onClick={() => {
                   if (isSavedDraft) setShowSubmitConfirmation(true);
                   else void saveDraft();
                 }}
                 disabled={saving || submitting}
-                className="inline-flex h-9 items-center justify-center rounded-lg bg-[#54247a] px-5 text-sm font-semibold text-white transition hover:bg-[#472066] disabled:cursor-not-allowed disabled:opacity-60"
+                aria-busy={saving || submitting}
+                className="h-9 gap-2 rounded-lg bg-[#54247a] px-5 text-sm font-semibold text-white hover:bg-[#472066]"
               >
                 {saving || submitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : isSavedDraft ? (
-                  'Submit'
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {saving ? 'Saving' : 'Submitting'}
+                  </>
                 ) : (
-                  'Save'
+                  primaryActionLabel
                 )}
-              </button>
+              </Button>
             )}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setMoreMenuOpen((current) => !current)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#e3e1e8] bg-white text-slate-600 transition hover:border-[#54247a] hover:text-[#54247a]"
-                aria-label="Quotation actions"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--customer-border)] bg-[var(--customer-surface)] text-[var(--customer-text-secondary)] transition hover:border-[var(--customer-primary)] hover:text-[var(--customer-primary)]"
+                aria-label="RFQ actions"
                 aria-expanded={moreMenuOpen}
                 aria-haspopup="menu"
               >
@@ -374,7 +542,7 @@ export function CustomerQuotationNew() {
               {moreMenuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 top-11 z-30 w-44 overflow-hidden rounded-lg border border-[#e3e1e8] bg-white p-1.5 shadow-xl shadow-slate-900/10"
+                  className="absolute right-0 top-11 z-30 w-44 overflow-hidden rounded-lg border border-[var(--customer-border)] bg-[var(--customer-surface)] p-1.5 shadow-xl shadow-slate-900/10"
                 >
                   <QuotationMenuItem
                     icon={<Eye size={15} />}
@@ -400,70 +568,123 @@ export function CustomerQuotationNew() {
           </div>
         </header>
 
+        <div role="tablist" aria-label="RFQ sections" className="mx-4 flex border-b border-[var(--customer-border)] sm:mx-5">
+          {(['Details', 'Items', 'Review'] as const).map((label) => {
+            const section = label.toLowerCase();
+            return (
+              <button
+                key={section}
+                type="button"
+                role="tab"
+                id={`rfq-tab-${section}`}
+                aria-controls={`rfq-${section}`}
+                aria-selected={activeSection === section}
+                tabIndex={activeSection === section ? 0 : -1}
+                onClick={() => {
+                  setActiveSection(section);
+                  setActivePickerKey(null);
+                }}
+                onKeyDown={(event) => {
+                  const tabs = ['details', 'items', 'review'];
+                  const index = tabs.indexOf(section);
+                  const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length
+                    : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length
+                    : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : null;
+                  if (next === null) return;
+                  event.preventDefault();
+                  document.getElementById(`rfq-tab-${tabs[next]}`)?.click();
+                  document.getElementById(`rfq-tab-${tabs[next]}`)?.focus();
+                }}
+                className={`border-b-2 px-5 py-3 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--customer-primary)] sm:px-8 ${activeSection === section ? 'border-[var(--customer-primary)] text-[var(--customer-primary)]' : 'border-transparent text-[var(--customer-text-muted)] hover:text-[var(--customer-text)]'}`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
         {(error || isSubmitted) && (
-          <div className="border-b border-[#eceaf0] px-5 py-3">
+          <div className="border-b border-[var(--customer-border)] px-5 py-3">
             {error ? (
               <InlineMessage tone="error" message={error} />
             ) : (
               <InlineMessage
                 tone="success"
-                message="This quotation is pending Sales review and is now read-only."
+                message="This RFQ is pending Sales review and is now read-only."
               />
             )}
           </div>
         )}
 
-        <div className="grid divide-y divide-[#eceaf0] lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+        <div id="rfq-details" role="tabpanel" hidden={activeSection !== 'details'} tabIndex={0} aria-labelledby="rfq-tab-details" className="scroll-mt-5 focus-visible:outline focus-visible:outline-[var(--customer-primary)]">
           <DocumentSection title="Customer Information">
-            <dl className="grid gap-3 sm:grid-cols-[minmax(120px,0.8fr)_minmax(110px,0.7fr)_minmax(240px,1.5fr)] sm:gap-3">
+            <dl className="grid grid-cols-1 gap-5 sm:flex sm:flex-wrap [&>div]:w-full sm:[&>div]:w-[200px] sm:[&>div:last-child]:w-[240px]">
               <InfoField label="Company" value={account?.companyName} />
               <InfoField label="Contact Person" value={user?.name} />
-              <InfoField label="Customer ID" value={account?.id} compact />
+              <InfoField label="Customer ID" value={account?.id} compact copyable />
             </dl>
           </DocumentSection>
 
-          <DocumentSection title="Quotation Details">
+          <DocumentSection title="RFQ Details">
             <div
-              ref={validationErrors.length > 0 ? firstInvalidRef : undefined}
-              className="grid gap-4 sm:grid-cols-2"
+              className="flex flex-col gap-5 sm:flex-row sm:flex-wrap sm:items-start [&>*]:w-full sm:[&>*:first-child]:w-[280px] sm:[&>*:nth-child(2)]:w-[240px] sm:[&>*:nth-child(3)]:w-[340px]"
             >
               <Field
                 label="Requested Delivery Date"
+                controlId="rfq-requested-date"
+                errorId="rfq-requested-date-error"
                 error={showValidation ? getRequestedDateError(form) : ''}
               >
                 <div className="relative">
-                  <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
+                  <button
+                    type="button"
+                    disabled={isSubmitted}
+                    onClick={openRequestedDatePicker}
+                    className="absolute right-1 top-1/2 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-[var(--customer-text-secondary)] transition hover:text-[var(--customer-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--customer-primary)] disabled:pointer-events-none disabled:opacity-50"
+                    aria-label="Open requested delivery date picker"
+                  >
+                    <CalendarDays className="h-4 w-4" />
+                  </button>
+                  <Input
+                    ref={requestedDateInputRef}
+                    id="rfq-requested-date"
                     type="date"
                     min={today}
                     value={form.requestedDate}
                     disabled={isSubmitted}
                     onChange={(event) => updateForm({ requestedDate: event.target.value })}
-                    className={`${fieldClass} pl-9`}
+                    className="pl-3 pr-10 leading-5 [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:p-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-3 [&::-webkit-calendar-picker-indicator]:opacity-0"
+                    aria-describedby={showValidation && getRequestedDateError(form) ? 'rfq-requested-date-error' : undefined}
+                    aria-invalid={Boolean(showValidation && getRequestedDateError(form))}
                   />
                 </div>
               </Field>
 
               <Field label="Fulfilment">
-                <NativeTomSelect
+                <Select
                   value={form.fulfilmentType}
                   disabled={isSubmitted}
-                  onChange={(event) =>
-                    updateForm({ fulfilmentType: event.target.value as QuotationFulfilmentType })
+                  onValueChange={(value) =>
+                    updateForm({ fulfilmentType: value as QuotationFulfilmentType })
                   }
-                  className={fieldClass}
                 >
-                  <option value="DELIVERY">Delivery</option>
-                  <option value="PICKUP">Pick-Up</option>
-                </NativeTomSelect>
+                  <SelectTrigger className="rounded-md" aria-label="Fulfilment">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DELIVERY">Delivery</SelectItem>
+                    <SelectItem value="PICKUP">Pick-Up</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
 
               {form.fulfilmentType === 'DELIVERY' ? (
                 <div className="sm:col-span-2">
-                  <div className="flex items-end gap-3">
-                    <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="min-w-0 w-full [&_.ts-control]:!border-[var(--customer-border)] [&_.ts-control]:!shadow-none [&_.ts-wrapper.focus_.ts-control]:!ring-2 [&_.ts-wrapper.focus_.ts-control]:!ring-[var(--customer-primary-soft)]">
                       <Field
                         label="Delivery Location"
+                        errorId="rfq-delivery-location-error"
                         error={
                           showValidation && !form.shipToLocationId
                             ? 'Delivery location is required.'
@@ -475,6 +696,11 @@ export function CustomerQuotationNew() {
                           disabled={isSubmitted}
                           onChange={(event) => updateForm({ shipToLocationId: event.target.value })}
                           className={fieldClass}
+                          aria-label="Delivery Location"
+                          aria-invalid={showValidation && !form.shipToLocationId}
+                          aria-describedby={showValidation && !form.shipToLocationId ? 'rfq-delivery-location-error' : undefined}
+                          placeholder=""
+                          searchPlaceholder="Search delivery locations..."
                         >
                           <option value="">Select delivery location</option>
                           {deliveryLocations.map((location) => (
@@ -490,7 +716,7 @@ export function CustomerQuotationNew() {
                         href={`https://www.openstreetmap.org/?mlat=${selectedShipTo.latitude}&mlon=${selectedShipTo.longitude}#map=16/${selectedShipTo.latitude}/${selectedShipTo.longitude}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="mb-0.5 inline-flex h-9 shrink-0 items-center gap-1.5 px-2 text-xs font-semibold text-[#54247a] hover:text-[#472066]"
+                        className="inline-flex h-8 shrink-0 items-center gap-1.5 text-xs font-semibold text-[var(--customer-primary)] hover:text-[var(--customer-primary-hover)]"
                       >
                         <MapPin size={14} /> View Map <ExternalLink size={12} />
                       </a>
@@ -507,6 +733,7 @@ export function CustomerQuotationNew() {
                   >
                     <NativeTomSelect
                       value={form.pickupLocationId}
+                      aria-label="Pickup From"
                       disabled={isSubmitted}
                       onChange={(event) => updateForm({ pickupLocationId: event.target.value })}
                       className={fieldClass}
@@ -523,9 +750,117 @@ export function CustomerQuotationNew() {
               )}
             </div>
           </DocumentSection>
+      <DocumentSection title="Pallet Details">
+          <div className="space-y-5">
+            <div>
+              <div className="flex items-center gap-3">
+                <p
+                  id="pallet-required-label"
+                  className="text-sm font-semibold text-[var(--customer-text)]"
+                >
+                  Pallet Required
+                </p>
+                <Switch
+                  checked={form.palletRequired}
+                  disabled={isSubmitted}
+                  onCheckedChange={updatePalletRequired}
+                  aria-labelledby="pallet-required-label"
+                />
+              </div>
+              <div>
+                <p className="mt-0.5 text-xs text-[var(--customer-text-muted)]">
+                  Add pallets to this RFQ
+                </p>
+              </div>
+            </div>
+
+            {form.palletRequired && (
+              <div className="flex flex-col gap-5 sm:flex-row sm:flex-wrap sm:items-start">
+                <div className="w-full sm:w-[300px]">
+                  <Field
+                    label="Pallet Type"
+                    error={palletTypeError}
+                    required
+                    errorId="pallet-type-error"
+                  >
+                    <NativeTomSelect
+                      value={form.palletType}
+                      dropdownPlacement="bottom"
+                      disabled={isSubmitted}
+                      onChange={(event) => updateForm({ palletType: event.target.value })}
+                      className={fieldClass}
+                      aria-label="Pallet Type"
+                      aria-required="true"
+                      aria-invalid={Boolean(palletTypeError)}
+                      aria-describedby={palletTypeError ? 'pallet-type-error' : undefined}
+                      placeholder="Select pallet type"
+                      searchPlaceholder="Search pallet types..."
+                    >
+                      <option value="">Select pallet type</option>
+                      {palletTypeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </NativeTomSelect>
+                  </Field>
+                </div>
+                <div className="w-full sm:w-[180px]">
+                  <Field
+                    label="Pallet Quantity"
+                    error={palletQuantityError}
+                    required
+                    errorId="pallet-quantity-error"
+                  >
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      aria-required="true"
+                      pattern="[0-9]*"
+                      autoComplete="off"
+                      value={form.palletQuantity}
+                      disabled={isSubmitted}
+                      onKeyDown={handlePalletQuantityKeyDown}
+                      onPaste={handlePalletQuantityPaste}
+                      onBlur={() => setPalletQuantityTouched(true)}
+                      onChange={(event) => updatePalletQuantity(event.target.value)}
+                      aria-invalid={Boolean(palletQuantityError)}
+                      aria-describedby={palletQuantityError ? 'pallet-quantity-error' : undefined}
+                    />
+                  </Field>
+                </div>
+              </div>
+            )}
+          </div>
+      </DocumentSection>
+          <DocumentSection title="Special Instructions">
+            <div>
+              <label htmlFor="rfq-notes" className="sr-only">
+                Special Instructions
+              </label>
+              <Textarea
+                id="rfq-notes"
+                aria-describedby={showValidation && form.notes.length > 1000 ? 'rfq-notes-error' : undefined}
+                value={form.notes}
+                maxLength={1000}
+                rows={3}
+                disabled={isSubmitted}
+                onChange={(event) => updateForm({ notes: event.target.value })}
+                className="min-h-[72px] resize-y"
+                aria-invalid={showValidation && form.notes.length > 1000}
+              />
+              {showValidation && form.notes.length > 1000 && (
+                <p id="rfq-notes-error" className="mt-1 text-xs font-medium text-[var(--customer-danger)]">
+                  Use 1000 characters or fewer.
+                </p>
+              )}
+              <p className="mt-1 text-right text-[11px] text-[var(--customer-text-muted)]">{form.notes.length} / 1000</p>
+            </div>
+          </DocumentSection>
         </div>
       </section>
 
+      <div id="rfq-items" role="tabpanel" hidden={activeSection !== 'items'} tabIndex={0} aria-labelledby="rfq-tab-items" className="focus-visible:outline focus-visible:outline-[var(--customer-primary)]">
       <ItemsTable
         form={form}
         isSubmitted={isSubmitted}
@@ -543,30 +878,20 @@ export function CustomerQuotationNew() {
         onSetProductSearch={setProductSearch}
         onUpdateItem={updateItem}
         onAddRow={addRow}
+        onRemoveRow={removeRow}
         onRemoveSelectedRows={removeSelectedRows}
       />
+      </div>
 
-      <section className="rounded-lg border border-[#e3e1e8] bg-white px-5 py-4">
-        <Field
-          label="Special Instructions"
-          error={showValidation && form.notes.length > 1000 ? 'Use 1000 characters or fewer.' : ''}
-        >
-          <textarea
-            value={form.notes}
-            maxLength={1000}
-            rows={3}
-            disabled={isSubmitted}
-            onChange={(event) => updateForm({ notes: event.target.value })}
-            placeholder="Optional delivery/site requirements or quotation comments"
-            className="w-full resize-y rounded-lg border border-[#e3e1e8] bg-white px-3 py-2.5 text-sm text-[#1a1b23] outline-none transition placeholder:text-slate-400 focus:border-[#54247a] focus:ring-2 focus:ring-[#54247a]/10 disabled:bg-slate-50"
-          />
-          <p className="mt-1 text-right text-[11px] text-slate-400">{form.notes.length} / 1000</p>
-        </Field>
+      <section id="rfq-review" role="tabpanel" hidden={activeSection !== 'review'} tabIndex={0} aria-labelledby="rfq-tab-review" className="mx-4 scroll-mt-5 py-4 focus-visible:outline focus-visible:outline-[var(--customer-primary)] sm:mx-5">
+        <ReviewSummary
+          account={account}
+          userName={user?.name}
+          form={form}
+          selectedPickup={selectedPickup}
+          selectedShipTo={selectedShipTo}
+        />
       </section>
-
-      <p className="px-1 text-xs font-medium text-[#64748b]">
-        Last saved: {quotationId ? savedMessage || 'Draft available' : 'Not saved yet'}
-      </p>
 
       {showSubmitConfirmation && (
         <ConfirmationDialog
@@ -593,9 +918,9 @@ export function CustomerQuotationNew() {
 }
 
 const fieldClass =
-  'h-10 w-full rounded-lg border border-[#e3e1e8] bg-white px-3 text-sm font-medium text-[#1a1b23] outline-none transition placeholder:text-slate-400 focus:border-[#54247a] focus:ring-2 focus:ring-[#54247a]/10 disabled:bg-slate-50 disabled:text-slate-600';
+  'h-10 w-full rounded-md border border-[var(--customer-border)] bg-[var(--customer-input)] px-3 text-sm font-medium text-[var(--customer-text)] outline-none transition placeholder:text-[var(--customer-text-muted)] focus:border-[var(--customer-primary)] focus:ring-2 focus:ring-[var(--customer-primary)] disabled:cursor-not-allowed disabled:opacity-60';
 const checkboxClass =
-  'h-4 w-4 rounded border-slate-300 text-[#54247a] accent-[#54247a] focus:ring-[#54247a]';
+  'h-4 w-4 rounded border-[var(--customer-border)] accent-[var(--customer-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--customer-primary)]';
 
 type ItemsTableProps = {
   form: FormState;
@@ -614,19 +939,20 @@ type ItemsTableProps = {
   onSetProductSearch: (value: string) => void;
   onUpdateItem: (key: string, patch: Partial<FormItem>) => void;
   onAddRow: () => void;
+  onRemoveRow: (key: string) => void;
   onRemoveSelectedRows: () => void;
 };
 
 function ItemsTable(props: ItemsTableProps) {
   const { form, isSubmitted, selectedRows, expandedRows } = props;
   return (
-    <section className="overflow-visible rounded-lg border border-[#e3e1e8] bg-white">
-      <div className="border-b border-[#eceaf0] px-5 py-3">
-        <h2 className="text-sm font-semibold text-[#54247a]">Items</h2>
+    <section aria-label="RFQ items" className="mx-4 overflow-visible border-b border-[var(--customer-border)] py-4 sm:mx-5">
+      <div className="pb-4">
+        <h2 className="text-sm font-semibold text-[var(--customer-primary)]">Items</h2>
       </div>
       <div className={`overflow-x-auto ${props.activePickerKey ? 'pb-72' : ''}`}>
         <div className="min-w-[940px]">
-          <div className="grid grid-cols-[44px_170px_minmax(280px,1fr)_130px_110px_130px_48px] items-center border-b border-[#e3e1e8] bg-[#f8fafc] px-3 py-2.5 text-xs font-semibold text-[#4b4d5c]">
+          <div className="grid grid-cols-[44px_170px_minmax(280px,1fr)_130px_110px_130px_48px] items-center border-b border-[var(--customer-border)] bg-[var(--customer-surface-secondary)] px-3 py-2.5 text-xs font-semibold text-[var(--customer-text-secondary)]">
             {!isSubmitted ? (
               <input
                 type="checkbox"
@@ -636,7 +962,7 @@ function ItemsTable(props: ItemsTableProps) {
                     event.target.checked ? new Set(form.items.map((item) => item.key)) : new Set(),
                   )
                 }
-                aria-label="Select all quotation items"
+                aria-label="Select all RFQ items"
                 className={checkboxClass}
               />
             ) : (
@@ -647,7 +973,7 @@ function ItemsTable(props: ItemsTableProps) {
             <span>Quantity (TON)</span>
             <span>UOM</span>
             <span>Packaging</span>
-            <span />
+            <span>Action</span>
           </div>
 
           {form.items.map((item, index) => (
@@ -677,6 +1003,7 @@ function ItemsTable(props: ItemsTableProps) {
               onPickerClose={() => props.onSetActivePickerKey(null)}
               onSearchChange={props.onSetProductSearch}
               onChange={(patch) => props.onUpdateItem(item.key, patch)}
+              onRemove={() => props.onRemoveRow(item.key)}
               onToggleExpanded={() =>
                 props.onSetExpandedRows((current) => {
                   const next = new Set(current);
@@ -693,19 +1020,18 @@ function ItemsTable(props: ItemsTableProps) {
         <button
           type="button"
           onClick={props.onAddRow}
-          className="mx-4 my-3 inline-flex items-center gap-1.5 text-sm font-semibold text-[#54247a] hover:text-[#472066]"
+          className="my-3 inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--customer-primary)] hover:text-[var(--customer-primary-hover)]"
         >
           <Plus size={15} /> Add Row
         </button>
       )}
-      {!isSubmitted && (
-        <div className="flex min-h-12 items-center justify-between border-t border-[#eceaf0] bg-[#fdfbfd] px-5 py-2">
-          <span className="text-xs font-medium text-[#64748b]">{selectedRows.size} selected</span>
+      {!isSubmitted && selectedRows.size > 0 && (
+        <div className="flex min-h-12 items-center justify-between border-t border-[var(--customer-border)] bg-[var(--customer-surface-secondary)] px-5 py-2">
+          <span className="text-xs font-medium text-[var(--customer-text-muted)]">{selectedRows.size} selected</span>
           <button
             type="button"
-            disabled={selectedRows.size === 0}
             onClick={props.onRemoveSelectedRows}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-300"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-semibold text-[var(--customer-danger)] hover:bg-[var(--customer-danger-soft)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 size={14} /> Remove
           </button>
@@ -724,25 +1050,25 @@ type QuotationItemRowProps = {
   searchValue: string;
   products: CustomerProduct[];
   productsLoading: boolean;
-  errors: Partial<Record<'product' | 'quantity' | 'palletType' | 'palletQuantity', string>>;
+  errors: Partial<Record<'product' | 'quantity', string>>;
   onSelectedChange: (selected: boolean) => void;
   onPickerOpen: () => void;
   onPickerClose: () => void;
   onSearchChange: (value: string) => void;
   onChange: (patch: Partial<FormItem>) => void;
+  onRemove: () => void;
   onToggleExpanded: () => void;
 };
 
 function QuotationItemRow(props: QuotationItemRowProps) {
   const { item, errors } = props;
-  const bagProduct = item.product?.packagingType.toLowerCase().includes('bag') ?? false;
   const packagingQuantity = item.product
     ? packagingQuantityForTons(Number(item.quantity), item.product.unitWeightKg, item.product.uom)
     : null;
 
   return (
-    <div className="border-b border-[#eceaf0] last:border-b-0">
-      <div className="grid min-h-[58px] grid-cols-[44px_170px_minmax(280px,1fr)_130px_110px_130px_48px] items-center px-3 text-sm hover:bg-[#fdfbfd]">
+    <div className="border-b border-[var(--customer-border)] last:border-b-0">
+      <div className="grid min-h-[58px] grid-cols-[44px_170px_minmax(280px,1fr)_130px_110px_130px_48px] items-center px-3 text-sm hover:bg-[var(--customer-surface-secondary)]">
         {!props.readOnly ? (
           <input
             type="checkbox"
@@ -761,27 +1087,28 @@ function QuotationItemRow(props: QuotationItemRowProps) {
               type="button"
               disabled={props.readOnly}
               onClick={props.onPickerOpen}
-              className="w-full truncate text-left text-sm font-semibold text-[#1a1b23] disabled:cursor-default"
+              className="w-full truncate text-left text-sm font-semibold text-[var(--customer-text)] disabled:cursor-default"
             >
               {item.product.productCode}
             </button>
           ) : (
             <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
               <input
                 autoFocus={props.pickerOpen}
                 value={props.searchValue}
                 disabled={props.readOnly}
                 onFocus={props.onPickerOpen}
                 onChange={(event) => props.onSearchChange(event.target.value)}
-                placeholder="Search item"
-                className={`${fieldClass} h-9 pl-8 pr-8`}
+                className={`${fieldClass} h-9 pr-8`}
+                aria-label="Search item code or name"
+                aria-invalid={Boolean(errors.product)}
+                aria-describedby={errors.product ? `product-error-${item.key}` : undefined}
               />
               {props.pickerOpen && (
                 <button
                   type="button"
                   onClick={props.onPickerClose}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--customer-text-muted)] hover:text-[var(--customer-text)]"
                   aria-label="Close product picker"
                 >
                   <X size={14} />
@@ -795,18 +1122,14 @@ function QuotationItemRow(props: QuotationItemRowProps) {
               loading={props.productsLoading}
               selectedProductId={item.product?.id}
               onSelect={(product) => {
-                const nextIsBag = product.packagingType.toLowerCase().includes('bag');
                 props.onChange({
                   product,
-                  palletRequired: nextIsBag ? item.palletRequired : false,
-                  palletType: nextIsBag ? item.palletType : '',
-                  palletQuantity: nextIsBag ? item.palletQuantity : '',
                 });
                 props.onPickerClose();
               }}
             />
           )}
-          {errors.product && <RowError message={errors.product} />}
+          {errors.product && <RowError id={`product-error-${item.key}`} message={errors.product} />}
         </div>
 
         <div className="flex min-w-0 items-center gap-3 pr-4">
@@ -818,87 +1141,64 @@ function QuotationItemRow(props: QuotationItemRowProps) {
                 size="thumbnail"
               />
               <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold text-[#1a1b23]">
+                <span className="block truncate text-sm font-semibold text-[var(--customer-text)]">
                   {item.product.productName}
                 </span>
-                <span className="mt-0.5 block truncate text-xs text-[#64748b]">
+                <span className="mt-0.5 block truncate text-xs text-[var(--customer-text-muted)]">
                   {item.product.shortDescription || item.product.category}
                 </span>
               </span>
             </>
           ) : (
-            <span className="text-sm text-slate-400">Select an item</span>
+            <span className="text-sm text-[var(--customer-text-muted)]">Item details appear after selection</span>
           )}
         </div>
 
         <div className="pr-3">
           <input
-            type="number"
-            min="0"
-            step="0.001"
+            type="text"
             inputMode="decimal"
+            autoComplete="off"
             value={item.quantity}
             disabled={props.readOnly}
-            onChange={(event) => props.onChange({ quantity: event.target.value })}
-            placeholder="0"
-            className={`${fieldClass} h-9 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+            onKeyDown={handleTonQuantityKeyDown}
+            onPaste={(event) => {
+              const pastedValue = event.clipboardData.getData('text');
+              if (!isValidTonQuantityPaste(pastedValue)) event.preventDefault();
+            }}
+            onChange={(event) => {
+              if (isPermittedTonQuantityInput(event.target.value)) {
+                props.onChange({ quantity: event.target.value });
+              }
+            }}
+            aria-label={`Quantity (TON) for ${item.product?.productName ?? 'blank item'}`}
+            aria-describedby={errors.quantity ? `quantity-error-${item.key}` : undefined}
+            className={`${fieldClass} h-9`}
+            aria-invalid={Boolean(errors.quantity)}
           />
-          {errors.quantity && <RowError message={errors.quantity} />}
+          {errors.quantity && <RowError id={`quantity-error-${item.key}`} message={errors.quantity} />}
           {packagingQuantity !== null && (
-            <p className="mt-1 text-[11px] text-[#64748b]">
+            <p className="mt-1 text-[11px] text-[var(--customer-text-muted)]">
               Equivalent: {formatQuantity(packagingQuantity)} bags
             </p>
           )}
         </div>
         <CompactValue value={item.product ? 'TON' : '—'} />
         <CompactValue value={item.product?.packagingType ?? '—'} />
-        <button
-          type="button"
-          disabled={!bagProduct}
-          onClick={props.onToggleExpanded}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-[#f6f2fa] hover:text-[#54247a] disabled:cursor-default disabled:opacity-25"
-          aria-label="Toggle additional item options"
-        >
-          <ChevronDown size={16} className={`transition ${props.expanded ? 'rotate-180' : ''}`} />
-        </button>
+        {!props.readOnly ? (
+          <button
+            type="button"
+            onClick={props.onRemove}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--customer-text-secondary)] hover:bg-[var(--customer-danger-soft)] hover:text-[var(--customer-danger)]"
+            title="Remove item"
+            aria-label={`Remove ${item.product?.productName ?? 'blank item'}`}
+          >
+            <Trash2 size={15} />
+          </button>
+        ) : (
+          <span />
+        )}
       </div>
-
-      {props.expanded && bagProduct && (
-        <div className="grid gap-4 border-t border-[#eceaf0] bg-[#f8fafc] px-14 py-3 sm:grid-cols-3">
-          <label className="flex h-10 items-center gap-2 text-sm font-medium text-[#1a1b23]">
-            <input
-              type="checkbox"
-              checked={item.palletRequired}
-              disabled={props.readOnly}
-              onChange={(event) => props.onChange({ palletRequired: event.target.checked })}
-              className={checkboxClass}
-            />
-            Pallet Required
-          </label>
-          {item.palletRequired && (
-            <>
-              <Field label="Pallet Type" error={errors.palletType}>
-                <input
-                  value={item.palletType}
-                  disabled={props.readOnly}
-                  onChange={(event) => props.onChange({ palletType: event.target.value })}
-                  className={fieldClass}
-                />
-              </Field>
-              <Field label="Pallet Quantity" error={errors.palletQuantity}>
-                <input
-                  type="number"
-                  min="1"
-                  value={item.palletQuantity}
-                  disabled={props.readOnly}
-                  onChange={(event) => props.onChange({ palletQuantity: event.target.value })}
-                  className={fieldClass}
-                />
-              </Field>
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -915,21 +1215,21 @@ function ProductPicker({
   onSelect: (product: CustomerProduct) => void;
 }) {
   return (
-    <div className="absolute left-0 top-11 z-30 max-h-72 w-[390px] overflow-y-auto rounded-lg border border-[#e3e1e8] bg-white shadow-xl shadow-slate-900/10">
+    <div className="absolute left-0 top-11 z-30 max-h-72 w-[390px] overflow-y-auto rounded-lg border border-[var(--customer-border)] bg-[var(--customer-surface)] text-[var(--customer-text)] shadow-xl shadow-slate-900/10">
       {loading ? (
-        <div className="flex items-center gap-2 px-3 py-4 text-sm text-[#64748b]">
+        <div className="flex items-center gap-2 px-3 py-4 text-sm text-[var(--customer-text-muted)]">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading products
         </div>
       ) : products.length === 0 ? (
-        <p className="px-3 py-4 text-sm text-[#64748b]">No active products found.</p>
+        <p className="px-3 py-4 text-sm text-[var(--customer-text-muted)]">No active products found.</p>
       ) : (
         products.map((product) => (
           <button
             key={product.id}
             type="button"
             onClick={() => onSelect(product)}
-            className={`flex w-full items-center gap-3 border-b border-[#eceaf0] px-3 py-2.5 text-left last:border-b-0 hover:bg-[#f6f2fa] ${selectedProductId === product.id ? 'bg-[#f6f2fa]' : ''}`}
+            className={`flex w-full items-center gap-3 border-b border-[var(--customer-border)] px-3 py-2.5 text-left last:border-b-0 hover:bg-[var(--customer-primary-soft)] ${selectedProductId === product.id ? 'bg-[var(--customer-primary-soft)]' : ''}`}
           >
             <ProductImage
               image={product.image}
@@ -937,17 +1237,17 @@ function ProductPicker({
               size="thumbnail"
             />
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-xs font-semibold text-[#54247a]">
+              <span className="block truncate text-xs font-semibold text-[var(--customer-primary)]">
                 {product.productCode}
               </span>
-              <span className="mt-0.5 block truncate text-sm font-semibold text-[#1a1b23]">
+              <span className="mt-0.5 block truncate text-sm font-semibold text-[var(--customer-text)]">
                 {product.productName}
               </span>
-              <span className="mt-0.5 block truncate text-xs text-[#64748b]">
+              <span className="mt-0.5 block truncate text-xs text-[var(--customer-text-muted)]">
                 {product.packagingType} · {product.uom}
               </span>
             </span>
-            {selectedProductId === product.id && <Check size={16} className="text-[#54247a]" />}
+            {selectedProductId === product.id && <Check size={16} className="text-[var(--customer-primary)]" />}
           </button>
         ))
       )}
@@ -955,13 +1255,124 @@ function ProductPicker({
   );
 }
 
+function ReviewSummary({
+  account,
+  userName,
+  form,
+  selectedPickup,
+  selectedShipTo,
+}: {
+  account: { companyName?: string | null } | null;
+  userName: string | null | undefined;
+  form: FormState;
+  selectedPickup: PickupLocation | undefined;
+  selectedShipTo: CustomerLocation | undefined;
+}) {
+  const fulfilmentLabel = form.fulfilmentType === 'DELIVERY' ? 'Delivery' : 'Pick-Up';
+  const locationLabel =
+    form.fulfilmentType === 'DELIVERY'
+      ? formatCustomerLocation(selectedShipTo)
+      : formatPickupLocation(selectedPickup);
+  const visibleItems = form.items.filter((item) => item.product || item.quantity);
+
+  return (
+    <div className="space-y-5">
+      <h2 className="text-sm font-semibold text-[var(--customer-primary)]">Review</h2>
+
+      <ReviewSection title="Customer">
+        <ReviewRow label="Company" value={account?.companyName} />
+        <ReviewRow label="Contact Person" value={userName} />
+      </ReviewSection>
+
+      <ReviewSection title="RFQ Details">
+        <ReviewRow label="Delivery Date" value={formatReviewDate(form.requestedDate)} />
+        <ReviewRow label="Fulfilment" value={fulfilmentLabel} />
+        <ReviewRow
+          label={form.fulfilmentType === 'DELIVERY' ? 'Delivery Location' : 'Pickup From'}
+          value={locationLabel}
+        />
+      </ReviewSection>
+
+      <ReviewSection title="Pallet">
+        <ReviewRow label="Required" value={form.palletRequired ? 'Yes' : 'No'} />
+        {form.palletRequired && (
+          <>
+            <ReviewRow label="Pallet Type" value={form.palletType} />
+            <ReviewRow label="Pallet Quantity" value={form.palletQuantity} />
+          </>
+        )}
+      </ReviewSection>
+
+      <ReviewSection title="Items">
+        <div className="overflow-x-auto">
+          <div className="min-w-[680px]">
+            <div className="grid grid-cols-[minmax(240px,1fr)_130px_100px_140px] border-b border-[var(--customer-border)] py-2 text-xs font-semibold text-[var(--customer-text-secondary)]">
+              <span>Item</span>
+              <span>Quantity</span>
+              <span>UOM</span>
+              <span>Packaging</span>
+            </div>
+            {visibleItems.length > 0 ? (
+              visibleItems.map((item) => (
+                <div
+                  key={item.key}
+                  className="grid grid-cols-[minmax(240px,1fr)_130px_100px_140px] border-b border-[var(--customer-border)] py-2 text-sm last:border-b-0"
+                >
+                  <span className="truncate pr-4 font-medium text-[var(--customer-text)]">
+                    {item.product?.productName ?? 'Not selected'}
+                  </span>
+                  <span className="text-[var(--customer-text)]">{item.quantity || 'Not provided'}</span>
+                  <span className="text-[var(--customer-text-secondary)]">
+                    {item.product ? 'TON' : 'Not provided'}
+                  </span>
+                  <span className="text-[var(--customer-text-secondary)]">
+                    {item.product?.packagingType ?? 'Not provided'}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <p className="py-2 text-sm text-[var(--customer-text-muted)]">No items added</p>
+            )}
+          </div>
+        </div>
+      </ReviewSection>
+
+      <ReviewSection title="Special Instructions">
+        <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--customer-text)]">
+          {form.notes.trim() || 'No special instructions'}
+        </p>
+      </ReviewSection>
+    </div>
+  );
+}
+
+function ReviewSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="border-b border-[var(--customer-border)] pb-4 last:border-b-0">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--customer-text-secondary)]">
+        {title}
+      </h3>
+      <div className="mt-3 space-y-2">{children}</div>
+    </section>
+  );
+}
+
+function ReviewRow({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div className="grid gap-1 text-sm sm:grid-cols-[180px_minmax(0,1fr)]">
+      <span className="font-medium text-[var(--customer-text-secondary)]">{label}</span>
+      <span className="min-w-0 text-[var(--customer-text)]">{value || 'Not provided'}</span>
+    </div>
+  );
+}
+
 function DocumentSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="px-5 py-5">
-      <h2 className="border-b border-[#eceaf0] pb-3 text-sm font-semibold text-[#54247a]">
+    <section className="mx-4 border-b border-[var(--customer-border)] py-4 sm:mx-5">
+      <h2 className="text-sm font-semibold text-[var(--customer-primary)]">
         {title}
       </h2>
-      <div className="pt-5">{children}</div>
+      <div className="pt-4">{children}</div>
     </section>
   );
 }
@@ -970,21 +1381,37 @@ function InfoField({
   label,
   value,
   compact = false,
+  copyable = false,
 }: {
   label: string;
   value: string | null | undefined;
   compact?: boolean;
+  copyable?: boolean;
 }) {
   return (
     <div className="min-w-0">
-      <dt className="text-xs font-medium text-[#64748b]">{label}</dt>
-      <dd
-        className={`mt-1 font-semibold text-[#1a1b23] ${
-          compact ? 'break-all text-[11px] leading-4' : 'truncate text-sm'
-        }`}
-        title={value ?? undefined}
-      >
-        {value || 'Not provided'}
+      <dt className="text-xs font-medium text-[var(--customer-text-secondary)]">{label}</dt>
+      <dd className="mt-1 flex min-w-0 items-center gap-2" title={value ?? undefined}>
+        <span
+          className={`flex h-10 min-w-0 flex-1 items-center rounded-md border border-[var(--customer-border)] bg-[var(--customer-surface-secondary)] px-3 font-medium text-[var(--customer-text)] ${
+            compact
+              ? 'text-[13px] leading-5'
+              : 'text-sm leading-5'
+          }`}
+        >
+          <span className="truncate">{value || 'Not provided'}</span>
+        </span>
+        {copyable && value && (
+          <button
+            type="button"
+            onClick={() => void navigator.clipboard?.writeText(value)}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--customer-text-secondary)] hover:bg-[var(--customer-primary-soft)] hover:text-[var(--customer-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--customer-primary)]"
+            title={`Copy ${label}`}
+            aria-label={`Copy ${label}`}
+          >
+            <Copy size={13} />
+          </button>
+        )}
       </dd>
     </div>
   );
@@ -994,46 +1421,67 @@ function Field({
   label,
   children,
   error,
+  required = false,
+  errorId,
+  controlId,
 }: {
   label: string;
   children: ReactNode;
   error?: string | undefined;
+  required?: boolean;
+  errorId?: string | undefined;
+  controlId?: string | undefined;
 }) {
+  const Wrapper = controlId ? 'div' : 'label';
+  const labelContent = (
+    <>
+      {label}
+      {required && (
+        <>
+          <span aria-hidden="true"> *</span>
+          <span className="sr-only"> required</span>
+        </>
+      )}
+    </>
+  );
   return (
-    <label className="block">
-      <span className="mb-1.5 block text-xs font-medium text-[#4b4d5c]">{label}</span>
+    <Wrapper className="block min-w-0">
+      {controlId ? (
+        <label htmlFor={controlId} className="mb-1.5 block text-xs font-medium text-[var(--customer-text-secondary)]">
+          {labelContent}
+        </label>
+      ) : (
+        <span className="mb-1.5 block text-xs font-medium text-[var(--customer-text-secondary)]">
+          {labelContent}
+        </span>
+      )}
       {children}
-      {error && <p className="mt-1 text-xs font-medium text-[#b42318]">{error}</p>}
-    </label>
+      {error && (
+        <p id={errorId} className="mt-1 text-xs font-medium text-[var(--customer-danger)]">
+          {error}
+        </p>
+      )}
+    </Wrapper>
   );
 }
 
 function CompactValue({ value }: { value: string }) {
   return (
-    <span className="mr-3 flex h-9 items-center rounded-lg border border-[#e3e1e8] bg-[#f8fafc] px-3 text-xs font-medium text-[#4b4d5c]">
+    <span className="mr-3 flex h-9 items-center rounded-md bg-[var(--customer-surface-secondary)] px-3 text-xs font-medium text-[var(--customer-text-secondary)]">
       {value}
     </span>
   );
 }
 
-function RowError({ message }: { message: string }) {
-  return <p className="mt-1 truncate text-[10px] font-medium text-[#b42318]">{message}</p>;
-}
-
-function StatusDot({ label, submitted }: { label: string; submitted: boolean }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#4b4d5c]">
-      <span className={`h-1.5 w-1.5 rounded-full ${submitted ? 'bg-amber-500' : 'bg-slate-500'}`} />
-      {label}
-    </span>
-  );
+function RowError({ message, id }: { message: string; id?: string }) {
+  return <p id={id} className="mt-1 text-[11px] font-medium text-[var(--customer-danger)]">{message}</p>;
 }
 
 function InlineMessage({ tone, message }: { tone: 'error' | 'success'; message: string }) {
   const errorTone = tone === 'error';
   return (
     <div
-      className={`flex items-center gap-2 rounded-md px-3 py-2 text-xs font-medium ${errorTone ? 'bg-[#fdecec] text-[#b42318]' : 'bg-emerald-50 text-emerald-700'}`}
+      className={`flex items-center gap-2 rounded-md px-3 py-2 text-xs font-medium ${errorTone ? 'bg-[var(--customer-danger-soft)] text-[var(--customer-danger)]' : 'bg-[var(--customer-success-soft)] text-[var(--customer-success)]'}`}
     >
       {errorTone ? <AlertCircle size={15} /> : <Check size={15} />}
       {message}
@@ -1055,7 +1503,7 @@ function QuotationMenuItem({
       type="button"
       role="menuitem"
       onClick={onClick}
-      className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-[#f6f2fa] hover:text-[#54247a]"
+      className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-xs font-semibold text-[var(--customer-text-secondary)] transition hover:bg-[var(--customer-primary-soft)] hover:text-[var(--customer-primary)]"
     >
       {icon}
       {children}
@@ -1072,61 +1520,59 @@ function ConfirmationDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) onCancel();
-    };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [busy, onCancel]);
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !busy) onCancel();
-      }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="submit-confirmation-title"
-        className="w-full max-w-md rounded-xl border border-[#e3e1e8] bg-white p-5 shadow-2xl"
-      >
-        <h2 id="submit-confirmation-title" className="text-lg font-semibold text-[#1a1b23]">
-          Submit Quotation?
-        </h2>
-        <p className="mt-2 text-sm leading-6 text-[#4b4d5c]">
-          Once submitted, this quotation will be sent to the Sales Team for review and cannot be
-          freely edited.
-        </p>
-        <div className="mt-5 flex justify-end gap-2">
-          <button
+    <Dialog open onOpenChange={(open) => !open && !busy && onCancel()}>
+      <DialogContent showCloseButton={false} className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Submit RFQ?</DialogTitle>
+          <DialogDescription className="leading-6">
+            Are you sure you want to submit this RFQ to the Sales Team? Once submitted,
+            it cannot be edited.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="gap-2">
+          <Button
             type="button"
+            variant="outline"
             onClick={onCancel}
-            className="h-9 rounded-lg border border-[#e3e1e8] px-4 text-sm font-semibold text-[#4b4d5c] hover:bg-slate-50"
+            className="h-9 rounded-lg border-[var(--customer-border)] px-4 text-sm font-semibold text-[var(--customer-text-secondary)]"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             disabled={busy}
             onClick={onConfirm}
-            className="inline-flex h-9 items-center justify-center rounded-lg bg-[#54247a] px-4 text-sm font-semibold text-white hover:bg-[#472066] disabled:opacity-60"
+            aria-busy={busy}
+            className="h-9 gap-2 rounded-lg bg-[#54247a] px-4 text-sm font-semibold text-white hover:bg-[#472066]"
           >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit'}
-          </button>
-        </div>
-      </div>
-    </div>
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Submitting
+              </>
+            ) : (
+              'Submit RFQ'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
+}
+
+function playFeedbackSound(src: string) {
+  if (typeof window === 'undefined') return;
+  const audio = new Audio(src);
+  audio.volume = 0.28;
+  void audio.play().catch(() => undefined);
 }
 
 function QuotationSkeleton() {
   return (
     <div className="space-y-3">
-      <div className="h-64 animate-pulse rounded-lg border border-[#e3e1e8] bg-white" />
-      <div className="h-72 animate-pulse rounded-lg border border-[#e3e1e8] bg-white" />
+      <div className="h-64 animate-pulse rounded-lg border border-[var(--customer-border)] bg-[var(--customer-surface)]" />
+      <div className="h-72 animate-pulse rounded-lg border border-[var(--customer-border)] bg-[var(--customer-surface)]" />
     </div>
   );
 }
@@ -1138,16 +1584,61 @@ function getRequestedDateError(form: FormState) {
 }
 
 function getItemErrors(item: FormItem, index: number) {
-  const errors: Partial<Record<'product' | 'quantity' | 'palletType' | 'palletQuantity', string>> =
-    {};
+  const errors: Partial<Record<'product' | 'quantity', string>> = {};
   if (!item.product) errors.product = `Item ${index + 1} is required.`;
-  if (!item.quantity || Number(item.quantity) <= 0)
+  if (!isValidTonQuantityValue(item.quantity) || Number(item.quantity) <= 0)
     errors.quantity = 'Quantity (TON) must be greater than zero.';
-  if (item.palletRequired && !item.palletType.trim())
-    errors.palletType = 'Pallet type is required.';
-  if (item.palletRequired && (!item.palletQuantity || Number(item.palletQuantity) <= 0))
-    errors.palletQuantity = 'Pallet quantity must be greater than zero.';
   return errors;
+}
+
+function getPalletQuantityError(value: string, inputError = '') {
+  if (inputError) return inputError;
+  if (!value) return 'Enter pallet quantity.';
+  if (!digitsOnly(value)) return 'Enter a valid whole number of pallets.';
+  if (Number(value) < 1) return 'Pallet quantity must be at least 1.';
+  return '';
+}
+
+function digitsOnly(value: string) {
+  return /^\d*$/.test(value);
+}
+
+function isPermittedTextInputKey(event: KeyboardEvent<HTMLInputElement>) {
+  if (event.ctrlKey || event.metaKey) return true;
+  return [
+    'Backspace',
+    'Delete',
+    'Tab',
+    'ArrowLeft',
+    'ArrowRight',
+    'Home',
+    'End',
+  ].includes(event.key);
+}
+
+function handleTonQuantityKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+  if (isPermittedTextInputKey(event)) return;
+
+  const nextValue = valueAfterKeyPress(event.currentTarget, event.key);
+  if (!isPermittedTonQuantityInput(nextValue)) event.preventDefault();
+}
+
+function valueAfterKeyPress(input: HTMLInputElement, key: string) {
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  return `${input.value.slice(0, start)}${key}${input.value.slice(end)}`;
+}
+
+function isPermittedTonQuantityInput(value: string) {
+  return value === '' || /^\d+(\.\d*)?$/.test(value);
+}
+
+function isValidTonQuantityPaste(value: string) {
+  return /^\d+(\.\d+)?$/.test(value);
+}
+
+function isValidTonQuantityValue(value: string) {
+  return /^\d+(\.\d+)?$/.test(value);
 }
 
 function validateForm(form: FormState) {
@@ -1158,6 +1649,9 @@ function validateForm(form: FormState) {
   if (!form.requestedDate) errors.push('Requested delivery date is required.');
   if (form.requestedDate && form.requestedDate < today)
     errors.push('Requested delivery date cannot be in the past.');
+  if (form.palletRequired && !form.palletType.trim()) errors.push('Select a pallet type.');
+  const palletQuantityError = form.palletRequired ? getPalletQuantityError(form.palletQuantity) : '';
+  if (palletQuantityError) errors.push(palletQuantityError);
   form.items.forEach((item, index) =>
     errors.push(
       ...Object.values(getItemErrors(item, index)).filter((message): message is string =>
@@ -1170,6 +1664,27 @@ function validateForm(form: FormState) {
   return errors;
 }
 
+function formatReviewDate(value: string) {
+  if (!value) return '';
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+}
+
+function formatCustomerLocation(location: CustomerLocation | undefined) {
+  if (!location) return '';
+  return [location.name, location.city, location.region].filter(Boolean).join(' - ');
+}
+
+function formatPickupLocation(location: PickupLocation | undefined) {
+  if (!location) return '';
+  return [location.name, location.city].filter(Boolean).join(' - ');
+}
+
 function toPayload(form: FormState): CustomerQuotationPayload {
   const payload: CustomerQuotationPayload = {
     fulfilmentType: form.fulfilmentType,
@@ -1179,13 +1694,13 @@ function toPayload(form: FormState): CustomerQuotationPayload {
       const line: CustomerQuotationPayload['items'][number] = {
         productId: item.product?.id ?? '',
         quantityTon: Number(item.quantity),
-        palletRequired: item.palletRequired,
+        palletRequired: form.palletRequired,
       };
-      return item.palletRequired
+      return form.palletRequired
         ? {
             ...line,
-            palletType: item.palletType.trim(),
-            palletQuantity: Number(item.palletQuantity),
+            palletType: form.palletType.trim(),
+            palletQuantity: Number(form.palletQuantity),
           }
         : line;
     }),
@@ -1196,11 +1711,15 @@ function toPayload(form: FormState): CustomerQuotationPayload {
 }
 
 function fromQuotation(quotation: CustomerQuotation): FormState {
+  const palletLine = quotation.items.find((item) => item.palletRequired);
   return {
     fulfilmentType: quotation.fulfilmentType,
     pickupLocationId: quotation.pickupLocationId ?? '',
     shipToLocationId: quotation.shipToLocationId ?? '',
     requestedDate: quotation.requestedDate ?? '',
+    palletRequired: Boolean(palletLine),
+    palletType: palletLine?.palletType ?? '',
+    palletQuantity: palletLine?.palletQuantity ? String(palletLine.palletQuantity) : '',
     notes: quotation.notes ?? '',
     items: quotation.items.map((item) => ({
       key: item.id,
@@ -1213,9 +1732,6 @@ function fromQuotation(quotation: CustomerQuotation): FormState {
         updatedAt: quotation.updatedAt,
       },
       quantity: String(item.quantityTon),
-      palletRequired: item.palletRequired,
-      palletType: item.palletType ?? '',
-      palletQuantity: item.palletQuantity ? String(item.palletQuantity) : '',
     })),
   };
 }
@@ -1226,13 +1742,13 @@ function serializeForm(form: FormState) {
     pickupLocationId: form.pickupLocationId,
     shipToLocationId: form.shipToLocationId,
     requestedDate: form.requestedDate,
+    palletRequired: form.palletRequired,
+    palletType: form.palletType,
+    palletQuantity: form.palletQuantity,
     notes: form.notes,
     items: form.items.map((item) => ({
       productId: item.product?.id ?? null,
       quantity: item.quantity,
-      palletRequired: item.palletRequired,
-      palletType: item.palletType,
-      palletQuantity: item.palletQuantity,
     })),
   });
 }

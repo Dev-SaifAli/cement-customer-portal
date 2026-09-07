@@ -63,7 +63,7 @@ const productRow = {
 
 const contractRow = {
   id: contractId,
-  reference: 'CT-2026-000001',
+  reference: 'CT26000001',
   customer_account_id: customerAccountId,
   customer_company_name: 'Activated Cement Customer',
   product_id: productId,
@@ -85,7 +85,10 @@ const contractRow = {
   delivery_list_price: '35.00',
   delivery_price: '35.00',
   quotation_id: '77777777-7777-4777-8777-777777777777',
-  quotation_reference: 'QT-2026-000001',
+  quotation_reference: 'RFQ26000001',
+  source_document_type: 'RFQ',
+  source_document_number: 'RFQ26000001',
+  source_direct_order_id: null,
   accepted_at: '2026-08-24T09:00:00.000Z',
   pricing_city_id: 'city-jeddah',
   total_quantity_tons: '100.000',
@@ -199,7 +202,7 @@ describe('sales contracts API', () => {
     expect(response.status).toBe(200);
     expect(response.body.data.items[0]).toMatchObject({
       id: contractId,
-      reference: 'CT-2026-000001',
+      reference: 'CT26000001',
       customerCompanyName: 'Activated Cement Customer',
       productCode: 'CEM-OPC-50KG',
     });
@@ -218,6 +221,7 @@ describe('sales contracts API', () => {
     mockTransactionClient();
     clientQuery
       .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ sequence: '1' }] })
       .mockResolvedValueOnce({ rows: [{ ...contractRow, customer_company_name: null }] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
@@ -230,8 +234,15 @@ describe('sales contracts API', () => {
       .send(validPayload);
 
     expect(response.status).toBe(201);
-    expect(clientQuery.mock.calls[1]?.[0]).toContain('insert into contracts');
-    expect(clientQuery.mock.calls[2]?.[0]).toContain('insert into contract_status_events');
+    const insertCall = clientQuery.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into contracts'),
+    );
+    const statusEventCall = clientQuery.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into contract_status_events'),
+    );
+    expect(insertCall?.[0]).toContain('insert into contracts');
+    expect(insertCall?.[1]?.[0]).toBe('CT26000001');
+    expect(statusEventCall?.[0]).toContain('insert into contract_status_events');
     expect(response.body.data.contract).toMatchObject({
       id: contractId,
       status: 'DRAFT',
@@ -297,7 +308,7 @@ describe('sales contracts API', () => {
     expect(response.status).toBe(200);
     expect(clientQuery.mock.calls[4]?.[1]).toEqual([
       contractId,
-      'CT-2026-000001',
+      'CT26000001',
       salesUserId,
     ]);
     expect(clientQuery.mock.calls[5]?.[1]).toEqual([
@@ -335,7 +346,7 @@ describe('sales contracts API', () => {
     expect(response.status).toBe(200);
     expect(clientQuery.mock.calls[4]?.[1]).toEqual([
       contractId,
-      'CT-2026-000001',
+      'CT26000001',
       salesUserId,
     ]);
     expect(clientQuery.mock.calls[5]?.[1]).toEqual([

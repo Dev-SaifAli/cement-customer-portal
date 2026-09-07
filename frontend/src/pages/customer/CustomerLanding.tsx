@@ -62,14 +62,14 @@ export function CustomerLanding() {
       actions.push(
         {
           to: '/customer/quotations/new',
-          title: 'New Quotation',
-          description: 'Create a new quotation request',
+          title: 'New RFQ',
+          description: 'Create a new Request for Quote (RFQ)',
           icon: <FilePlus2 size={20} />,
         },
         {
           to: '/customer/quotations',
-          title: 'View Quotations',
-          description: 'Track and manage your quotations',
+          title: 'View RFQs',
+          description: 'Track and manage your RFQs',
           icon: <FileText size={20} />,
         },
       );

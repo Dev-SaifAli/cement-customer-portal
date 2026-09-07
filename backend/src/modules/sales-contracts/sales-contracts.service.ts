@@ -9,6 +9,7 @@ import type {
   SalesContractExtensionPayload,
   SalesContractPayload,
 } from './sales-contracts.validation.js';
+import { nextDocumentReference } from '../document-numbering/document-numbering.service.js';
 
 type ContractStatus =
   | 'DRAFT'
@@ -47,6 +48,9 @@ interface ContractRow {
   delivery_price: string | null;
   quotation_id: string | null;
   quotation_reference: string | null;
+  source_document_type: 'DIRECT_ORDER' | 'RFQ' | null;
+  source_document_number: string | null;
+  source_direct_order_id: string | null;
   accepted_at: Date | string | null;
   pricing_city_id: string | null;
   total_quantity_tons: string | null;
@@ -61,7 +65,7 @@ interface ContractRow {
   customer_notes: string | null;
   internal_notes: string | null;
   items_snapshot: unknown;
-  sales_user_id: string;
+  sales_user_id: string | null;
   sales_user_name: string | null;
   registration_delivery_locations: unknown;
   status: ContractStatus;
@@ -255,8 +259,10 @@ export class SalesContractsService {
 
     try {
       await client.query('begin');
+      const reference = await nextReference(client);
       const result = await client.query<ContractRow>(
         `insert into contracts (
+           reference,
            customer_account_id,
            product_id,
            packaging,
@@ -277,9 +283,10 @@ export class SalesContractsService {
            sales_user_id,
            status
          )
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'DRAFT')
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+           $11, $12, $13, $14, $15, $16, $17, $18, $19, 'DRAFT')
          returning *`,
-        payloadValues(payload, related.product, salesUser.id),
+        [reference, ...payloadValues(payload, related.product, salesUser.id)],
       );
 
       const contract = result.rows[0];
@@ -411,6 +418,8 @@ export class SalesContractsService {
            status,
            quotation_id,
            quotation_reference,
+           source_document_type,
+           source_document_number,
            accepted_at,
            pricing_city_id,
            total_quantity_tons,
@@ -427,8 +436,8 @@ export class SalesContractsService {
          values (
            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
            $11, $12, $13, $14, $15, $16, $17, $18, $19, 'DRAFT',
-           $20, $21, $22, $23, $24, $25, $26, $27, $28, $29,
-           $30, $31, $32, $33
+           $20, $21, 'RFQ', $22, $23, $24, $25, $26, $27, $28,
+           $29, $30, $31, $32, $33, $34
          )
          returning *`,
         [
@@ -458,6 +467,7 @@ export class SalesContractsService {
           quotation.fulfilment_type === 'DELIVERY' ? Number(firstItem.delivery_price) : null,
           salesUser.id,
           quotation.id,
+          quotation.reference,
           quotation.reference,
           findAcceptedAt(quotation),
           quotation.pricing_city_id,
@@ -828,7 +838,7 @@ const contractSelectSql = `select
  inner join customer_accounts on customer_accounts.id = contracts.customer_account_id
  inner join registration_drafts on registration_drafts.id = customer_accounts.registration_id
  inner join product_catalog on product_catalog.id = contracts.product_id
- inner join sales_users on sales_users.id = contracts.sales_user_id`;
+ left join sales_users on sales_users.id = contracts.sales_user_id`;
 
 function payloadValues(payload: SalesContractPayload, product: ProductRow, salesUserId: string) {
   return [
@@ -1241,12 +1251,7 @@ async function insertQuotationAuditEvent(
 }
 
 async function nextReference(client: PoolClient) {
-  const result = await client.query<{ sequence: string }>(
-    `select nextval('contract_reference_seq')::text as sequence`,
-  );
-  const sequence = String(result.rows[0]?.sequence ?? '1').padStart(6, '0');
-
-  return `CT-${new Date().getFullYear()}-${sequence}`;
+  return nextDocumentReference(client, 'contract_reference_seq', 'CT');
 }
 
 function hasCustomPricing(contract: ContractRow) {
@@ -1340,6 +1345,14 @@ function mapContractSummary(row: ContractRow) {
           id: row.quotation_id,
           reference: row.quotation_reference,
           acceptedAt: row.accepted_at ? dateTime(row.accepted_at) : null,
+        }
+      : null,
+    sourceDocument: row.source_document_type
+      ? {
+          type: row.source_document_type,
+          number: row.source_document_number,
+          directOrderId: row.source_direct_order_id,
+          quotationId: row.quotation_id,
         }
       : null,
     customerAccountId: row.customer_account_id,
