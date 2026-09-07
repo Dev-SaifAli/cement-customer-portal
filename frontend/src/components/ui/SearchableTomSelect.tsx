@@ -7,6 +7,7 @@ export interface SearchableSelectOption {
 }
 
 export function SearchableTomSelect({
+  id,
   value,
   options,
   placeholder,
@@ -18,6 +19,7 @@ export function SearchableTomSelect({
   onChange,
   onBlur,
 }: {
+  id?: string | undefined;
   value: string;
   options: SearchableSelectOption[];
   placeholder: string;
@@ -99,6 +101,7 @@ export function SearchableTomSelect({
     });
 
     instanceRef.current = instance;
+    instance.control_input.setAttribute('aria-label', ariaLabel);
     copyCustomerThemeVariables(instance.wrapper, instance.dropdown);
     return () => {
       instance.destroy();
@@ -137,6 +140,7 @@ export function SearchableTomSelect({
 
   return (
     <select
+      id={id}
       ref={selectRef}
       aria-label={ariaLabel}
       autoComplete={autoComplete}

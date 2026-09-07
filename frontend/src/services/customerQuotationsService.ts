@@ -165,6 +165,7 @@ export const getPickupLocations = async () => {
 
 export const listCustomerQuotations = async (
   filters: CustomerQuotationListFilters = {},
+  signal?: AbortSignal,
 ): Promise<CustomerQuotationListResult> => {
   const searchParams = new URLSearchParams();
   if (filters.page) searchParams.set('page', String(filters.page));
@@ -178,6 +179,7 @@ export const listCustomerQuotations = async (
 
   const response = await requestCustomerQuotations<unknown>(
     `/customer/quotations${searchParams.size ? `?${searchParams.toString()}` : ''}`,
+    signal ? { signal } : {},
   );
 
   return parseQuotationListResponse(response);
