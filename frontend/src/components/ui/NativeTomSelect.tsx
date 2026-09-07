@@ -4,6 +4,7 @@ import { useEffect, useRef, type SelectHTMLAttributes } from 'react';
 interface NativeTomSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   allowEmptyOption?: boolean;
   dropdownClassName?: string;
+  dropdownPlacement?: 'auto' | 'bottom';
   placeholder?: string;
   searchPlaceholder?: string;
 }
@@ -18,6 +19,7 @@ export function NativeTomSelect({
   className = '',
   disabled,
   dropdownClassName = '',
+  dropdownPlacement = 'auto',
   placeholder,
   value,
   defaultValue,
@@ -26,6 +28,7 @@ export function NativeTomSelect({
 }: NativeTomSelectProps) {
   const selectRef = useRef<HTMLSelectElement>(null);
   const instanceRef = useRef<TomSelect | null>(null);
+  const optionsSignatureRef = useRef('');
 
   useEffect(() => {
     const select = selectRef.current;
@@ -45,26 +48,31 @@ export function NativeTomSelect({
       wrapperClass: 'ts-wrapper app-tom-select',
       dropdownClass: `ts-dropdown customer-tom-select-dropdown ${dropdownClassName}`.trim(),
       onFocus() {
-        instance.control_input.placeholder = activeSearchPlaceholder;
+        const activeInstance = instanceRef.current;
+        if (activeInstance) activeInstance.control_input.placeholder = activeSearchPlaceholder;
       },
       onBlur() {
-        instance.control_input.placeholder = restingPlaceholder;
+        const activeInstance = instanceRef.current;
+        if (activeInstance) activeInstance.control_input.placeholder = restingPlaceholder;
       },
       onDropdownOpen() {
-        const controlRect = instance.control.getBoundingClientRect();
+        const activeInstance = instanceRef.current;
+        if (!activeInstance) return;
+        const controlRect = activeInstance.control.getBoundingClientRect();
         const spaceBelow = window.innerHeight - controlRect.bottom - 12;
         const spaceAbove = controlRect.top - 12;
-        const openAbove = spaceBelow < 280 && spaceAbove > spaceBelow;
+        const openAbove = dropdownPlacement === 'auto' && spaceBelow < 280 && spaceAbove > spaceBelow;
         const availableSpace = Math.max(120, Math.min(352, openAbove ? spaceAbove : spaceBelow));
 
-        instance.dropdown.classList.toggle('dropdown-above', openAbove);
-        instance.dropdown_content.style.maxHeight = `${availableSpace}px`;
+        activeInstance.dropdown.classList.toggle('dropdown-above', openAbove);
+        activeInstance.dropdown_content.style.maxHeight = `${availableSpace}px`;
       },
       render: {
         no_results() { return '<div class="no-results">No matching options</div>'; },
       },
     });
     instanceRef.current = instance;
+    optionsSignatureRef.current = getOptionsSignature(select);
     instance.control_input.setAttribute('aria-label', props['aria-label'] ?? 'Select an option');
     if (className.includes('h-9')) instance.wrapper.dataset.size = 'compact';
     if (className.includes('h-12')) instance.wrapper.dataset.size = 'large';
@@ -76,8 +84,13 @@ export function NativeTomSelect({
 
   useEffect(() => {
     const instance = instanceRef.current;
-    if (!instance) return;
-    instance.sync();
+    const select = selectRef.current;
+    if (!instance || !select) return;
+    const optionsSignature = getOptionsSignature(select);
+    if (optionsSignatureRef.current !== optionsSignature) {
+      instance.sync();
+      optionsSignatureRef.current = optionsSignature;
+    }
     const nextValue = value == null ? '' : String(value);
     if (String(instance.getValue()) !== nextValue) instance.setValue(nextValue, true);
   }, [children, value]);
@@ -100,4 +113,10 @@ export function NativeTomSelect({
       {children}
     </select>
   );
+}
+
+function getOptionsSignature(select: HTMLSelectElement) {
+  return Array.from(select.options)
+    .map((option) => `${option.value}\u0000${option.text}\u0000${option.disabled ? '1' : '0'}`)
+    .join('\u0001');
 }

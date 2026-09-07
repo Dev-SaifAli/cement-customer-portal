@@ -1,4 +1,4 @@
-import { Banknote, MapPinned, Package, Settings, Truck, Warehouse } from 'lucide-react';
+import { Banknote, ClipboardCheck, MapPinned, Package, Settings, Truck, Warehouse } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell, type AppShellNavigationItem } from '../../components/app-shell/AppShell';
 import { NotificationBell } from '../../components/notifications/NotificationBell';
@@ -23,6 +23,11 @@ const adminNav: AppShellNavigationItem[] = [
   },
   { to: '/admin/pickup-locations', label: 'Pickup-from Locations', icon: <MapPinned size={18} /> },
   { to: '/admin/tax-configuration', label: 'Tax Configuration', icon: <Settings size={18} /> },
+  {
+    to: '/admin/approval-settings',
+    label: 'Approval Settings',
+    icon: <ClipboardCheck size={18} />,
+  },
 ];
 
 export function PricingAdminLayout() {

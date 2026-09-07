@@ -19,6 +19,11 @@ import type {
   DirectOrderPricingPayload,
   ListCustomerOrdersQuery,
 } from './customer-orders.validation.js';
+import {
+  nextContractOrderReference,
+  nextDocumentReference,
+} from '../document-numbering/document-numbering.service.js';
+import { applicationSettingsService } from '../application-settings/application-settings.service.js';
 
 const orderWritableRoles = new Set<CustomerUser['role']>(['CUSTOMER_ADMIN', 'PURCHASER']);
 
@@ -101,7 +106,7 @@ interface OrderRow {
   hader_city_id: string | null;
   hader_city_name: string | null;
   created_by_customer_user_id: string;
-  status: 'SUBMITTED';
+  status: 'SUBMITTED' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
   requested_quantity_tons: string;
   remaining_contract_quantity_snapshot: string | null;
   approved_customer_rate_per_ton: string;
@@ -143,12 +148,24 @@ interface DirectOrderContext {
   pickupLocation: { id: string; name: string; city: string } | null;
   quantityTons: number;
   equivalentPackagingUnits: number | null;
+  productListPrice: number;
+  deliveryPrice: number;
   customerRatePerTon: number;
   subtotal: number;
   vatRate: number;
   vatAmount: number;
   grandTotal: number;
   zoneStatus: HaderZoneStatus | null;
+}
+
+interface AutoApprovedDirectOrderContractInput {
+  orderId: string;
+  orderNumber: string;
+  customerUser: CustomerUser;
+  context: DirectOrderContext;
+  payload: CreateDirectOrderPayload;
+  approvalMode: 'AUTO_APPROVE' | 'MUST_APPROVE';
+  salesUserId?: string | null;
 }
 
 type QueryExecutor = Pick<PoolClient, 'query'>;
@@ -189,7 +206,7 @@ export class CustomerOrdersService {
         client,
       );
       if (existingOrder) {
-        if (existingOrder.contract !== null) {
+        if (!existingOrder.orderNumber.startsWith('DO')) {
           throw new AppError(
             'The order request identifier has already been used.',
             409,
@@ -209,7 +226,11 @@ export class CustomerOrdersService {
         );
       }
 
-      const orderNumber = await nextOrderNumber(client);
+      const directOrderApprovalMode =
+        await applicationSettingsService.getListPriceDirectOrderApprovalMode(client);
+      const orderStatus =
+        directOrderApprovalMode === 'AUTO_APPROVE' ? 'APPROVED' : 'PENDING_APPROVAL';
+      const orderNumber = await nextDirectOrderNumber(client);
       const orderResult = await client.query<{ id: string }>(
         `insert into orders (
            order_number, contract_id, customer_account_id, ship_to_location_id,
@@ -220,8 +241,8 @@ export class CustomerOrdersService {
            ship_to_snapshot, pickup_location_name, vat_rate, vat_amount, grand_total,
            hader_zone_status, submitted_at
          ) values (
-           $1, null, $2, $3, $4, $5, $6, $7, $8, 'SUBMITTED', $9, null, $10, $11,
-           $12, $13, $14, $15::jsonb, $16, $17, $18, $19, $20, now()
+           $1, null, $2, $3, $4, $5, $6, $7, $8, $9, $10, null, $11, $12,
+           $13, $14, $15, $16::jsonb, $17, $18, $19, $20, $21, now()
          ) returning id`,
         [
           orderNumber,
@@ -232,6 +253,7 @@ export class CustomerOrdersService {
           context.city.id,
           context.city.name,
           customerUser.id,
+          orderStatus,
           context.quantityTons,
           context.customerRatePerTon,
           context.subtotal,
@@ -276,24 +298,40 @@ export class CustomerOrdersService {
            order_id, event_type, previous_status, new_status,
            changed_by_customer_user_id, event_data
          ) values
-           ($1, 'DIRECT_ORDER_CREATED', null, 'SUBMITTED', $2, $3::jsonb),
-           ($1, 'ORDER_SUBMITTED', null, 'SUBMITTED', $2, $4::jsonb)`,
+           ($1, 'DIRECT_ORDER_CREATED', null, $3, $2, $4::jsonb),
+           ($1, $5, null, $3, $2, $6::jsonb)`,
         [
           orderId,
           customerUser.id,
+          orderStatus,
           JSON.stringify({
             source: 'DIRECT',
             orderReference: orderNumber,
             productId: context.product.id,
             quantityTons: context.quantityTons,
           }),
+          directOrderApprovalMode === 'AUTO_APPROVE'
+            ? 'DIRECT_ORDER_APPROVED'
+            : 'DIRECT_ORDER_PENDING_APPROVAL',
           JSON.stringify({
             source: 'DIRECT',
             orderReference: orderNumber,
             submittedBy: customerUser.id,
+            approvalMode: directOrderApprovalMode,
           }),
         ],
       );
+
+      if (directOrderApprovalMode === 'AUTO_APPROVE') {
+        await createAutoApprovedDirectOrderContract(client, {
+          orderId,
+          orderNumber,
+          customerUser,
+          context,
+          payload,
+          approvalMode: directOrderApprovalMode,
+        });
+      }
 
       await client.query('commit');
     } catch (error) {
@@ -730,6 +768,8 @@ async function resolveDirectOrderContext(
     pickupLocation,
     quantityTons,
     equivalentPackagingUnits,
+    productListPrice: productPrice,
+    deliveryPrice,
     customerRatePerTon,
     subtotal,
     vatRate,
@@ -953,11 +993,210 @@ async function resolvePickupFleet(
 }
 
 async function nextOrderNumber(client: PoolClient) {
-  const result = await client.query<{ sequence: string }>(
-    `select nextval('order_reference_seq')::text as sequence`,
+  return nextContractOrderReference(client);
+}
+
+async function nextDirectOrderNumber(client: PoolClient) {
+  return nextDocumentReference(client, 'order_reference_seq', 'DO');
+}
+
+async function nextContractNumber(client: PoolClient) {
+  return nextDocumentReference(client, 'contract_reference_seq', 'CT');
+}
+
+async function createAutoApprovedDirectOrderContract(
+  client: PoolClient,
+  input: AutoApprovedDirectOrderContractInput,
+) {
+  const { approvalMode, context, customerUser, orderId, orderNumber, payload, salesUserId } = input;
+  const reference = await nextContractNumber(client);
+  const contractDate = payload.requestedDeliveryDate ?? new Date().toISOString().slice(0, 10);
+  const customerRate = round(context.customerRatePerTon, 2);
+  const productPrice = round(context.productListPrice, 2);
+  const deliveryPrice = context.shipTo ? round(context.deliveryPrice, 2) : null;
+  const itemSnapshot = {
+    orderId,
+    productId: context.product.id,
+    productCode: context.product.product_code,
+    productName: context.product.product_name,
+    packagingType: context.product.packaging_type,
+    uom: context.product.uom,
+    quantity: context.quantityTons,
+    quantityTon: context.quantityTons,
+    equivalentTons: context.quantityTons,
+    packagingQuantity: context.equivalentPackagingUnits,
+    productListPrice: productPrice,
+    productPrice,
+    deliveryPrice,
+    customerRate,
+    amount: context.subtotal,
+    displayOrder: 0,
+    source: 'DIRECT_ORDER',
+  };
+
+  const contractResult = await client.query<{ id: string }>(
+    `insert into contracts (
+       reference,
+       customer_account_id,
+       product_id,
+       packaging,
+       uom,
+       quantity,
+       start_date,
+       end_date,
+       fulfilment,
+       pickup_location_id,
+       delivery_location_id,
+       delivery_city,
+       pallet_required,
+       pallet_type,
+       product_list_price,
+       product_price,
+       delivery_list_price,
+       delivery_price,
+       sales_user_id,
+       status,
+       source_document_type,
+       source_document_number,
+       source_direct_order_id,
+       accepted_at,
+       pricing_city_id,
+       total_quantity_tons,
+       shipped_quantity_tons,
+       remaining_quantity_tons,
+       subtotal,
+       vat_rate,
+       vat_amount,
+       grand_total,
+       payment_terms,
+       customer_notes,
+       items_snapshot,
+       activated_at
+     )
+     values (
+       $1, $2, $3, $4, $5, $6, $7, $7, $8, $9,
+       $10, $11, false, null, $12, $13, $14, $15, $16, 'ACTIVE',
+       'DIRECT_ORDER', $17, $18, now(), $19, $20, 0, $20, $21, $22,
+       $23, $24, 'List price Direct Order auto-approved.', $25, $26::jsonb, now()
+     )
+     returning id`,
+    [
+      reference,
+      customerUser.customerAccountId,
+      context.product.id,
+      context.product.packaging_type,
+      context.product.uom,
+      context.quantityTons,
+      contractDate,
+      payload.fulfilmentType,
+      context.pickupLocation?.id ?? null,
+      context.shipTo?.id ?? null,
+      context.shipTo ? context.city.name : null,
+      productPrice,
+      productPrice,
+      deliveryPrice,
+      deliveryPrice,
+      salesUserId ?? null,
+      orderNumber,
+      orderId,
+      context.city.id,
+      context.quantityTons,
+      context.subtotal,
+      context.vatRate,
+      context.vatAmount,
+      context.grandTotal,
+      payload.notes ?? null,
+      JSON.stringify([itemSnapshot]),
+    ],
   );
-  const sequence = String(result.rows[0]?.sequence ?? '1').padStart(6, '0');
-  return `ORD-${new Date().getFullYear()}-${sequence}`;
+  const contractId = contractResult.rows[0]?.id;
+  if (!contractId) {
+    throw new AppError('Contract could not be created.', 503, 'DIRECT_ORDER_CONTRACT_CREATE_FAILED');
+  }
+
+  await client.query(
+    `insert into contract_items (
+       contract_id,
+       source_quotation_item_id,
+       product_id,
+       product_code,
+       product_name,
+       packaging,
+       original_uom,
+       original_quantity,
+       equivalent_tons,
+       approved_product_price_per_ton,
+       discount_mode,
+       discount_value,
+       discount_amount_per_ton,
+       hader_delivery_price_per_ton,
+       approved_customer_rate_per_ton,
+       amount,
+       display_order
+     )
+     values ($1, null, $2, $3, $4, $5, $6, $7, $8, $9, null, null, null, $10, $11, $12, 0)`,
+    [
+      contractId,
+      context.product.id,
+      context.product.product_code,
+      context.product.product_name,
+      context.product.packaging_type,
+      context.product.uom,
+      context.equivalentPackagingUnits ?? context.quantityTons,
+      context.quantityTons,
+      productPrice,
+      deliveryPrice,
+      customerRate,
+      context.subtotal,
+    ],
+  );
+
+  await client.query(
+    `insert into contract_events (
+       contract_id,
+       event_type,
+       previous_status,
+       new_status,
+       reason,
+       changed_by_customer_user_id,
+       changed_by_sales_user_id,
+       event_data
+     )
+     values (
+       $1,
+       $2,
+       null,
+       'ACTIVE',
+       $3,
+       $4,
+       $5,
+       $6::jsonb
+     )`,
+    [
+      contractId,
+      approvalMode === 'AUTO_APPROVE' ? 'DIRECT_ORDER_AUTO_APPROVED' : 'DIRECT_ORDER_APPROVED',
+      approvalMode === 'AUTO_APPROVE'
+        ? `List price Direct Order ${orderNumber} auto-approved and converted to Contract ${reference}.`
+        : `List price Direct Order ${orderNumber} approved and converted to Contract ${reference}.`,
+      customerUser.id,
+      salesUserId ?? null,
+      JSON.stringify({
+        sourceDocumentType: 'DIRECT_ORDER',
+        sourceDocumentNumber: orderNumber,
+        sourceDirectOrderId: orderId,
+        approvalMode,
+      }),
+    ],
+  );
+
+  await client.query(
+    `update orders
+     set contract_id = $2, updated_at = now()
+     where id = $1`,
+    [orderId, contractId],
+  );
+
+  return contractId;
 }
 
 function mapOrder(

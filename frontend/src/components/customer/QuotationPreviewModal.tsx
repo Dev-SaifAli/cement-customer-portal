@@ -67,7 +67,7 @@ export function QuotationPreviewModal({
         remainingHeight -= pageHeight;
       }
 
-      const reference = quotation.reference ?? 'QUOTATION';
+      const reference = quotation.reference ?? 'RFQ';
       const suffix = quotation.status === 'DRAFT' ? '-DRAFT' : '';
       pdf.save(`${reference}${suffix}.pdf`);
     } catch {
@@ -113,7 +113,7 @@ export function QuotationPreviewModal({
         <header className="quotation-preview-toolbar customer-card customer-border-soft flex min-h-14 shrink-0 items-center justify-between gap-3 border-b px-4 sm:px-5">
           <div className="min-w-0">
             <h2 id="quotation-preview-title" className="customer-text text-sm font-bold">
-              Quotation Preview
+              RFQ Preview
             </h2>
             {downloadError && (
               <p className="mt-0.5 truncate text-[11px] text-red-600">{downloadError}</p>
@@ -146,7 +146,7 @@ export function QuotationPreviewModal({
               type="button"
               onClick={onClose}
               className="customer-muted inline-flex h-9 w-9 items-center justify-center rounded-lg transition hover:bg-[var(--customer-hover)] hover:text-[var(--customer-text)]"
-              aria-label="Close quotation preview"
+              aria-label="Close RFQ preview"
             >
               <X size={18} />
             </button>

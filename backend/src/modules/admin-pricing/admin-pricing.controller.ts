@@ -6,6 +6,7 @@ import {
   cityParamsSchema,
   productPriceParamsSchema,
   updateHaderCitySchema,
+  updateListPriceDirectOrderApprovalSchema,
   upsertDeliveryPriceSchema,
   upsertProductPriceSchema,
 } from './admin-pricing.validation.js';
@@ -44,6 +45,30 @@ export class AdminPricingController {
     response.status(200).json({
       success: true,
       data: { city: await adminPricingService.setHaderEnabled(cityId, isHaderEnabled) },
+    });
+  }
+
+  async getApprovalSettings(request: SalesAuthenticatedRequest, response: Response) {
+    requirePricingAdmin(request);
+    response.status(200).json({
+      success: true,
+      data: {
+        approvalSettings: await adminPricingService.getApprovalSettings(),
+      },
+    });
+  }
+
+  async updateListPriceDirectOrderApproval(
+    request: SalesAuthenticatedRequest,
+    response: Response,
+  ) {
+    const user = requirePricingAdmin(request);
+    const { value } = updateListPriceDirectOrderApprovalSchema.parse(request.body);
+    response.status(200).json({
+      success: true,
+      data: {
+        setting: await adminPricingService.setListPriceDirectOrderApproval(value, user),
+      },
     });
   }
 }

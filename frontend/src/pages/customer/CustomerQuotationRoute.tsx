@@ -27,7 +27,7 @@ export function CustomerQuotationRoute() {
   if (error || !quotation) {
     return (
       <section className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">
-        Unable to load this quotation. Please return to Quotations and try again.
+        Unable to load this RFQ. Please return to RFQs and try again.
       </section>
     );
   }
@@ -38,7 +38,7 @@ export function CustomerQuotationRoute() {
 
 function QuotationRouteSkeleton() {
   return (
-    <div className="space-y-4 animate-pulse" aria-label="Loading quotation">
+    <div className="space-y-4 animate-pulse" aria-label="Loading RFQ">
       <div className="h-8 w-72 rounded bg-slate-200" />
       <div className="h-24 rounded-xl bg-slate-100" />
       <div className="h-64 rounded-xl bg-slate-100" />

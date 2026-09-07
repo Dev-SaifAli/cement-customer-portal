@@ -65,7 +65,7 @@ export function CustomerQuotationDetails({
     if (decision !== 'accept' && trimmed.length < 3) {
       setError(
         decision === 'reject'
-          ? 'Please provide a reason for rejecting this quotation.'
+          ? 'Please provide a reason for rejecting this RFQ.'
           : 'Please enter your clarification request.',
       );
       return;
@@ -83,9 +83,9 @@ export function CustomerQuotationDetails({
       setQuotation(updated);
       setSuccess(
         decision === 'accept'
-          ? 'Quotation accepted successfully.'
+          ? 'RFQ accepted successfully.'
           : decision === 'reject'
-            ? 'Quotation rejected. Your reason has been shared with Sales.'
+            ? 'RFQ rejected. Your reason has been shared with Sales.'
             : 'Your clarification request has been sent to Sales.',
       );
       setDecision(null);
@@ -107,11 +107,11 @@ export function CustomerQuotationDetails({
             to="/customer/quotations"
             className="mb-2 inline-flex text-xs font-semibold text-slate-600 hover:text-[#54247a]"
           >
-            ← Quotations
+            ← RFQs
           </Link>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight">
-              Quotation / {quotation.reference ?? 'Reference pending'}
+              RFQ / {quotation.reference ?? 'Reference pending'}
             </h1>
             <Status status={quotation.status} />
           </div>
@@ -155,7 +155,7 @@ export function CustomerQuotationDetails({
             </span>
             <div>
               <p className="text-sm font-semibold text-[#54247a]">
-                Please review the commercial terms of this quotation carefully.
+                Please review the commercial terms of this RFQ carefully.
               </p>
               <p className="mt-0.5 text-xs text-slate-600">
                 You can accept, reject, or request clarification if you need any changes.
@@ -284,28 +284,28 @@ export function CustomerQuotationDetails({
         <section className="customer-card customer-border rounded-xl border p-4">
           <h2 className="customer-primary text-sm font-bold">What would you like to do?</h2>
           <p className="customer-secondary mt-1 text-xs">
-            Please choose one action regarding this quotation.
+            Please choose one action regarding this RFQ.
           </p>
           <div className="mt-4 grid gap-3 lg:grid-cols-3">
             <DecisionCard
               icon={<Check size={18} />}
               tone="green"
-              title="Accept Quotation"
-              description="I accept the commercial terms shown in this quotation."
+              title="Accept RFQ"
+              description="I accept the commercial terms shown in this RFQ."
               onClick={() => setDecision('accept')}
             />
             <DecisionCard
               icon={<X size={18} />}
               tone="red"
               title="Reject"
-              description="I do not want to proceed with this quotation."
+              description="I do not want to proceed with this RFQ."
               onClick={() => setDecision('reject')}
             />
             <DecisionCard
               icon={<HelpCircle size={18} />}
               tone="amber"
               title="Request Clarification"
-              description="I need more information or changes to this quotation."
+              description="I need more information or changes to this RFQ."
               onClick={() => setDecision('clarification')}
             />
           </div>
@@ -443,9 +443,9 @@ function DecisionDialog({
 }) {
   const isAccept = decision === 'accept';
   const title = isAccept
-    ? 'Accept Quotation?'
+    ? 'Accept RFQ?'
     : decision === 'reject'
-      ? 'Reject Quotation?'
+      ? 'Reject RFQ?'
       : 'Request Clarification';
 
   useEffect(() => {
@@ -485,7 +485,7 @@ function DecisionDialog({
             </h2>
             <p className="customer-secondary mt-1 text-sm">
               {isAccept
-                ? 'You are confirming the commercial terms shown in this quotation.'
+                ? 'You are confirming the commercial terms shown in this RFQ.'
                 : decision === 'reject'
                   ? 'Tell our Sales team why you do not want to proceed.'
                   : 'Tell our Sales team what information or changes you need.'}
@@ -524,7 +524,7 @@ function DecisionDialog({
           </button>
           <button type="button" onClick={onConfirm} disabled={submitting} className={primaryButton}>
             {submitting && <Loader2 size={16} className="animate-spin" />}
-            {isAccept ? 'Accept' : decision === 'reject' ? 'Reject Quotation' : 'Send Request'}
+            {isAccept ? 'Accept' : decision === 'reject' ? 'Reject RFQ' : 'Send Request'}
           </button>
         </div>
       </div>

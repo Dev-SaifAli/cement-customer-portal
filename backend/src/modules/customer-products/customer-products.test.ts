@@ -19,6 +19,23 @@ import { createApp } from '../../app.js';
 
 const customerUserId = '11111111-1111-4111-8111-111111111111';
 const customerAccountId = '22222222-2222-4222-8222-222222222222';
+const pricingCityId = '55555555-5555-4555-8555-555555555555';
+const deliveryLocations = [
+  {
+    id: 'location-primary',
+    name: 'Main Site',
+    siteId: 'LOC-000001',
+    streetAddress: 'Main Road',
+    city: 'Jeddah',
+    region: 'Makkah',
+    country: 'Saudi Arabia',
+    postalCode: '',
+    contactPerson: 'Buyer',
+    contactPhone: '+966555000222',
+    isPrimary: true,
+    createdAt: '2026-08-23T08:00:00.000Z',
+  },
+];
 
 const authenticatedCustomerUserRow = {
   id: customerUserId,
@@ -50,6 +67,7 @@ const productRow = {
   is_active: true,
   created_at: '2026-08-23T08:00:00.000Z',
   updated_at: '2026-08-23T09:00:00.000Z',
+  list_price_per_ton: '195.50',
 };
 
 function createValidCustomerToken() {
@@ -97,14 +115,28 @@ describe('customer products API', () => {
   it('returns active customer-visible products with fixed pagination', async () => {
     query
       .mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] })
+      .mockResolvedValueOnce({ rows: [{ delivery_locations: deliveryLocations }] })
+      .mockResolvedValueOnce({ rows: [{ id: pricingCityId }] })
       .mockResolvedValueOnce({ rows: [{ total: '1' }] })
       .mockResolvedValueOnce({ rows: [productRow] });
 
     const response = await authenticatedProductsRequest();
 
     expect(response.status).toBe(200);
-    expect(query).toHaveBeenNthCalledWith(2, expect.stringContaining('where is_active = true'), []);
-    expect(query).toHaveBeenNthCalledWith(3, expect.stringContaining('limit $1'), [10, 0]);
+    expect(query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('select registration_drafts.delivery_locations'),
+      [customerAccountId, authenticatedCustomerUserRow.registration_id],
+    );
+    expect(query).toHaveBeenNthCalledWith(3, expect.stringContaining('from ksa_cities'), [
+      'Jeddah',
+    ]);
+    expect(query).toHaveBeenNthCalledWith(4, expect.stringContaining('where is_active = true'), []);
+    expect(query).toHaveBeenNthCalledWith(5, expect.stringContaining('from product_list_prices'), [
+      pricingCityId,
+      10,
+      0,
+    ]);
     expect(response.body).toEqual({
       success: true,
       data: {
@@ -123,7 +155,10 @@ describe('customer products API', () => {
             isActive: true,
             createdAt: '2026-08-23T08:00:00.000Z',
             updatedAt: '2026-08-23T09:00:00.000Z',
-            priceDisplay: 'PRICE_ON_REQUEST',
+            priceDisplay: 'LIST_PRICE',
+            listPricePerTon: 195.5,
+            priceCurrency: 'SAR',
+            priceUnit: 'TON',
           },
         ],
         pagination: {
@@ -141,6 +176,8 @@ describe('customer products API', () => {
   it('returns one active customer-visible product by id', async () => {
     query
       .mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] })
+      .mockResolvedValueOnce({ rows: [{ delivery_locations: deliveryLocations }] })
+      .mockResolvedValueOnce({ rows: [{ id: pricingCityId }] })
       .mockResolvedValueOnce({ rows: [productRow] });
 
     const response = await authenticatedProductsRequest(
@@ -148,8 +185,9 @@ describe('customer products API', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(query).toHaveBeenNthCalledWith(2, expect.stringContaining('and is_active = true'), [
+    expect(query).toHaveBeenNthCalledWith(4, expect.stringContaining('and is_active = true'), [
       productRow.id,
+      pricingCityId,
     ]);
     expect(response.body).toEqual({
       success: true,
@@ -168,7 +206,10 @@ describe('customer products API', () => {
           isActive: true,
           createdAt: '2026-08-23T08:00:00.000Z',
           updatedAt: '2026-08-23T09:00:00.000Z',
-          priceDisplay: 'PRICE_ON_REQUEST',
+          priceDisplay: 'LIST_PRICE',
+          listPricePerTon: 195.5,
+          priceCurrency: 'SAR',
+          priceUnit: 'TON',
         },
       },
     });
@@ -179,6 +220,8 @@ describe('customer products API', () => {
   it('returns 404 when the requested product is inactive or missing', async () => {
     query
       .mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] })
+      .mockResolvedValueOnce({ rows: [{ delivery_locations: deliveryLocations }] })
+      .mockResolvedValueOnce({ rows: [{ id: pricingCityId }] })
       .mockResolvedValueOnce({ rows: [] });
 
     const response = await authenticatedProductsRequest(
@@ -192,6 +235,8 @@ describe('customer products API', () => {
   it('supports search, category, packaging type and uom filters', async () => {
     query
       .mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] })
+      .mockResolvedValueOnce({ rows: [{ delivery_locations: deliveryLocations }] })
+      .mockResolvedValueOnce({ rows: [{ id: pricingCityId }] })
       .mockResolvedValueOnce({ rows: [{ total: '0' }] })
       .mockResolvedValueOnce({ rows: [] });
 
@@ -200,16 +245,16 @@ describe('customer products API', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(query).toHaveBeenNthCalledWith(2, expect.stringContaining('lower(category) = $2'), [
+    expect(query).toHaveBeenNthCalledWith(4, expect.stringContaining('lower(category) = $2'), [
       '%opc%',
       'cement',
       'bag',
       'ton',
     ]);
     expect(query).toHaveBeenNthCalledWith(
-      3,
+      5,
       expect.stringContaining('lower(packaging_type) = $3'),
-      ['%opc%', 'cement', 'bag', 'ton', 10, 10],
+      ['%opc%', 'cement', 'bag', 'ton', pricingCityId, 10, 10],
     );
     expect(response.body.data.pagination).toEqual({
       page: 2,

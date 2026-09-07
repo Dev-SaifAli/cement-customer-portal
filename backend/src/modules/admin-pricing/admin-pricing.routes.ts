@@ -9,6 +9,14 @@ adminPricingRouter.get(
   '/',
   asyncHandler((req, res) => adminPricingController.index(req, res)),
 );
+adminPricingRouter.get(
+  '/approval-settings',
+  asyncHandler((req, res) => adminPricingController.getApprovalSettings(req, res)),
+);
+adminPricingRouter.put(
+  '/approval-settings/list-price-direct-order',
+  asyncHandler((req, res) => adminPricingController.updateListPriceDirectOrderApproval(req, res)),
+);
 adminPricingRouter.put(
   '/products/:productId',
   asyncHandler((req, res) => adminPricingController.upsertProductPrice(req, res)),

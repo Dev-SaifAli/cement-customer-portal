@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ProductImage } from '../../components/customer/ProductImage';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import {
@@ -27,7 +27,11 @@ import {
   getCustomerLocations,
   type CustomerLocation,
 } from '../../services/customerLocationsService';
-import { getCustomerProducts, type CustomerProduct } from '../../services/customerProductsService';
+import {
+  getCustomerProduct,
+  getCustomerProducts,
+  type CustomerProduct,
+} from '../../services/customerProductsService';
 import { getPickupLocations, type PickupLocation } from '../../services/customerQuotationsService';
 import { createClientId } from '../../utils/createClientId';
 
@@ -37,6 +41,8 @@ const today = new Date().toISOString().slice(0, 10);
 
 export function CustomerDirectOrder() {
   const { user } = useCustomerAuth();
+  const [searchParams] = useSearchParams();
+  const preselectedProductId = searchParams.get('product')?.trim() ?? '';
   const requestId = useRef(createClientId());
   const [products, setProducts] = useState<CustomerProduct[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<CustomerProduct | null>(null);
@@ -68,10 +74,26 @@ export function CustomerDirectOrder() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getCustomerProducts(), getCustomerLocations(), getPickupLocations()])
-      .then(([productResult, customerLocations, pickupResult]) => {
+    Promise.all([
+      getCustomerProducts(),
+      getCustomerLocations(),
+      getPickupLocations(),
+      preselectedProductId
+        ? getCustomerProduct(preselectedProductId).catch(() => null)
+        : Promise.resolve(null),
+    ])
+      .then(([productResult, customerLocations, pickupResult, preselectedProduct]) => {
         if (cancelled) return;
-        setProducts(productResult.items);
+        setProducts(
+          preselectedProduct &&
+            !productResult.items.some((product) => product.id === preselectedProduct.id)
+            ? [preselectedProduct, ...productResult.items]
+            : productResult.items,
+        );
+        if (preselectedProduct) {
+          setSelectedProduct(preselectedProduct);
+          setProductSearch(preselectedProduct.productName);
+        }
         setLocations(customerLocations);
         setPickupLocations(pickupResult);
         const mappedPrimaryLocation = customerLocations.find(
@@ -90,7 +112,7 @@ export function CustomerDirectOrder() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [preselectedProductId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {

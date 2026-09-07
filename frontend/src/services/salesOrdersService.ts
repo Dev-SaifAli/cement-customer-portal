@@ -44,6 +44,22 @@ export async function startSalesOrderProcessing(id: string) {
   return response.data.order;
 }
 
+export async function approveDirectOrder(id: string) {
+  const response = await request<{ success: boolean; data: { order: SalesOrder } }>(
+    `/sales/orders/${encodeURIComponent(id)}/approve-direct-order`,
+    { method: 'POST' },
+  );
+  return response.data.order;
+}
+
+export async function rejectDirectOrder(id: string, reason?: string) {
+  const response = await request<{ success: boolean; data: { order: SalesOrder } }>(
+    `/sales/orders/${encodeURIComponent(id)}/reject-direct-order`,
+    { method: 'POST', body: JSON.stringify({ reason: reason?.trim() || undefined }) },
+  );
+  return response.data.order;
+}
+
 async function request<T>(path: string, init?: RequestInit) {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,

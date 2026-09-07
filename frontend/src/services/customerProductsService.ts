@@ -16,7 +16,10 @@ export interface CustomerProduct {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
-  priceDisplay: 'PRICE_ON_REQUEST';
+  priceDisplay: 'LIST_PRICE' | 'PRICE_UNAVAILABLE' | 'PRICE_ON_REQUEST';
+  listPricePerTon: number | null;
+  priceCurrency: 'SAR';
+  priceUnit: 'TON';
 }
 
 export interface CustomerProductsQuery {

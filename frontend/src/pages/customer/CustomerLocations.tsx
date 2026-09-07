@@ -1,8 +1,8 @@
-import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { CheckCircle2, Edit3, Eye, MapPin, Plus, Star, Trash2, X } from 'lucide-react';
 import { LocationPickerMap } from '../../components/registration/LocationPickerMap';
+import { SearchableTomSelect } from '../../components/ui/SearchableTomSelect';
 import type { Coordinates } from '../../config/map';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import {
@@ -22,6 +22,7 @@ import {
   type CustomerLocationPayload,
   type CustomerLocationCity,
 } from '../../services/customerLocationsService';
+import type { NormalizedLocationData } from '../../services/locationReverseGeocodingService';
 
 type LocationForm = {
   name: string;
@@ -85,6 +86,10 @@ export function CustomerLocations() {
   const cityOptions = useMemo(
     () => Array.from(new Set([form.city, ...cities.map((city) => city.name)].filter(Boolean))),
     [cities, form.city],
+  );
+  const regionOptions = useMemo(
+    () => Array.from(new Set([form.region, ...regions].filter(Boolean))),
+    [form.region],
   );
 
   const editingLocation = useMemo(
@@ -231,6 +236,20 @@ export function CustomerLocations() {
   };
 
   const formCoordinates = getCoordinates(form);
+  const applySelectedLocation = (
+    current: LocationForm,
+    location: NormalizedLocationData,
+  ): LocationForm => ({
+    ...current,
+    name: location.locationName ?? current.name,
+    latitude: Number(location.latitude),
+    longitude: Number(location.longitude),
+    streetAddress: location.street ?? location.formattedAddress ?? current.streetAddress,
+    city: resolveLocationCity(location.city, cityOptions) ?? current.city,
+    region: location.region ?? current.region,
+    country: location.country ?? (current.country || 'Saudi Arabia'),
+    postalCode: location.postalCode?.replace(/\D/g, '').slice(0, 5) ?? current.postalCode,
+  });
 
   return (
     <div className="space-y-4">
@@ -291,7 +310,7 @@ export function CustomerLocations() {
             required
             value={form.region}
             error={formErrors.region}
-            options={regions}
+            options={regionOptions}
             onChange={(value) => updateField('region', value)}
             onBlur={() => validateField('region')}
           />
@@ -450,8 +469,18 @@ export function CustomerLocations() {
               return;
             }
 
-            setForm((current) => ({ ...current, latitude, longitude }));
-            setFormErrors((current) => ({ ...current, coordinates: '' }));
+            setForm((current) =>
+              applySelectedLocation(current, { ...coordinates, latitude, longitude }),
+            );
+            setFormErrors((current) => ({
+              ...current,
+              coordinates: '',
+              streetAddress: '',
+              city: '',
+              region: '',
+              country: '',
+              postalCode: '',
+            }));
             setMapTarget(null);
           }}
         />
@@ -587,6 +616,32 @@ function ActionButton({
   );
 }
 
+function resolveLocationCity(city: string | undefined, options: string[]) {
+  const normalizedCity = normalizeLocationText(city);
+  if (!normalizedCity) return undefined;
+
+  return (
+    options.find((option) => normalizeLocationText(option) === normalizedCity) ??
+    options.find((option) => {
+      const normalizedOption = normalizeLocationText(option);
+      return normalizedOption.includes(normalizedCity) || normalizedCity.includes(normalizedOption);
+    }) ??
+    city?.trim()
+  );
+}
+
+function normalizeLocationText(value: string | undefined) {
+  return (
+    value
+    ?.normalize('NFKD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/\b(city|tehsil|district|governorate|governorate of|province|region)\b/giu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+      .toLowerCase() ?? ''
+  );
+}
+
 function TextInput(props: {
   label: string;
   value: string;
@@ -640,25 +695,19 @@ function SelectInput(props: {
         {props.label}
         {props.required && <span className="ml-1 text-red-600">*</span>}
       </span>
-      <NativeTomSelect
+      <SearchableTomSelect
         value={props.value}
-        onChange={(event) => props.onChange(event.target.value)}
+        options={props.options.map((option) => ({ value: option, label: option }))}
+        placeholder={props.placeholder ?? props.label}
+        ariaLabel={props.label}
+        onChange={props.onChange}
         onBlur={props.onBlur}
-        aria-label={props.label}
-        searchPlaceholder={`Search ${props.label.toLowerCase()}...`}
-        className={`mt-2 h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium outline-none focus:ring-2 ${
+        wrapperClassName={`mt-2 ${
           props.error
-            ? 'border-red-400 focus:ring-red-100'
-            : 'border-slate-200 focus:border-[#54247a] focus:ring-[#54247a]/10'
+            ? 'registration-region-select-error'
+            : ''
         }`}
-      >
-        <option value="">{props.placeholder ?? 'Select Region'}</option>
-        {props.options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </NativeTomSelect>
+      />
       {props.error && (
         <span className="mt-1 block text-xs font-semibold text-red-600">{props.error}</span>
       )}

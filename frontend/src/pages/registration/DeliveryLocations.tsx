@@ -1,4 +1,4 @@
-import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
+import { SearchableTomSelect } from '../../components/ui/SearchableTomSelect';
 import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
@@ -20,6 +20,7 @@ import { LocationPickerMap } from '../../components/registration/LocationPickerM
 import { SaveDraftButton } from '../../components/registration/SaveDraftButton';
 import { SaveStatus } from '../../components/registration/SaveStatus';
 import { formatCoordinates, isValidCoordinates } from '../../config/map';
+import type { NormalizedLocationData } from '../../services/locationReverseGeocodingService';
 import {
   formatSaudiPhoneNumber,
   getSaudiPhoneDigitsRemaining,
@@ -322,7 +323,7 @@ export default function DeliveryLocations() {
                     error={errors.region}
                     autoComplete="shipping address-level1"
                     onChange={(value) => updateField('region', value)}
-                    options={SAUDI_REGIONS}
+                    options={Array.from(new Set([form.region, ...SAUDI_REGIONS].filter(Boolean)))}
                   />
                 </div>
 
@@ -548,24 +549,31 @@ export default function DeliveryLocations() {
           initialCoordinates={getMapTargetCoordinates(mapTarget, form) ?? undefined}
           locationLabel={getMapTargetLabel(mapTarget, form)}
           onCancel={() => setMapTarget(null)}
-          onConfirm={(coordinates) => {
+          onConfirm={(location) => {
             if (mapTarget.type === 'form') {
               setForm((current) => ({
-                ...current,
-                latitude: coordinates.latitude,
-                longitude: coordinates.longitude,
+                ...applySelectedLocation(current, location, cities.map((city) => city.name)),
               }));
-              setErrors((current) => ({ ...current, coordinates: '' }));
+              setErrors((current) => ({
+                ...current,
+                coordinates: '',
+                streetAddress: '',
+                city: '',
+                region: '',
+                postalCode: '',
+              }));
             } else {
               setDeliveryLocations(
-                locations.map((location) =>
-                  location.id === mapTarget.locationId
+                locations.map((deliveryLocation) =>
+                  deliveryLocation.id === mapTarget.locationId
                     ? {
-                        ...location,
-                        latitude: coordinates.latitude,
-                        longitude: coordinates.longitude,
+                        ...applySelectedLocation(
+                          deliveryLocation,
+                          location,
+                          cities.map((city) => city.name),
+                        ),
                       }
-                    : location,
+                    : deliveryLocation,
                 ),
               );
             }
@@ -621,6 +629,51 @@ function getMapTargetLabel(mapTarget: MapTarget, form: DeliveryLocationForm) {
   return form.name || form.city || undefined;
 }
 
+function applySelectedLocation<T extends DeliveryLocationForm | DeliveryLocation>(
+  current: T,
+  location: NormalizedLocationData,
+  cityOptions: string[],
+): T {
+  return {
+    ...current,
+    name: location.locationName ?? current.name,
+    latitude: location.latitude,
+    longitude: location.longitude,
+    streetAddress: location.street ?? location.formattedAddress ?? current.streetAddress,
+    city: resolveLocationCity(location.city, cityOptions) ?? current.city,
+    region: location.region ?? current.region,
+    country: location.country ?? current.country,
+    postalCode: location.postalCode?.replace(/\D/g, '').slice(0, 5) ?? current.postalCode,
+  };
+}
+
+function resolveLocationCity(city: string | undefined, options: string[]) {
+  const normalizedCity = normalizeLocationText(city);
+  if (!normalizedCity) return undefined;
+
+  const candidateOptions = Array.from(new Set([...options, city].filter(Boolean)));
+  return (
+    candidateOptions.find((option) => normalizeLocationText(option) === normalizedCity) ??
+    candidateOptions.find((option) => {
+      const normalizedOption = normalizeLocationText(option);
+      return normalizedOption.includes(normalizedCity) || normalizedCity.includes(normalizedOption);
+    }) ??
+    city?.trim()
+  );
+}
+
+function normalizeLocationText(value: string | undefined) {
+  return (
+    value
+    ?.normalize('NFKD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/\b(city|tehsil|district|governorate|governorate of|province|region)\b/giu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+      .toLowerCase() ?? ''
+  );
+}
+
 function normalizePrimaryLocations(locations: DeliveryLocation[], primaryId?: string) {
   if (locations.length === 0) return locations;
 
@@ -672,7 +725,7 @@ function RegistrationProgress() {
                   }
                 `}
                 >
-                  {step.completed ? 'âœ“' : step.number}
+                  {step.completed ? <CheckCircle2 size={17} strokeWidth={3} /> : step.number}
                 </div>
 
                 <span
@@ -803,7 +856,7 @@ function LocationCard({
         <div className="flex gap-2">
           <UserRound size={17} className="shrink-0 mt-0.5" />
           <span>
-            {location.contactPerson} â€¢ {location.contactPhone}
+            {location.contactPerson} - {location.contactPhone}
           </span>
         </div>
 
@@ -994,28 +1047,15 @@ function FormSelect({
         {required && <span className="text-red-600 ml-1">*</span>}
       </label>
 
-      <NativeTomSelect
+      <SearchableTomSelect
         value={value}
         autoComplete={autoComplete}
-        onChange={(e) => onChange(e.target.value)}
-        className={`
-          w-full h-[43px] px-3 rounded-sm border bg-white
-          outline-none text-[15px]
-          ${
-            error
-              ? 'border-red-500'
-              : 'border-[#d6cbd7] focus:border-[#54247a] focus:ring-2 focus:ring-[#54247a]/10'
-          }
-        `}
-      >
-        <option value="">{placeholder ?? 'Select Region'}</option>
-
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </NativeTomSelect>
+        options={options.map((option) => ({ value: option, label: option }))}
+        placeholder={placeholder ?? label}
+        ariaLabel={label}
+        onChange={onChange}
+        wrapperClassName={error ? 'registration-region-select-error' : undefined}
+      />
 
       {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
     </div>

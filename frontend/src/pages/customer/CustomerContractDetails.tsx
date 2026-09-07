@@ -78,7 +78,7 @@ export function CustomerContractDetailsPage() {
       <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
         <InfoCard title="Contract Information">
           <Field label="Contract Number" value={contract.reference} />
-          <Field label="Source Quotation" value={contract.sourceQuotation?.reference} />
+          <Field label="Source RFQ" value={contract.sourceQuotation?.reference} />
           <Field label="Product" value={contract.productName} />
           <Field label="Packaging" value={contract.packaging} />
           <Field label="Fulfilment" value={formatFulfilment(contract.fulfilment)} />

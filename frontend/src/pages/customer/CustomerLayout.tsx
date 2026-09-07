@@ -46,7 +46,7 @@ const customerNavigation: Array<AppShellNavigationItem & { roles: CustomerRole[]
   },
   {
     to: '/customer/quotations',
-    label: 'Quotations',
+    label: 'RFQs',
     icon: <FileText size={18} />,
     roles: ['CUSTOMER_ADMIN', 'PURCHASER'],
   },

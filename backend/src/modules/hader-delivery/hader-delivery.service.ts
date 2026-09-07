@@ -3,6 +3,10 @@ import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import type { SalesUser } from '../sales-auth/sales-auth.types.js';
 import type { CreateShipmentInput, HaderListQuery } from './hader-delivery.validation.js';
+import {
+  nextDeliveryRequestReference,
+  nextShipmentReference,
+} from '../document-numbering/document-numbering.service.js';
 
 const PAGE_SIZE = 10;
 
@@ -143,7 +147,7 @@ export class HaderDeliveryService {
           'SHIPMENT_QUANTITY_EXCEEDS_REMAINING',
         );
       }
-      const number = await nextReference(client, 'shipment_number_seq', 'SHP');
+      const number = await nextShipmentReference(client, request.contract_id, request.contract_reference);
       const result = await client.query<{ id: string }>(
         `insert into shipments (shipment_number,delivery_request_id,order_id,customer_account_id,
           quantity_ton,status,scheduled_date,created_by_sales_user_id,client_request_id)
@@ -283,7 +287,7 @@ export async function createDeliveryRequestForOrder(
     salesUserId: string;
   },
 ) {
-  const number = await nextReference(client, 'delivery_request_number_seq', 'DR');
+  const number = await nextDeliveryRequestReference(client);
   const result = await client.query<{ id: string; request_number: string; status: string }>(
     `insert into delivery_requests (request_number,order_id,customer_account_id,hader_city_id,
       ship_to_location_id,quantity_ton,requested_date,hader_zone_status,status)
@@ -329,12 +333,6 @@ export async function createDeliveryRequestForOrder(
   return { id: row.id, requestNumber: row.request_number, status: row.status, created: false };
 }
 
-async function nextReference(client: PoolClient, sequence: string, prefix: string) {
-  const result = await client.query<{ sequence: string }>(
-    `select nextval('${sequence}')::text as sequence`,
-  );
-  return `${prefix}-${new Date().getFullYear()}-${String(result.rows[0]?.sequence ?? '1').padStart(6, '0')}`;
-}
 function buildFilters(query: HaderListQuery, statusColumn: string, searchColumns: string[]) {
   const values: unknown[] = [];
   const clauses: string[] = [];

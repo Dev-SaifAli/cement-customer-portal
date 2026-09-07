@@ -45,7 +45,18 @@ export const listCustomerOrdersSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   search: z.string().trim().max(120).optional(),
   orderType: z.enum(['DIRECT', 'CONTRACT']).optional(),
-  status: z.enum(['DRAFT', 'SUBMITTED', 'PROCESSING', 'COMPLETED', 'CANCELLED']).optional(),
+  status: z
+    .enum([
+      'DRAFT',
+      'SUBMITTED',
+      'PENDING_APPROVAL',
+      'APPROVED',
+      'REJECTED',
+      'PROCESSING',
+      'COMPLETED',
+      'CANCELLED',
+    ])
+    .optional(),
 });
 
 export type CreateCustomerOrderPayload = z.infer<typeof createCustomerOrderSchema>;

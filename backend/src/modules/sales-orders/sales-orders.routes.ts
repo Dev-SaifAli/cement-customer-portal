@@ -17,6 +17,14 @@ salesOrdersRouter.get(
   asyncHandler((request, response) => salesOrdersController.show(request, response)),
 );
 salesOrdersRouter.post(
+  '/:id/approve-direct-order',
+  asyncHandler((request, response) => salesOrdersController.approveDirectOrder(request, response)),
+);
+salesOrdersRouter.post(
+  '/:id/reject-direct-order',
+  asyncHandler((request, response) => salesOrdersController.rejectDirectOrder(request, response)),
+);
+salesOrdersRouter.post(
   '/:id/start-processing',
   asyncHandler((request, response) => salesOrdersController.startProcessing(request, response)),
 );

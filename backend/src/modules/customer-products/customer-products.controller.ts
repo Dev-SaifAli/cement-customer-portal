@@ -9,7 +9,7 @@ import {
 export class CustomerProductsController {
   async show(request: CustomerAuthenticatedRequest, response: Response) {
     const productId = customerProductIdSchema.parse(request.params.id);
-    const product = await customerProductsService.getProduct(productId);
+    const product = await customerProductsService.getProduct(request.customerUser!, productId);
 
     response.status(200).json({
       success: true,
@@ -21,7 +21,7 @@ export class CustomerProductsController {
 
   async list(request: CustomerAuthenticatedRequest, response: Response) {
     const query = listCustomerProductsSchema.parse(request.query);
-    const products = await customerProductsService.listProducts(query);
+    const products = await customerProductsService.listProducts(request.customerUser!, query);
 
     response.status(200).json({
       success: true,

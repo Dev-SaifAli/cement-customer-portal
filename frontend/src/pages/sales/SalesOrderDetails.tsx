@@ -13,7 +13,9 @@ import {
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
+  approveDirectOrder,
   getSalesOrder,
+  rejectDirectOrder,
   startSalesOrderProcessing,
   type SalesOrder,
 } from '../../services/salesOrdersService';
@@ -23,6 +25,7 @@ export function SalesOrderDetailsPage() {
   const [order, setOrder] = useState<SalesOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [approvalAction, setApprovalAction] = useState<'approve' | 'reject' | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState('');
 
@@ -63,6 +66,23 @@ export function SalesOrderDetailsPage() {
     }
   };
 
+  const decideDirectOrder = async (action: 'approve' | 'reject') => {
+    if (!id) return;
+    setApprovalAction(action);
+    setError('');
+    try {
+      setOrder(action === 'approve' ? await approveDirectOrder(id) : await rejectDirectOrder(id));
+    } catch (approvalError) {
+      setError(
+        approvalError instanceof Error
+          ? approvalError.message
+          : `Unable to ${action} this Direct Order.`,
+      );
+    } finally {
+      setApprovalAction(null);
+    }
+  };
+
   if (loading) return <State text="Loading order..." loading />;
   if (!order) return <State text={error || 'Order was not found.'} error />;
 
@@ -81,7 +101,27 @@ export function SalesOrderDetailsPage() {
             <Status value={order.status} />
           </div>
         </div>
-        {order.status === 'SUBMITTED' && (
+        {order.status === 'PENDING_APPROVAL' && order.orderType === 'DIRECT' && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void decideDirectOrder('reject')}
+              disabled={approvalAction !== null}
+              className="inline-flex h-10 items-center rounded-lg border border-red-200 px-5 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-60"
+            >
+              {approvalAction === 'reject' ? 'Rejecting...' : 'Reject'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void decideDirectOrder('approve')}
+              disabled={approvalAction !== null}
+              className="inline-flex h-10 items-center rounded-lg bg-[#54247a] px-5 text-sm font-bold text-white hover:bg-[#472066] disabled:opacity-60"
+            >
+              {approvalAction === 'approve' ? 'Approving...' : 'Approve'}
+            </button>
+          </div>
+        )}
+        {['SUBMITTED', 'APPROVED'].includes(order.status) && (
           <button
             type="button"
             onClick={() => setConfirmOpen(true)}
@@ -264,11 +304,17 @@ function Field({
 }
 
 function Status({ value }: { value: string }) {
+  const color =
+    value === 'PROCESSING'
+      ? 'bg-blue-600'
+      : value === 'APPROVED'
+        ? 'bg-emerald-600'
+        : value === 'REJECTED'
+          ? 'bg-red-600'
+          : 'bg-amber-500';
   return (
     <span className="inline-flex items-center gap-2 text-xs font-semibold text-[#1a1b23]">
-      <span
-        className={`h-2 w-2 rounded-full ${value === 'PROCESSING' ? 'bg-blue-600' : 'bg-amber-500'}`}
-      />
+      <span className={`h-2 w-2 rounded-full ${color}`} />
       {title(value)}
     </span>
   );
