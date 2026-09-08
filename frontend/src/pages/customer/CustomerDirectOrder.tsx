@@ -56,7 +56,10 @@ export function CustomerDirectOrder() {
   const [pickupLocationId, setPickupLocationId] = useState('');
   const [requestedDeliveryDate, setRequestedDeliveryDate] = useState('');
   const [notes, setNotes] = useState('');
-  const [pricing, setPricing] = useState<DirectOrderPricing | null>(null);
+  const [pricingResponse, setPricing] = useState<{
+    input: DirectOrderInput;
+    result: DirectOrderPricing;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [pricingLoading, setPricingLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -67,6 +70,8 @@ export function CustomerDirectOrder() {
   const canCreate = user?.role === 'CUSTOMER_ADMIN' || user?.role === 'PURCHASER';
   const quantityTons = Number(quantity);
   const selectedLocation = locations.find((location) => location.id === shipToLocationId) ?? null;
+  const selectedProductId = selectedProduct?.id ?? null;
+  const selectedLocationMapped = hasMapCoordinates(selectedLocation);
   const hasMappedLocations = locations.some(hasMapCoordinates);
   const hasUnmappedLocations = locations.some((location) => !hasMapCoordinates(location));
   const selectedPickup =
@@ -124,44 +129,44 @@ export function CustomerDirectOrder() {
   }, [productSearch]);
 
   const pricingPayload = useMemo<DirectOrderInput | null>(() => {
-    if (!selectedProduct || !Number.isFinite(quantityTons) || quantityTons <= 0) return null;
+    if (!selectedProductId || !Number.isFinite(quantityTons) || quantityTons <= 0) return null;
     if (fulfilmentType === 'DELIVERY' && !shipToLocationId) return null;
-    if (fulfilmentType === 'DELIVERY' && !hasMapCoordinates(selectedLocation)) return null;
+    if (fulfilmentType === 'DELIVERY' && !selectedLocationMapped) return null;
     if (fulfilmentType === 'PICKUP' && !pickupLocationId) return null;
     return {
-      productId: selectedProduct.id,
+      productId: selectedProductId,
       quantityTons,
       fulfilmentType,
       shipToLocationId: fulfilmentType === 'DELIVERY' ? shipToLocationId : null,
       pickupLocationId: fulfilmentType === 'PICKUP' ? pickupLocationId : null,
-      requestedDeliveryDate:
-        fulfilmentType === 'DELIVERY' && requestedDeliveryDate ? requestedDeliveryDate : null,
-      notes: notes.trim() || null,
+      requestedDeliveryDate: null,
+      notes: null,
     };
   }, [
     fulfilmentType,
-    notes,
     pickupLocationId,
     quantityTons,
-    requestedDeliveryDate,
-    selectedProduct,
-    selectedLocation,
+    selectedProductId,
+    selectedLocationMapped,
     shipToLocationId,
   ]);
+  // Only a response for the current pricing inputs can enable review or submission.
+  const pricing = pricingResponse?.input === pricingPayload ? pricingResponse.result : null;
 
   useEffect(() => {
+    setPricing(null);
     if (!pricingPayload) {
-      setPricing(null);
       setPricingLoading(false);
       return;
     }
     let cancelled = false;
+    const controller = new AbortController();
+    setPricingLoading(true);
+    setError('');
     const timer = window.setTimeout(() => {
-      setPricingLoading(true);
-      setError('');
-      priceDirectOrder(pricingPayload)
+      priceDirectOrder(pricingPayload, controller.signal)
         .then((result) => {
-          if (!cancelled) setPricing(result);
+          if (!cancelled) setPricing({ input: pricingPayload, result });
         })
         .catch((pricingError) => {
           if (!cancelled) {
@@ -179,6 +184,7 @@ export function CustomerDirectOrder() {
     }, 350);
     return () => {
       cancelled = true;
+      controller.abort();
       window.clearTimeout(timer);
     };
   }, [pricingPayload]);
@@ -243,17 +249,21 @@ export function CustomerDirectOrder() {
       return setError('Select a requested delivery date.');
     if (fulfilmentType === 'PICKUP' && !pickupLocationId)
       return setError('Select a pickup location.');
-    if (!pricing) return setError('Wait for pricing to be calculated before continuing.');
+    if (!pricing || pricingLoading)
+      return setError('Wait for pricing to be calculated before continuing.');
     setReviewOpen(true);
   };
 
   const submit = async () => {
-    if (!pricingPayload || !pricing) return;
+    if (!pricingPayload || !pricing || pricingLoading || submitting) return;
     setSubmitting(true);
     setError('');
     try {
       const order = await createDirectOrder({
         ...pricingPayload,
+        requestedDeliveryDate:
+          fulfilmentType === 'DELIVERY' && requestedDeliveryDate ? requestedDeliveryDate : null,
+        notes: notes.trim() || null,
         clientRequestId: requestId.current,
       });
       setReviewOpen(false);

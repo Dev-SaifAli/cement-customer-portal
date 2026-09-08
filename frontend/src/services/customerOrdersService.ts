@@ -109,9 +109,14 @@ export interface CustomerOrdersList {
 }
 
 export class CustomerOrdersApiError extends Error {
-  constructor(message: string) {
+  readonly status: number | undefined;
+  readonly code: string | undefined;
+
+  constructor(message: string, status?: number, code?: string) {
     super(message);
     this.name = 'CustomerOrdersApiError';
+    this.status = status;
+    this.code = code;
   }
 }
 
@@ -133,10 +138,10 @@ export async function createCustomerOrder(
   return response.data.order;
 }
 
-export async function priceDirectOrder(payload: DirectOrderInput) {
+export async function priceDirectOrder(payload: DirectOrderInput, signal?: AbortSignal) {
   const response = await request<{ success: boolean; data: { pricing: DirectOrderPricing } }>(
     '/customer/orders/price',
-    { method: 'POST', body: JSON.stringify(payload) },
+    { method: 'POST', body: JSON.stringify(payload), ...(signal ? { signal } : {}) },
   );
   return response.data.pricing;
 }
@@ -185,16 +190,20 @@ async function request<T>(path: string, options: RequestInit = {}) {
         ...options.headers,
       },
     });
-  } catch {
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
     throw new CustomerOrdersApiError('Unable to connect to the orders service.');
   }
   const data = (await response.json().catch(() => ({}))) as T & {
     message?: string;
-    error?: { message?: string };
+    error?: { message?: string; code?: string };
   };
   if (!response.ok) {
     throw new CustomerOrdersApiError(
-      data.error?.message ?? data.message ?? 'Order request failed.',
+      data.error?.message ?? data.message ??
+        (response.status >= 500 ? 'The service is temporarily unavailable.' : 'Order request failed.'),
+      response.status,
+      data.error?.code,
     );
   }
   return data;

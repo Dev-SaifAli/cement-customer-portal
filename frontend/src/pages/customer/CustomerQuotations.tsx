@@ -1305,7 +1305,7 @@ function filtersToRules(filters: typeof initialFilters) {
   return rules;
 }
 
-function upsertReferenceRule(rules: RFQFilterRule[], value: string) {
+function upsertReferenceRule(rules: RFQFilterRule[], value: string): RFQFilterRule[] {
   const reference = value.trim();
   const withoutReference = rules.filter((rule) => rule.field !== 'reference');
   if (!reference) return withoutReference;
