@@ -4,6 +4,10 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { listSalesOrders, type SalesOrder } from '../../services/salesOrdersService';
 import type { OrderStatus } from '../../services/customerOrdersService';
+import { formatCommercialTonValue } from '../../utils/commercialQuantity';
+import { LocationCityDisplay, getShipToCity } from '../../components/list/LocationCityDisplay';
+import { ShipmentSummaryCell } from '../../components/list/ShipmentSummaryCell';
+import { TrackingQrCell } from '../../components/list/TrackingQrCell';
 
 export function SalesOrdersPage() {
   const [orders, setOrders] = useState<SalesOrder[]>([]);
@@ -105,9 +109,10 @@ export function SalesOrdersPage() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
+              <table className="min-w-[1560px] w-full text-left text-sm">
                 <thead className="bg-[#f8fafc] text-xs text-[#64748b]">
                   <tr>
+                    <th className="px-4 py-3">QR</th>
                     <th className="px-4 py-3">Order Number</th>
                     <th className="px-4 py-3">Customer</th>
                     <th className="px-4 py-3">Order Type</th>
@@ -115,7 +120,9 @@ export function SalesOrdersPage() {
                     <th className="px-4 py-3">Product</th>
                     <th className="px-4 py-3">Quantity TON</th>
                     <th className="px-4 py-3">Fulfilment</th>
-                    <th className="px-4 py-3">Shipment Status</th>
+                    <th className="px-4 py-3">Shipment(s)</th>
+                    <th className="px-4 py-3">Hader City</th>
+                    <th className="px-4 py-3">Ship-to City</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Created Date</th>
                   </tr>
@@ -123,6 +130,9 @@ export function SalesOrdersPage() {
                 <tbody className="divide-y divide-[#eceaf0]">
                   {orders.map((order) => (
                     <tr key={order.id} className="hover:bg-[#faf8fc]">
+                      <td className="px-4 py-3">
+                        <TrackingQrCell documentType="ORDER" reference={order.orderNumber} viewTo={`/sales/orders/${order.id}`} />
+                      </td>
                       <td className="px-4 py-3 font-bold text-[#54247a]">
                         <Link
                           to={`/sales/orders/${order.id}`}
@@ -143,9 +153,7 @@ export function SalesOrdersPage() {
                         <p className="text-xs text-[#64748b]">{order.product.code}</p>
                       </td>
                       <td className="px-4 py-3">
-                        {order.requestedQuantityTons.toLocaleString(undefined, {
-                          maximumFractionDigits: 3,
-                        })}
+                        {formatCommercialTonValue(order.requestedQuantityTons)}
                       </td>
                       <td className="px-4 py-3">
                         <p>{order.fulfilmentType === 'DELIVERY' ? 'Hader Delivery' : 'Pick-Up'}</p>
@@ -157,12 +165,10 @@ export function SalesOrdersPage() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {order.fulfilmentType === 'PICKUP'
-                          ? 'Not applicable'
-                          : order.shipmentSummary.count
-                            ? `${label(order.shipmentSummary.latestStatus ?? 'CREATED')} (${order.shipmentSummary.count})`
-                            : 'Not created'}
+                        <ShipmentSummaryCell summary={order.shipmentSummary} routeBase="/sales/shipments" />
                       </td>
+                      <td className="px-4 py-3"><LocationCityDisplay city={order.fulfilmentType === 'DELIVERY' ? order.haderCity : null} /></td>
+                      <td className="px-4 py-3"><LocationCityDisplay city={getShipToCity(order)} /></td>
                       <td className="px-4 py-3">
                         <span className="inline-flex items-center gap-2 text-xs font-semibold">
                           <span

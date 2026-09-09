@@ -1,6 +1,4 @@
 import {
-  ArrowLeft,
-  AlertTriangle,
   BriefcaseBusiness,
   CalendarDays,
   CheckCircle2,
@@ -8,25 +6,59 @@ import {
   Lock,
   MapPin,
   Package,
+  Pencil,
   PlusCircle,
+  Send,
+  XCircle,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { CommercialTonInput } from '../../components/ui/CommercialTonInput';
+import { useToast } from '../../components/ui/ToastProvider';
+import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Textarea } from '../../components/ui/shadcn';
+import { DetailBreadcrumb } from '../../components/customer-detail/DetailBreadcrumb';
 import {
-  activateSalesContract,
+  DocumentHeader,
+  DocumentStateBadge,
+} from '../../components/customer-detail/DocumentHeader';
+import {
+  formatCommercialTonValue,
+  isWholeTonQuantity,
+  wholeTonQuantityMessage,
+} from '../../utils/commercialQuantity';
+import {
+  approveSalesContract,
   extendSalesContract,
   getSalesContract,
+  rejectSalesContract,
+  submitSalesContract,
+  updateSalesContract,
   type SalesContractDetails,
 } from '../../services/salesService';
+import { useSalesAuth } from '../../context/SalesAuthContext';
+import { getSalesLandingPath } from '../../utils/salesRouting';
 
 export function SalesContractDetailsPage() {
   const { id } = useParams();
+  const { user } = useSalesAuth();
+  const toast = useToast();
   const [contract, setContract] = useState<SalesContractDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [activating, setActivating] = useState(false);
+  const [submitOpen, setSubmitOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [editOpen, setEditOpen] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editForm, setEditForm] = useState({
+    startDate: '',
+    endDate: '',
+  });
   const [extendOpen, setExtendOpen] = useState(false);
   const [extending, setExtending] = useState(false);
   const [extensionError, setExtensionError] = useState('');
@@ -50,18 +82,100 @@ export function SalesContractDetailsPage() {
 
   const history = useMemo(() => buildHistory(contract), [contract]);
 
-  const handleActivate = async () => {
-    if (!contract || activating) return;
-    setActivating(true);
+  const handleSubmit = async () => {
+    if (!contract || submitting) return;
+    setSubmitting(true);
     setError('');
     try {
-      const activatedContract = await activateSalesContract(contract.id);
-      setContract(activatedContract);
-      setConfirmOpen(false);
+      const submittedContract = await submitSalesContract(contract.id);
+      setContract(submittedContract);
+      setSubmitOpen(false);
+      toast.success('Contract submitted for approval');
     } catch {
-      setError('Unable to activate contract. Please verify contract dates, customer, and items.');
+      setError('Unable to submit contract. Please verify contract dates, customer, and items.');
     } finally {
-      setActivating(false);
+      setSubmitting(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!contract || approving) return;
+    setApproving(true);
+    setError('');
+    try {
+      setContract(await approveSalesContract(contract.id));
+      toast.success('Contract approved and activated');
+    } catch {
+      setError('Unable to approve this Contract.');
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!contract || rejecting || !rejectionReason.trim()) return;
+    setRejecting(true);
+    setError('');
+    try {
+      setContract(await rejectSalesContract(contract.id, rejectionReason.trim()));
+      setRejectOpen(false);
+      setRejectionReason('');
+      toast.success('Changes requested from Sales');
+    } catch {
+      setError('Unable to request Contract changes.');
+    } finally {
+      setRejecting(false);
+    }
+  };
+
+  const openEditModal = () => {
+    if (!contract) return;
+    setEditForm({
+      startDate: contract.startDate,
+      endDate: contract.endDate,
+    });
+    setEditError('');
+    setEditOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!contract || savingEdit) return;
+    const quantity = Number(contract.quantity ?? contract.totalQuantityTons);
+    if (!isWholeTonQuantity(quantity)) {
+      setEditError(wholeTonQuantityMessage);
+      return;
+    }
+    if (!editForm.startDate || !editForm.endDate || editForm.endDate < editForm.startDate) {
+      setEditError('End date must be on or after the start date.');
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError('');
+    try {
+      const updated = await updateSalesContract(contract.id, {
+        customerAccountId: contract.customerAccountId,
+        productId: contract.productId,
+        quantity,
+        startDate: editForm.startDate,
+        endDate: editForm.endDate,
+        fulfilment: contract.fulfilment,
+        ...(contract.pickupLocationId ? { pickupLocationId: contract.pickupLocationId } : {}),
+        ...(contract.deliveryLocationId ? { deliveryLocationId: contract.deliveryLocationId } : {}),
+        palletRequired: Boolean(contract.palletRequired),
+        ...(contract.palletType ? { palletType: contract.palletType } : {}),
+        productListPrice: Number(contract.productListPrice),
+        productPrice: Number(contract.productPrice),
+        ...(contract.deliveryListPrice != null ? { deliveryListPrice: contract.deliveryListPrice } : {}),
+        ...(contract.deliveryPrice != null ? { deliveryPrice: contract.deliveryPrice } : {}),
+      });
+      setContract(updated);
+      setEditOpen(false);
+      toast.success('Contract updated');
+    } catch {
+      setEditError('Unable to update Contract. Verify the entered values.');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -87,8 +201,8 @@ export function SalesContractDetailsPage() {
         ? extensionForm.endDate
         : undefined;
 
-    if (additionalQuantity !== undefined && (!Number.isFinite(additionalQuantity) || additionalQuantity <= 0)) {
-      setExtensionError('Quantity increase must be greater than zero.');
+    if (additionalQuantity !== undefined && !isWholeTonQuantity(additionalQuantity)) {
+      setExtensionError(wholeTonQuantityMessage);
       return;
     }
 
@@ -146,38 +260,48 @@ export function SalesContractDetailsPage() {
   if (!contract) return null;
 
   const items = contract.items ?? [];
-  const isDraft = contract.status === 'DRAFT';
+  const isEditable = ['DRAFT', 'CHANGES_REQUESTED'].includes(contract.status);
+  const isUnderReview = contract.status === 'UNDER_REVIEW';
   const isActive = contract.status === 'ACTIVE';
+  const isSalesRep = user?.role === 'SALES_REP';
+  const isContractApprover = user?.role === 'COMMERCIAL_DIRECTOR';
 
   return (
     <div className="space-y-5">
-      <header className="rounded-2xl border border-[#e2e8f0] bg-white shadow-sm">
-        <div className="flex flex-col justify-between gap-4 border-b border-[#e2e8f0] px-5 py-4 lg:flex-row lg:items-center">
-          <div>
-            <Link
-              to="/sales/contracts"
-              className="inline-flex items-center gap-2 text-sm font-semibold text-[#64748b] hover:text-[#54247a]"
-            >
-              <ArrowLeft size={16} /> Contracts
-            </Link>
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-[#1a1b23]">
-                Contract / {contract.reference ?? 'Draft Contract'}
-              </h1>
-              <StatusDot status={contract.status} />
-            </div>
-          </div>
-
-          {isDraft && (
-            <button
-              type="button"
-              onClick={() => setConfirmOpen(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#54247a] px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#472066]"
-            >
-              <CheckCircle2 size={16} /> Activate Contract
-            </button>
+      <DetailBreadcrumb
+        homePath={user ? getSalesLandingPath(user.role) : '/sales'}
+        listLabel="Contracts"
+        listPath="/sales/contracts"
+        current={contract.reference ?? 'Draft Contract'}
+      />
+      <section className="rounded-2xl border border-[#e2e8f0] bg-white shadow-sm">
+        <DocumentHeader
+          number={contract.reference ?? 'Draft Contract'}
+          status={<DocumentStateBadge persisted status={contract.status} />}
+          className="border-b border-[#e2e8f0] px-5 py-4"
+          actions={
+            <>
+          {isEditable && isSalesRep && (
+            <>
+              <Button type="button" variant="outline" onClick={openEditModal}>
+                <Pencil size={16} /> Edit Contract
+              </Button>
+              <Button type="button" onClick={() => setSubmitOpen(true)}>
+                <Send size={16} /> {contract.status === 'CHANGES_REQUESTED' ? 'Resubmit' : 'Submit for Approval'}
+              </Button>
+            </>
           )}
-          {isActive && (
+          {isUnderReview && isContractApprover && (
+            <>
+              <Button type="button" variant="outline" onClick={() => setRejectOpen(true)}>
+                <XCircle size={16} /> Request Changes
+              </Button>
+              <Button type="button" disabled={approving} onClick={() => void handleApprove()}>
+                <CheckCircle2 size={16} /> {approving ? 'Approving...' : 'Approve'}
+              </Button>
+            </>
+          )}
+          {isActive && isSalesRep && (
             <button
               type="button"
               onClick={openExtendModal}
@@ -186,7 +310,9 @@ export function SalesContractDetailsPage() {
               <PlusCircle size={16} /> Extend Contract
             </button>
           )}
-        </div>
+            </>
+          }
+        />
 
         <div className="grid gap-px bg-[#e2e8f0] md:grid-cols-2 xl:grid-cols-4">
           <HeaderCell icon={<BriefcaseBusiness size={16} />} label="Customer">
@@ -211,7 +337,7 @@ export function SalesContractDetailsPage() {
             {formatFulfilment(contract.fulfilment)}
           </HeaderCell>
         </div>
-      </header>
+      </section>
 
       {error && <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
@@ -269,7 +395,9 @@ export function SalesContractDetailsPage() {
                   </td>
                   <td className="px-4 py-3 text-[#1a1b23]">{item.packagingType ?? 'Not provided'}</td>
                   <td className="px-4 py-3 text-[#1a1b23]">
-                    {formatNumber(item.quantityTon ?? item.equivalentTons)} TON
+                    {(item.quantityTon ?? item.equivalentTons) == null
+                      ? 'Not provided'
+                      : `${formatCommercialTonValue(item.quantityTon ?? item.equivalentTons ?? 0)} TON`}
                   </td>
                   <td className="px-4 py-3 font-semibold text-[#1a1b23]">
                     {item.packagingQuantity == null
@@ -322,7 +450,7 @@ export function SalesContractDetailsPage() {
                 <div className="min-w-0">
                   <p className="font-bold text-[#1a1b23]">{event.title}</p>
                   <p className="mt-0.5 text-xs text-[#64748b]">
-                    {event.actor ? `${event.actor} · ` : ''}
+                    {event.actor ? `${event.actor}${event.actorRole ? ` (${formatStatus(event.actorRole)})` : ''} - ` : ''}
                     {formatDateTime(event.createdAt)}
                   </p>
                   {event.reason && (
@@ -338,53 +466,68 @@ export function SalesContractDetailsPage() {
         </Card>
       </section>
 
-      {confirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
-            <div className="flex gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#f6f2fa] text-[#54247a]">
-                <AlertTriangle size={22} />
-              </span>
-              <div>
-                <h2 className="text-lg font-extrabold text-[#1a1b23]">Activate Contract?</h2>
-                <p className="mt-2 text-sm leading-6 text-[#64748b]">
-                  This will activate the contract using the already accepted quotation commercial
-                  terms. Pricing, products, packaging, ship-to and agreement fields will remain
-                  locked after activation.
-                </p>
-              </div>
-            </div>
+      <Dialog open={submitOpen} onOpenChange={(open) => !submitting && setSubmitOpen(open)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Submit Contract for approval?</DialogTitle>
+            <DialogDescription>
+              The Commercial Director will review the Contract. It remains hidden from the customer until approved and activated.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={submitting} onClick={() => setSubmitOpen(false)}>Cancel</Button>
+            <Button type="button" disabled={submitting} onClick={() => void handleSubmit()}>
+              {submitting ? 'Submitting...' : 'Submit for Approval'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-            <div className="mt-5 rounded-xl border border-[#e3e1e8] bg-[#f8fafc] p-4 text-sm">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Contract" value={contract.reference} />
-                <Field label="Customer" value={contract.customerCompanyName} />
-                <Field label="Period" value={`${formatDate(contract.startDate)} - ${formatDate(contract.endDate)}`} />
-                <Field label="Grand Total" value={formatMoney(contract.grandTotal)} strong />
-              </div>
-            </div>
+      <Dialog open={rejectOpen} onOpenChange={(open) => !rejecting && setRejectOpen(open)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Request Contract changes</DialogTitle>
+            <DialogDescription>Explain what Sales must correct before resubmitting.</DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={rejectionReason}
+            maxLength={500}
+            rows={4}
+            aria-label="Reason for requested Contract changes"
+            onChange={(event) => setRejectionReason(event.target.value)}
+          />
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={rejecting} onClick={() => setRejectOpen(false)}>Cancel</Button>
+            <Button type="button" disabled={rejecting || !rejectionReason.trim()} onClick={() => void handleReject()}>
+              {rejecting ? 'Sending...' : 'Request Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-            <div className="mt-6 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmOpen(false)}
-                disabled={activating}
-                className="rounded-xl border border-[#e3e1e8] bg-white px-4 py-2 text-sm font-bold text-[#1a1b23] hover:bg-slate-50 disabled:opacity-60"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleActivate}
-                disabled={activating}
-                className="rounded-xl bg-[#54247a] px-4 py-2 text-sm font-bold text-white hover:bg-[#472066] disabled:opacity-60"
-              >
-                {activating ? 'Activating...' : 'Yes, Activate'}
-              </button>
-            </div>
+      <Dialog open={editOpen} onOpenChange={(open) => !savingEdit && setEditOpen(open)}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Edit Contract</DialogTitle>
+            <DialogDescription>Update the Contract period before approval. Accepted RFQ commercial terms remain unchanged.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="space-y-1.5 text-sm font-medium">
+              <span>Start Date</span>
+              <Input type="date" value={editForm.startDate} onChange={(event) => setEditForm((current) => ({ ...current, startDate: event.target.value }))} />
+            </label>
+            <label className="space-y-1.5 text-sm font-medium">
+              <span>End Date</span>
+              <Input type="date" value={editForm.endDate} onChange={(event) => setEditForm((current) => ({ ...current, endDate: event.target.value }))} />
+            </label>
           </div>
-        </div>
-      )}
+          {editError && <p className="text-sm font-medium text-[var(--customer-danger)]">{editError}</p>}
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={savingEdit} onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button type="button" disabled={savingEdit} onClick={() => void handleSaveEdit()}>{savingEdit ? 'Saving...' : 'Save Changes'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {extendOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
@@ -403,8 +546,8 @@ export function SalesContractDetailsPage() {
             </div>
 
             <div className="mt-5 grid gap-4 rounded-xl border border-[#e3e1e8] bg-[#f8fafc] p-4 sm:grid-cols-2">
-              <Field label="Current Total TON" value={formatNumber(contract.totalQuantityTons)} />
-              <Field label="Current Remaining TON" value={formatNumber(contract.remainingQuantityTons)} />
+              <Field label="Current Total TON" value={contract.totalQuantityTons == null ? 'Not provided' : formatCommercialTonValue(contract.totalQuantityTons)} />
+              <Field label="Current Remaining TON" value={contract.remainingQuantityTons == null ? 'Not provided' : formatCommercialTonValue(contract.remainingQuantityTons)} />
               <Field label="Current End Date" value={formatDate(contract.endDate)} />
               <Field label="Customer Rate / TON" value={formatMoney(contract.customerRate)} />
             </div>
@@ -412,17 +555,16 @@ export function SalesContractDetailsPage() {
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <label className="block">
                 <span className="text-xs font-bold text-[#64748b]">Increase Quantity (TON)</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.001"
+                <CommercialTonInput
                   value={extensionForm.additionalQuantityTons}
-                  onChange={(event) =>
+                  onValueChange={(value) => {
+                    setExtensionError('');
                     setExtensionForm((current) => ({
                       ...current,
-                      additionalQuantityTons: event.target.value,
-                    }))
-                  }
+                      additionalQuantityTons: value,
+                    }));
+                  }}
+                  onInvalidValue={setExtensionError}
                   className="mt-1 h-11 w-full rounded-xl border border-[#d8d4df] px-3 text-sm font-semibold outline-none focus:border-[#54247a]"
                   placeholder="e.g. 25"
                 />
@@ -566,6 +708,7 @@ function buildHistory(contract: SalesContractDetails | null) {
           id: 'quotation-accepted',
           title: 'Quotation accepted',
           actor: 'Customer',
+          actorRole: null,
           reason: contract.sourceQuotation.reference
             ? `Source quotation ${contract.sourceQuotation.reference} was accepted.`
             : null,
@@ -578,6 +721,7 @@ function buildHistory(contract: SalesContractDetails | null) {
     id: event.id,
     title: historyTitle(event.action, event.previousStatus, event.newStatus),
     actor: event.changedByName ?? 'Sales user',
+    actorRole: event.changedByRole,
     reason: event.reason,
     createdAt: event.createdAt,
   }));
@@ -588,6 +732,12 @@ function buildHistory(contract: SalesContractDetails | null) {
 }
 
 function historyTitle(action: string, previousStatus: string | null, newStatus: string) {
+  if (action === 'CONTRACT_CREATED_FROM_RFQ') return 'Contract created from accepted quotation';
+  if (action === 'CONTRACT_UPDATED') return 'Contract updated';
+  if (action === 'CONTRACT_SUBMITTED_FOR_APPROVAL') return 'Contract submitted for approval';
+  if (action === 'CONTRACT_APPROVED') return 'Contract approved';
+  if (action === 'CONTRACT_CHANGES_REQUESTED') return 'Contract changes requested';
+  if (action === 'CONTRACT_ACTIVATED') return 'Contract activated';
   if (action === 'CREATE') return 'Contract created';
   if (action === 'ACTIVATE') return 'Contract activated';
   if (action === 'EXTEND') return 'Contract extended';

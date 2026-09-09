@@ -384,7 +384,7 @@ describe('customer order from contract API', () => {
     expect(release).toHaveBeenCalledOnce();
   });
 
-  it('allows a contract delivery order outside the boundary and stores the zone flag', async () => {
+  it('rejects a contract delivery order outside the selected Hader boundary', async () => {
     poolQuery.mockResolvedValueOnce({ rows: [authenticatedCustomerUserRow] });
     configureTransaction(
       activeContractRow,
@@ -405,11 +405,12 @@ describe('customer order from contract API', () => {
 
     const response = await createOrderRequest(10);
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe('DELIVERY_LOCATION_OUTSIDE_HADER_BOUNDARY');
     const insertCall = clientQuery.mock.calls.find(([sql]) =>
       String(sql).includes('insert into orders'),
     );
-    expect(insertCall?.[1]).toContain('OUTSIDE_HADER_ZONE');
+    expect(insertCall).toBeUndefined();
   });
 
   it('does not create a Hader delivery request for a pick-up order', async () => {

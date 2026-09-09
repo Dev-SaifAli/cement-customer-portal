@@ -1,4 +1,11 @@
 import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
+import { CommercialTonInput } from '../../components/ui/CommercialTonInput';
+import {
+  createOrderPalletState,
+  OrderPalletFields,
+  type OrderPalletState,
+  validateOrderPallet,
+} from '../../components/orders/OrderPalletFields';
 import {
   ArrowLeft,
   ArrowRight,
@@ -27,6 +34,11 @@ import {
   type CustomerTruck,
 } from '../../services/customerFleetService';
 import { createClientId } from '../../utils/createClientId';
+import {
+  formatCommercialTons,
+  isWholeTonQuantity,
+  wholeTonQuantityMessage,
+} from '../../utils/commercialQuantity';
 
 const steps = [
   'Contract & Quantity',
@@ -50,6 +62,11 @@ export function CustomerCreateOrder() {
   const [drivers, setDrivers] = useState<CustomerDriver[]>([]);
   const [truckId, setTruckId] = useState('');
   const [driverId, setDriverId] = useState('');
+  const [pallet, setPallet] = useState<OrderPalletState>({
+    palletRequired: false,
+    palletType: '',
+    palletQuantity: '',
+  });
   const [fleetLoading, setFleetLoading] = useState(false);
   const [fleetError, setFleetError] = useState('');
   const [createdOrder, setCreatedOrder] = useState<CustomerOrder | null>(null);
@@ -62,7 +79,10 @@ export function CustomerCreateOrder() {
     let cancelled = false;
     getCustomerContract(id)
       .then((data) => {
-        if (!cancelled) setContract(data);
+        if (!cancelled) {
+          setContract(data);
+          setPallet(createOrderPalletState(data));
+        }
       })
       .catch(() => {
         if (!cancelled) setError('Unable to load the active contract.');
@@ -113,11 +133,12 @@ export function CustomerCreateOrder() {
 
   const quantityError = useMemo(() => {
     if (!quantity) return 'Enter the requested quantity.';
-    if (!Number.isFinite(requestedTons) || requestedTons <= 0)
-      return 'Quantity must be greater than 0.';
-    if (requestedTons > remaining) return `Quantity cannot exceed ${formatNumber(remaining)} TON.`;
+    if (!isWholeTonQuantity(requestedTons)) return wholeTonQuantityMessage;
+    if (requestedTons > remaining)
+      return `Quantity cannot exceed ${formatCommercialTons(remaining)}.`;
     return '';
   }, [quantity, remaining, requestedTons]);
+  const palletError = validateOrderPallet(pallet);
 
   if (loading) return <LoadingCard />;
   if (error || !contract) return <ErrorCard message={error || 'Contract was not found.'} />;
@@ -132,6 +153,7 @@ export function CustomerCreateOrder() {
     if (step === 2 && contract.fulfilment === 'DELIVERY' && !preferredDate) {
       return setError('Preferred delivery date is required.');
     }
+    if (step === 2 && palletError) return setError(palletError);
     if (step === 2 && contract.fulfilment === 'PICKUP') {
       if (fleetLoading) return setError('Please wait while your fleet is loading.');
       if (fleetError) return setError(fleetError);
@@ -146,6 +168,14 @@ export function CustomerCreateOrder() {
 
   const submit = async () => {
     if (!id || submitting) return;
+    if (quantityError) {
+      setError(quantityError);
+      return;
+    }
+    if (palletError) {
+      setError(palletError);
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -156,6 +186,9 @@ export function CustomerCreateOrder() {
         deliveryNotes: notes.trim() || null,
         truckId: contract.fulfilment === 'PICKUP' ? truckId : null,
         driverId: contract.fulfilment === 'PICKUP' ? driverId : null,
+        palletRequired: pallet.palletRequired,
+        palletType: pallet.palletRequired ? pallet.palletType : null,
+        palletQuantity: pallet.palletRequired ? Number(pallet.palletQuantity) : null,
       });
       setCreatedOrder(order);
       setStep(5);
@@ -241,38 +274,36 @@ export function CustomerCreateOrder() {
                 Requested Quantity (TON) <span className="text-red-600">*</span>
               </label>
               <div className="customer-border customer-input mt-2 flex overflow-hidden rounded-lg border focus-within:ring-2 focus-within:ring-[var(--customer-primary)]">
-                <input
+                <CommercialTonInput
                   id="requested-quantity"
-                  type="number"
-                  min="0.001"
                   max={remaining}
-                  step="0.001"
                   value={quantity}
-                  onChange={(event) => {
-                    setQuantity(event.target.value);
+                  onValueChange={(value) => {
+                    setQuantity(value);
                     setError('');
                   }}
+                  onInvalidValue={setError}
                   className="customer-input customer-text min-w-0 flex-1 px-3 py-3 outline-none"
-                  placeholder="0.000"
+                  placeholder="0"
                 />
                 <span className="customer-surface-secondary customer-border flex items-center border-l px-4 text-sm font-bold">
                   TON
                 </span>
               </div>
               <p className="customer-muted mt-1.5 text-xs">
-                Maximum allowed: {formatNumber(remaining)} TON
+                Maximum allowed: {formatCommercialTons(remaining)}
               </p>
               <div className="customer-surface-secondary mt-5 grid items-center gap-3 rounded-xl p-4 text-center sm:grid-cols-[1fr_auto_1fr_auto_1fr]">
                 <Metric
                   label="Remaining Contract Quantity"
-                  value={`${formatNumber(remaining)} TON`}
+                  value={formatCommercialTons(remaining)}
                 />
                 <span className="customer-secondary text-xl">âˆ’</span>
-                <Metric label="Requested Quantity" value={`${formatNumber(requestedTons)} TON`} />
+                <Metric label="Requested Quantity" value={formatCommercialTons(requestedTons)} />
                 <span className="customer-secondary text-xl">=</span>
                 <Metric
                   label="Remaining After Order"
-                  value={`${formatNumber(remainingAfter)} TON`}
+                  value={formatCommercialTons(remainingAfter)}
                   success
                 />
               </div>
@@ -415,6 +446,16 @@ export function CustomerCreateOrder() {
                   </div>
                 </div>
               )}
+              <div className="mt-5">
+                <OrderPalletFields
+                  contractPalletRequired={contract.palletRequired}
+                  value={pallet}
+                  onChange={(value) => {
+                    setPallet(value);
+                    setError('');
+                  }}
+                />
+              </div>
             </Section>
           )}
 
@@ -432,7 +473,7 @@ export function CustomerCreateOrder() {
                 <ReadOnly label="Contract Number" value={contract.reference} />
                 <ReadOnly label="Product" value={contract.productName} />
                 <ReadOnly label="Packaging" value={contract.packaging} />
-                <ReadOnly label="Requested Quantity" value={`${formatNumber(requestedTons)} TON`} />
+                <ReadOnly label="Requested Quantity" value={formatCommercialTons(requestedTons)} />
                 <ReadOnly label="Fulfilment" value={formatFulfilment(contract.fulfilment)} />
                 <ReadOnly
                   label={contract.fulfilment === 'DELIVERY' ? 'Ship-to' : 'Pickup From'}
@@ -463,6 +504,13 @@ export function CustomerCreateOrder() {
                           : null
                       }
                     />
+                  </>
+                )}
+                <ReadOnly label="Pallet Required" value={pallet.palletRequired ? 'Yes' : 'No'} />
+                {pallet.palletRequired && (
+                  <>
+                    <ReadOnly label="Pallet Type" value={pallet.palletType} />
+                    <ReadOnly label="Pallet Quantity" value={pallet.palletQuantity} />
                   </>
                 )}
                 <ReadOnly label="Customer Rate / TON" value={formatMoney(rate)} />
@@ -585,12 +633,12 @@ function ContractStrip({ contract }: { contract: CustomerContractDetails }) {
       </div>
       <StripField label="Product" value={contract.productName} />
       <StripField label="Packaging" value={contract.packaging} />
-      <StripField label="Total Quantity" value={`${formatNumber(total)} TON`} />
-      <StripField label="Used Quantity" value={`${formatNumber(used)} TON`} />
+      <StripField label="Total Quantity" value={formatCommercialTons(total)} />
+      <StripField label="Used Quantity" value={formatCommercialTons(used)} />
       <div className="rounded-xl border border-[var(--customer-primary)]/30 bg-[var(--customer-primary-soft)] px-4 py-3">
         <p className="customer-primary text-xs">Remaining Quantity</p>
         <p className="customer-primary mt-1 text-lg font-bold">
-          {formatNumber(contract.remainingQuantityTons)} TON
+          {formatCommercialTons(contract.remainingQuantityTons)}
         </p>
       </div>
     </section>
@@ -627,7 +675,7 @@ function OrderSummary({
       </div>
       <div className="customer-border-soft my-5 border-t" />
       <div className="space-y-3">
-        <SummaryRow label="Requested Quantity" value={`${formatNumber(quantity)} TON`} />
+        <SummaryRow label="Requested Quantity" value={formatCommercialTons(quantity)} />
         <SummaryRow label="Rate (SAR / TON)" value={formatMoney(contract.customerRate)} />
         <SummaryRow label="Subtotal" value={formatMoney(subtotal)} />
         <SummaryRow label={`VAT (${(vatRate * 100).toFixed(2).replace(/\.00$/, '')}%)`} value={formatMoney(vat)} />

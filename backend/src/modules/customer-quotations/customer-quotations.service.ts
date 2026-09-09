@@ -15,6 +15,7 @@ import type {
 import type pg from 'pg';
 import { pickupLocationsService } from '../pickup-locations/pickup-locations.service.js';
 import { nextDocumentReference } from '../document-numbering/document-numbering.service.js';
+import { haderZoneService } from '../hader-zones/hader-zone.service.js';
 
 const writableRoles = new Set<CustomerUser['role']>(['CUSTOMER_ADMIN', 'PURCHASER']);
 const customerQuotationPageSize = 10;
@@ -48,6 +49,7 @@ interface QuotationRow {
   pickup_location_id: string | null;
   ship_to_location_id: string | null;
   requested_date: Date | string | null;
+  special_price_requested: boolean;
   notes: string | null;
   submitted_at: Date | string | null;
   created_at: Date | string;
@@ -207,7 +209,7 @@ export class CustomerQuotationsService {
 
   async create(customerUser: CustomerUser, payload: CustomerQuotationPayload) {
     requireWritableRole(customerUser);
-    const { pricingCityKey } = await this.validateRelatedData(customerUser, payload);
+    const { pricingCityId, pricingCityKey } = await this.validateRelatedData(customerUser, payload);
 
     const client = await pool.connect();
 
@@ -223,10 +225,12 @@ export class CustomerQuotationsService {
            ship_to_location_id,
            requested_date,
            notes,
-           pricing_city_id
+           pricing_city_id,
+           special_price_requested
          )
          values ($1, $2, $3, $4, $5, $6, $7,
-           (select id from ksa_cities where name_key = $8 and is_active = true limit 1))
+           coalesce($9::uuid, (select id from ksa_cities where name_key = $8 and is_active = true limit 1)),
+           $10)
          returning *`,
         [
           customerUser.account.id,
@@ -237,6 +241,8 @@ export class CustomerQuotationsService {
           payload.requestedDate ?? null,
           payload.notes ?? null,
           pricingCityKey,
+          pricingCityId,
+          payload.specialPriceRequested,
         ],
       );
 
@@ -259,7 +265,7 @@ export class CustomerQuotationsService {
 
   async update(customerUser: CustomerUser, quotationId: string, payload: CustomerQuotationPayload) {
     requireWritableRole(customerUser);
-    const { pricingCityKey } = await this.validateRelatedData(customerUser, payload);
+    const { pricingCityId, pricingCityKey } = await this.validateRelatedData(customerUser, payload);
 
     const client = await pool.connect();
 
@@ -277,8 +283,10 @@ export class CustomerQuotationsService {
              ship_to_location_id = $5,
              requested_date = $6,
              notes = $7,
-             pricing_city_id = (
-               select id from ksa_cities where name_key = $8 and is_active = true limit 1
+             special_price_requested = $10,
+             pricing_city_id = coalesce(
+               $9::uuid,
+               (select id from ksa_cities where name_key = $8 and is_active = true limit 1)
              ),
              updated_at = now()
          where id = $2
@@ -293,6 +301,8 @@ export class CustomerQuotationsService {
           payload.requestedDate ?? null,
           payload.notes ?? null,
           pricingCityKey,
+          pricingCityId,
+          payload.specialPriceRequested,
         ],
       );
 
@@ -369,6 +379,21 @@ export class CustomerQuotationsService {
         [quotationId, customerUser.id],
       );
 
+      if (quotation.special_price_requested) {
+        await client.query(
+          `insert into quotation_status_events (
+             quotation_id,
+             previous_status,
+             new_status,
+             action,
+             changed_by_customer_user_id
+           )
+           values ($1, 'PENDING_SALES_REVIEW', 'PENDING_SALES_REVIEW',
+             'SPECIAL_PRICE_REQUESTED', $2)`,
+          [quotationId, customerUser.id],
+        );
+      }
+
       await client.query('commit');
       const details = await this.getById(customerUser, quotation.id);
       await notificationEvents.quotationSubmitted(quotation.id, quotation.reference ?? 'Quotation');
@@ -429,6 +454,7 @@ export class CustomerQuotationsService {
 
   private async validateRelatedData(customerUser: CustomerUser, payload: CustomerQuotationPayload) {
     let pricingCity: string;
+    let pricingCityId: string | null = null;
     const pickupLocations = await pickupLocationsService.listActive();
     if (
       payload.fulfilmentType === 'PICKUP' &&
@@ -447,7 +473,11 @@ export class CustomerQuotationsService {
       if (!shipTo) {
         throw new AppError('Ship-to location was not found.', 400, 'SHIP_TO_LOCATION_NOT_FOUND');
       }
-      pricingCity = shipTo.city;
+      const boundary = await haderZoneService.validateDeliveryLocation(shipTo, pool, {
+        requireHaderCity: true,
+      });
+      pricingCity = boundary.city.name;
+      pricingCityId = boundary.city.id;
     }
 
     const productIds = Array.from(new Set(payload.items.map((item) => item.productId)));
@@ -481,7 +511,7 @@ export class CustomerQuotationsService {
       }
     });
 
-    return { pricingCityKey: normalizeCity(pricingCity) };
+    return { pricingCityId, pricingCityKey: normalizeCity(pricingCity) };
   }
 
   private async recordCustomerDecision(
@@ -711,6 +741,7 @@ function mapQuotation(
     shipToLocationId: quotation.ship_to_location_id,
     shipToLocation: shipToLocation ?? null,
     requestedDate: quotation.requested_date ? dateOnly(quotation.requested_date) : null,
+    specialPriceRequested: quotation.special_price_requested,
     notes: quotation.notes,
     submittedAt: quotation.submitted_at ? dateTime(quotation.submitted_at) : null,
     createdAt: dateTime(quotation.created_at),

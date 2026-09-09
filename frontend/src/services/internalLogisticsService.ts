@@ -119,6 +119,7 @@ export class LogisticsApiError extends Error {
   constructor(
     message: string,
     public status?: number,
+    public fieldErrors: Record<string, string> = {},
   ) {
     super(message);
     this.name = 'LogisticsApiError';
@@ -142,12 +143,17 @@ async function request<T>(path: string, options: RequestInit = {}) {
   }
   const data = (await response.json().catch(() => ({}))) as T & {
     message?: string;
-    error?: { message?: string };
+    errors?: Record<string, string>;
+    error?: { message?: string; errors?: Record<string, string> };
   };
-  if (!response.ok)
+  if (!response.ok) {
+    const fieldErrors = data.error?.errors ?? data.errors ?? {};
+    const firstFieldError = Object.values(fieldErrors)[0];
     throw new LogisticsApiError(
-      data.error?.message ?? data.message ?? 'Unable to complete the request.',
+      firstFieldError ?? data.error?.message ?? data.message ?? 'Unable to complete the request.',
       response.status,
+      fieldErrors,
     );
+  }
   return data as T;
 }

@@ -8,6 +8,7 @@ export const customerShipmentStatusSchema = z.enum([
   'IN_TRANSIT',
   'DELIVERED',
   'CLOSED',
+  'CANCELLED',
 ]);
 
 export const listCustomerShipmentsSchema = z

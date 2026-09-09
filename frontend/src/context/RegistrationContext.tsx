@@ -25,6 +25,7 @@ export type CompanyInfoData = {
   vatNumber: string;
   streetAddress: string;
   city: string;
+  haderCityId?: string | undefined;
   region: string;
   country: string;
   postalCode: string;
@@ -54,6 +55,7 @@ export type DocumentsData = {
 export type DeliveryLocation = {
   id: string;
   name: string;
+  haderCityId?: string | undefined;
   siteId?: string | undefined;
   streetAddress: string;
   city: string;
@@ -701,6 +703,9 @@ export function isDeliveryLocationValid(location: DeliveryLocation) {
       typeof location.longitude === 'number' &&
       location.longitude >= -180 &&
       location.longitude <= 180);
+  const hasRequiredHaderCoordinates =
+    !location.haderCityId ||
+    (typeof location.latitude === 'number' && typeof location.longitude === 'number');
 
   return Boolean(
     location.name.trim() &&
@@ -710,7 +715,8 @@ export function isDeliveryLocationValid(location: DeliveryLocation) {
     location.country.trim() &&
     location.contactPerson.trim() &&
     isSaudiPhoneNumber(location.contactPhone.trim()) &&
-    hasValidOptionalCoordinates,
+    hasValidOptionalCoordinates &&
+    hasRequiredHaderCoordinates,
   );
 }
 

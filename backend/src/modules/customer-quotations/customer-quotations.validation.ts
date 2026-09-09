@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { coercedWholeCommercialTonsSchema } from '../products/commercial-quantity.validation.js';
 
 const optionalText = (max = 200) =>
   z
@@ -12,7 +13,7 @@ const quotationItemSchema = z
   .object({
     id: z.string().uuid().optional(),
     productId: z.string().uuid(),
-    quantityTon: z.coerce.number().positive('Quantity (TON) must be greater than zero.'),
+    quantityTon: coercedWholeCommercialTonsSchema,
     palletRequired: z.boolean().optional().default(false),
     palletType: optionalText(80),
     palletQuantity: z.coerce.number().int().positive().optional(),
@@ -41,6 +42,7 @@ export const customerQuotationPayloadSchema = z
     pickupLocationId: optionalText(80),
     shipToLocationId: optionalText(120),
     requestedDate: optionalText(20),
+    specialPriceRequested: z.boolean().optional().default(false),
     notes: optionalText(1000),
     items: z.array(quotationItemSchema).min(1, 'At least one product is required.'),
   })

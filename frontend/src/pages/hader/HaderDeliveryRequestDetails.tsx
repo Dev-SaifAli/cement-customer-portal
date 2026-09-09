@@ -1,26 +1,48 @@
-import { ArrowLeft, CheckCircle2, PackagePlus, XCircle } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { CheckCircle2, PackagePlus, XCircle } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { DetailField } from '../../components/customer-detail/DetailField';
+import { DetailSection } from '../../components/customer-detail/DetailSection';
+import { DetailBreadcrumb } from '../../components/customer-detail/DetailBreadcrumb';
+import { DocumentHeader } from '../../components/customer-detail/DocumentHeader';
+import {
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Textarea,
+} from '../../components/ui/shadcn';
+import { useSalesAuth } from '../../context/SalesAuthContext';
 import {
   approveDeliveryRequest,
   getDeliveryRequest,
   rejectDeliveryRequest,
   type DeliveryRequest,
+  type DeliveryRequestShipment,
 } from '../../services/haderDeliveryService';
+import { formatTonQuantity } from '../../utils/quantity';
+import { getSalesLandingPath } from '../../utils/salesRouting';
 import { Status, date, text } from './HaderDeliveryRequests';
+
+const shipmentCreationRoles = ['HADER_MANAGER', 'HADER_OPERATIONS', 'DISPATCH_USER'];
 
 export function HaderDeliveryRequestDetails() {
   const { id } = useParams();
-  const navigate = useNavigate();
+  const { user } = useSalesAuth();
   const [item, setItem] = useState<DeliveryRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
-  const load = async () => {
+
+  const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
+    setError('');
     try {
       setItem(await getDeliveryRequest(id));
     } catch {
@@ -28,172 +50,164 @@ export function HaderDeliveryRequestDetails() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
   useEffect(() => {
     void load();
-  }, [id]);
+  }, [load]);
+
   const approve = async () => {
     if (!id) return;
     setBusy(true);
     try {
       setItem(await approveDeliveryRequest(id));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unable to approve request.');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to approve request.');
     } finally {
       setBusy(false);
     }
   };
+
   const reject = async () => {
     if (!id || !reason.trim()) return;
     setBusy(true);
     try {
       setItem(await rejectDeliveryRequest(id, reason.trim()));
       setRejecting(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unable to reject request.');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to reject request.');
     } finally {
       setBusy(false);
     }
   };
-  if (loading) return <div className="h-72 animate-pulse rounded-xl bg-white" />;
-  if (!item)
+
+  if (loading) {
+    return <div className="h-72 animate-pulse bg-[var(--customer-surface-secondary)]" />;
+  }
+  if (!item) {
     return (
-      <div className="rounded-xl border bg-white p-8 text-center text-red-600">
+      <div className="border border-[var(--customer-border)] bg-[var(--customer-surface)] p-8 text-center text-[var(--customer-danger)]">
         {error || 'Delivery request was not found.'}
       </div>
     );
+  }
+
+  const mayCreateShipment = Boolean(user && shipmentCreationRoles.includes(user.role));
+  const creationStatusAllowed = ['APPROVED', 'CONVERTED_TO_SHIPMENT'].includes(item.status);
+  const canCreateShipment = mayCreateShipment && creationStatusAllowed && item.remainingTon > 0;
+  const shipments = item.shipments ?? [];
+
   return (
-    <div className="space-y-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <Link
-            to="/hader/delivery-requests"
-            className="mb-2 inline-flex items-center gap-2 text-sm font-semibold text-[#54247a]"
-          >
-            <ArrowLeft size={16} />
-            Delivery Requests
-          </Link>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">{item.requestNumber}</h1>
-            <Status value={item.status} />
-          </div>
-          <p className="mt-1 text-sm text-slate-500">
-            Order {item.order.number} · Contract {item.contract?.reference ?? 'Direct Order'}
+    <div className="space-y-5">
+      <DetailBreadcrumb
+        homePath={user ? getSalesLandingPath(user.role) : '/hader'}
+        listLabel="Delivery Requests"
+        listPath="/hader/delivery-requests"
+        current={item.requestNumber}
+      />
+      <DocumentHeader
+        number={item.requestNumber}
+        status={<Status value={item.status} />}
+        description={
+          <p>
+            Order {item.order.number} / Contract {item.contract?.reference ?? 'Not provided'}
           </p>
-        </div>
-        <div className="flex gap-2">
+        }
+        actions={
+          <>
           {['PENDING', 'UNDER_REVIEW'].includes(item.status) && (
             <>
-              <button
+              <Button
+                type="button"
+                variant="outline"
                 disabled={busy}
                 onClick={() => setRejecting(true)}
-                className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
+                className="text-[var(--customer-danger)]"
               >
-                <XCircle size={16} />
-                Reject Request
-              </button>
-              <button
-                disabled={busy}
-                onClick={() => void approve()}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#54247a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#472066]"
-              >
-                <CheckCircle2 size={16} />
-                Approve Request
-              </button>
+                <XCircle size={16} /> Reject Request
+              </Button>
+              <Button type="button" disabled={busy} onClick={() => void approve()}>
+                <CheckCircle2 size={16} /> Approve Request
+              </Button>
             </>
           )}
-          {['APPROVED', 'CONVERTED_TO_SHIPMENT'].includes(item.status) && item.remainingTon > 0 && (
-            <button
-              onClick={() => navigate(`/hader/shipments/create?requestId=${item.id}`)}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#54247a] px-4 py-2 text-sm font-semibold text-white"
-            >
-              <PackagePlus size={16} />
-              Create Shipment
-            </button>
-          )}
-        </div>
-      </header>
+          </>
+        }
+      />
+
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="border border-[var(--customer-danger)] bg-[var(--customer-surface)] p-3 text-sm text-[var(--customer-danger)]">
           {error}
         </div>
       )}
+
       <div className="grid gap-4 xl:grid-cols-3">
-        <Card title="Customer Information">
-          <Info label="Company Name" value={item.customer.companyName} />
-          <Info label="Contact" value={item.customer.contact} />
-          <Info label="Phone" value={item.customer.phone} />
-        </Card>
-        <Card title="Order Information">
-          <Info label="Product" value={`${item.product.name} (${item.product.code})`} />
-          <Info label="Packaging / UOM" value={`${item.product.packaging} · ${item.product.uom}`} />
-          <Info label="Quantity" value={`${item.quantityTon.toFixed(3)} TON`} />
-          <Info label="Equivalent Bags" value={item.equivalentBags?.toLocaleString() ?? 'N/A'} />
-          <Info
-            label="Customer Rate"
-            value={`${item.customerRatePerTon.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR / TON`}
-          />
-          <Info
-            label="Total Amount"
-            value={`${item.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR`}
-          />
-          <Info label="Fulfilment" value="Delivery" />
-          <Info label="Hader City" value={item.haderCity.name} />
-          <Info
-            label="Delivery Boundary"
-            value={
-              item.haderZoneStatus === 'WITHIN_HADER_ZONE'
-                ? 'Within Hader Zone'
-                : item.haderZoneStatus === 'OUTSIDE_HADER_ZONE'
-                  ? 'Outside Hader Zone'
-                  : 'Not evaluated'
-            }
-          />
-        </Card>
-        <Card title="Delivery Information">
-          <Info label="Ship-to" value={text(item.shipTo, 'name')} />
-          <Info
+        <DetailSection title="Delivery Request" contentClassName="space-y-4">
+          <DetailField label="Delivery Request" value={item.requestNumber} />
+          <DetailField label="Order" value={item.order.number} />
+          <DetailField label="Contract" value={item.contract?.reference} />
+          <DetailField label="Requested Delivery Date" value={date(item.requestedDate)} />
+        </DetailSection>
+        <DetailSection title="Customer and Product" contentClassName="space-y-4">
+          <DetailField label="Customer" value={item.customer.companyName} />
+          <DetailField label="Product" value={`${item.product.name} (${item.product.code})`} />
+          <DetailField label="Packaging" value={`${item.product.packaging} / ${item.product.uom}`} />
+          <DetailField label="Contact" value={item.customer.contact} secondary={item.customer.phone} />
+        </DetailSection>
+        <DetailSection title="Delivery" contentClassName="space-y-4">
+          <DetailField label="Delivery Location" value={text(item.shipTo, 'name')} />
+          <DetailField
             label="City / Region"
             value={[text(item.shipTo, 'city'), text(item.shipTo, 'region')]
               .filter(Boolean)
               .join(', ')}
           />
-          <Info label="Requested Date" value={date(item.requestedDate)} />
-          <Info label="Customer Notes" value={item.notes} />
-        </Card>
+          <DetailField label="Hader City" value={item.haderCity.name} />
+          <DetailField label="Customer Notes" value={item.notes} />
+        </DetailSection>
       </div>
-      <section className="rounded-xl border border-slate-200 bg-white p-5">
-        <h2 className="font-bold text-[#54247a]">Shipment Allocation</h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <Metric label="Requested" value={item.quantityTon} />
-          <Metric label="Created" value={item.shippedTon} />
-          <Metric label="Remaining" value={item.remainingTon} />
-        </div>
-      </section>
+
+      <DetailSection title="Shipment Allocation" contentClassName="grid gap-4 sm:grid-cols-3">
+        <DetailField label="Total Quantity" value={formatTonQuantity(item.quantityTon)} strong />
+        <DetailField label="Allocated to Shipments" value={formatTonQuantity(item.shippedTon)} strong />
+        <DetailField label="Remaining to Allocate" value={formatTonQuantity(item.remainingTon)} strong />
+      </DetailSection>
+
+      <ShipmentTable
+        requestId={item.id}
+        shipments={shipments}
+        remainingTon={item.remainingTon}
+        canCreate={canCreateShipment}
+        allocationComplete={creationStatusAllowed && item.remainingTon <= 0}
+      />
+
       {rejecting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
-            <h2 className="text-lg font-bold">Reject Delivery Request</h2>
-            <p className="mt-1 text-sm text-slate-500">Provide a reason for the audit history.</p>
-            <textarea
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-xl">
+            <h2 className="text-lg font-semibold text-[var(--customer-text)]">
+              Reject Delivery Request
+            </h2>
+            <p className="mt-1 text-sm text-[var(--customer-text-muted)]">
+              Provide a reason for the audit history.
+            </p>
+            <Textarea
               value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className="mt-4 min-h-28 w-full rounded-lg border border-slate-200 p-3"
+              onChange={(event) => setReason(event.target.value)}
+              className="mt-4 min-h-28"
+              aria-label="Rejection reason"
             />
             <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={() => setRejecting(false)}
-                className="rounded-lg border px-4 py-2 text-sm font-semibold"
-              >
+              <Button type="button" variant="outline" onClick={() => setRejecting(false)}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
                 disabled={!reason.trim() || busy}
                 onClick={() => void reject()}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               >
                 Reject
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -201,27 +215,89 @@ export function HaderDeliveryRequestDetails() {
     </div>
   );
 }
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+
+function ShipmentTable({
+  requestId,
+  shipments,
+  remainingTon,
+  canCreate,
+  allocationComplete,
+}: {
+  requestId: string;
+  shipments: DeliveryRequestShipment[];
+  remainingTon: number;
+  canCreate: boolean;
+  allocationComplete: boolean;
+}) {
+  const createLabel = shipments.length > 0 ? 'Create Another Shipment' : 'Create Shipment';
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5">
-      <h2 className="border-b border-slate-100 pb-3 font-bold text-[#54247a]">{title}</h2>
-      <dl className="mt-3 space-y-3">{children}</dl>
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-[var(--customer-text)]">Shipments</h2>
+          {shipments.length > 0 && remainingTon > 0 && (
+            <p className="mt-1 text-sm text-[var(--customer-text-muted)]">
+              {formatTonQuantity(remainingTon)} remains available for another shipment.
+            </p>
+          )}
+        </div>
+        {canCreate && (
+          <Button asChild>
+            <Link to={`/hader/shipments/create?requestId=${requestId}`}>
+              <PackagePlus size={16} /> {createLabel}
+            </Link>
+          </Button>
+        )}
+      </div>
+      {allocationComplete && (
+        <p className="border border-[var(--customer-border)] bg-[var(--customer-surface-secondary)] px-4 py-3 text-sm font-medium text-[var(--customer-text-secondary)]">
+          All delivery quantity has been allocated to shipments.
+        </p>
+      )}
+      {shipments.length === 0 ? (
+        <div className="border border-[var(--customer-border)] bg-[var(--customer-surface)] px-4 py-8 text-center text-sm text-[var(--customer-text-muted)]">
+          <p>No shipments have been created yet.</p>
+          <p className="mt-1">You can allocate the delivery across one or multiple shipments.</p>
+        </div>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              {['Shipment', 'Quantity', 'Transporter', 'Truck', 'Driver', 'Scheduled Date', 'Status'].map(
+                (heading) => (
+                  <TableHead key={heading} className="whitespace-nowrap normal-case tracking-normal">
+                    {heading}
+                  </TableHead>
+                ),
+              )}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {shipments.map((shipment) => (
+              <TableRow key={shipment.id}>
+                <TableCell>
+                  <Link
+                    to={`/hader/shipments/${shipment.id}`}
+                    className="font-semibold text-[var(--customer-primary)] hover:underline"
+                  >
+                    {shipment.shipmentNumber}
+                  </Link>
+                </TableCell>
+                <TableCell className="whitespace-nowrap font-semibold">
+                  {formatTonQuantity(shipment.quantityTon)}
+                </TableCell>
+                <TableCell>{shipment.assignment.transporter?.name ?? '-'}</TableCell>
+                <TableCell>
+                  {shipment.assignment.truck?.plateNumber ?? shipment.assignment.truck?.number ?? '-'}
+                </TableCell>
+                <TableCell>{shipment.assignment.driver?.name ?? '-'}</TableCell>
+                <TableCell className="whitespace-nowrap">{date(shipment.scheduledDate)}</TableCell>
+                <TableCell><Status value={shipment.status} /></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
     </section>
-  );
-}
-function Info({ label, value }: { label: string; value: string | null | undefined }) {
-  return (
-    <div>
-      <dt className="text-xs font-medium uppercase text-slate-500">{label}</dt>
-      <dd className="mt-1 text-sm font-semibold">{value || 'Not provided'}</dd>
-    </div>
-  );
-}
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg bg-slate-50 p-4">
-      <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-xl font-bold">{value.toFixed(3)} TON</p>
-    </div>
   );
 }

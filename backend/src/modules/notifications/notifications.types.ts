@@ -13,6 +13,8 @@ export type NotificationType =
   | 'QUOTATION_REJECTED'
   | 'CLARIFICATION_REQUESTED'
   | 'CONTRACT_CREATED'
+  | 'CONTRACT_APPROVAL_REQUIRED'
+  | 'CONTRACT_CHANGES_REQUESTED'
   | 'CONTRACT_ACTIVATED'
   | 'ORDER_SUBMITTED'
   | 'ORDER_PROCESSING_STARTED'
@@ -26,6 +28,7 @@ export type NotificationType =
 
 export type NotificationRecipients =
   | { kind: 'SALES_ROLES'; roles: SalesRole[] }
+  | { kind: 'SALES_USERS'; userIds: string[] }
   | { kind: 'CUSTOMER_ACCOUNT'; customerAccountId: string; roles?: CustomerRole[] };
 
 export interface PublishNotificationInput {

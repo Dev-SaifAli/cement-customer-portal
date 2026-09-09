@@ -3,7 +3,8 @@ import { asyncHandler } from '../../middleware/async-handler.js';
 import { requireSalesAuth, requireSalesRole } from '../sales-auth/sales-auth.middleware.js';
 import { haderDeliveryController } from './hader-delivery.controller.js';
 
-const haderRoles = requireSalesRole('HADER_MANAGER', 'HADER_OPERATIONS', 'DISPATCH_USER');
+const haderRoles = requireSalesRole('HADER_MANAGER', 'HADER_OPERATIONS');
+const shipmentCancellationRoles = requireSalesRole('HADER_MANAGER', 'HADER_OPERATIONS');
 export const haderDeliveryRequestsRouter = Router();
 export const haderShipmentsRouter = Router();
 for (const router of [haderDeliveryRequestsRouter, haderShipmentsRouter]) {
@@ -33,6 +34,11 @@ haderDeliveryRequestsRouter.post(
 haderShipmentsRouter.get(
   '/',
   asyncHandler(haderDeliveryController.listShipments.bind(haderDeliveryController)),
+);
+haderShipmentsRouter.post(
+  '/:id/cancel',
+  shipmentCancellationRoles,
+  asyncHandler(haderDeliveryController.cancelShipment.bind(haderDeliveryController)),
 );
 haderShipmentsRouter.get(
   '/:id',

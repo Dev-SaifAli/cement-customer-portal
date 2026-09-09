@@ -16,6 +16,11 @@ registrationRouter.get(
   asyncHandler((request, response) => registrationController.listCities(request, response)),
 );
 
+registrationRouter.post(
+  '/validate-hader-zone',
+  asyncHandler((request, response) => registrationController.validateHaderZone(request, response)),
+);
+
 registrationRouter.get(
   '/:id',
   asyncHandler((request, response) => registrationController.get(request, response)),

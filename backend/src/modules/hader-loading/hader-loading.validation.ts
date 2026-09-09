@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const loadingIdSchema = z.uuid();
 export const loadingListSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
+  search: z.string().trim().max(120).optional(),
   status: z.enum(['WAITING', 'NOTIFIED', 'AT_GATE', 'LOADING', 'LOADED']).optional(),
   productId: z.uuid().optional(),
 });

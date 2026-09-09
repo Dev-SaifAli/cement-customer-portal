@@ -25,6 +25,7 @@ const quotation: CustomerQuotation = {
     isPrimary: true,
   },
   requestedDate: '2026-08-30',
+  specialPriceRequested: false,
   notes: 'Contact the site manager before arrival.',
   submittedAt: null,
   createdAt: '2026-08-24T08:00:00.000Z',

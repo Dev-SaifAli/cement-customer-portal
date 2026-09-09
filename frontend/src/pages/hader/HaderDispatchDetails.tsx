@@ -7,10 +7,16 @@ import {
   scheduleShipment,
   type DispatchShipment,
 } from '../../services/haderDeliveryService';
+import { formatTonQuantity } from '../../utils/quantity';
 import { Status, date, label, text } from './HaderDeliveryRequests';
+import { useSalesAuth } from '../../context/SalesAuthContext';
+import { getOperationalPortalPresentation } from '../../utils/operationalPortal';
 
 export function HaderDispatchDetails() {
   const { id } = useParams();
+  const { user } = useSalesAuth();
+  const { isDispatch } = getOperationalPortalPresentation(user?.role);
+  const dispatchPath = isDispatch ? '/dispatch/dispatch-board' : '/hader/dispatch';
   const [shipment, setShipment] = useState<DispatchShipment | null>(null);
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
@@ -60,7 +66,7 @@ export function HaderDispatchDetails() {
     <div className="space-y-4">
       <header>
         <Link
-          to="/hader/dispatch"
+          to={dispatchPath}
           className="inline-flex items-center gap-2 text-sm font-semibold text-[#54247a]"
         >
           <ArrowLeft size={16} /> Dispatch Board
@@ -75,7 +81,7 @@ export function HaderDispatchDetails() {
         <Card title="Shipment">
           <Info label="Order" value={request.order.number} />
           <Info label="Contract" value={request.contract?.reference ?? 'Direct Order'} />
-          <Info label="Quantity" value={`${shipment.quantityTon.toFixed(3)} TON`} />
+          <Info label="Quantity" value={formatTonQuantity(shipment.quantityTon)} />
           <Info label="Equivalent Bags" value={request.equivalentBags?.toLocaleString()} />
           <Info label="Requested Date" value={date(request.requestedDate)} />
         </Card>

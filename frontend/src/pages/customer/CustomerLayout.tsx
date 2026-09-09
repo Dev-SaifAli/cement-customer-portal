@@ -4,10 +4,10 @@ import {
   LayoutDashboard,
   MapPin,
   PackageCheck,
+  PackageOpen,
   PackageSearch,
   MessageSquareText,
   ShoppingBag,
-  ShoppingCart,
   Truck,
   Users,
 } from 'lucide-react';
@@ -51,17 +51,18 @@ const customerNavigation: Array<AppShellNavigationItem & { roles: CustomerRole[]
     roles: ['CUSTOMER_ADMIN', 'PURCHASER'],
   },
   {
+    to: '/customer/direct-orders',
+    label: 'Direct Orders',
+    icon: <PackageOpen size={18} />,
+    isActive: (pathname) =>
+      pathname === '/customer/direct-orders' || pathname.startsWith('/customer/direct-orders/'),
+    roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
+  },
+  {
     to: '/customer/contracts',
     label: 'Contracts',
     icon: <BriefcaseBusiness size={18} />,
     roles: ['CUSTOMER_ADMIN', 'PURCHASER', 'FINANCE_USER', 'VIEWER'],
-  },
-  {
-    to: '/customer/orders/new',
-    label: 'New Direct Order',
-    icon: <ShoppingCart size={18} />,
-    end: true,
-    roles: ['CUSTOMER_ADMIN', 'PURCHASER'],
   },
   {
     to: '/customer/orders',

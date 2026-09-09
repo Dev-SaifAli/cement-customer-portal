@@ -1,5 +1,5 @@
 import { SearchableTomSelect } from '../../components/ui/SearchableTomSelect';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -31,12 +31,18 @@ import {
   type DeliveryLocation,
 } from '../../context/RegistrationContext';
 import { createClientId } from '../../utils/createClientId';
-import { getRegistrationCities, type RegistrationCity } from '../../services/registrationService';
+import {
+  getRegistrationCities,
+  validateRegistrationHaderZone,
+  type RegistrationCity,
+} from '../../services/registrationService';
 
 type DeliveryLocationForm = {
   name: string;
   streetAddress: string;
   city: string;
+  haderCityId?: string | undefined;
+  validatedHaderCityId?: string | undefined;
   region: string;
   country: string;
   postalCode: string;
@@ -49,7 +55,14 @@ type DeliveryLocationForm = {
 
 type MapTarget =
   | { type: 'form' }
-  | { type: 'location'; locationId: string; locationName: string; coordinates: Coordinates }
+  | {
+      type: 'location';
+      locationId: string;
+      locationName: string;
+      city: string;
+      haderCityId?: string | undefined;
+      coordinates: Coordinates;
+    }
   | null;
 
 type Coordinates = {
@@ -96,6 +109,15 @@ export default function DeliveryLocations() {
   const [mapTarget, setMapTarget] = useState<MapTarget>(null);
   const [locationToDelete, setLocationToDelete] = useState<DeliveryLocation | null>(null);
   const [cities, setCities] = useState<RegistrationCity[]>([]);
+  const selectedCity = useMemo(
+    () =>
+      cities.find((city) => city.id === form.haderCityId) ??
+      cities.find((city) => city.name === form.city) ??
+      null,
+    [cities, form.city, form.haderCityId],
+  );
+  const boundarySelectionValid =
+    !selectedCity?.isHaderEnabled || form.validatedHaderCityId === selectedCity.id;
 
   useEffect(() => setCurrentStep(4), [setCurrentStep]);
   useEffect(() => {
@@ -118,6 +140,24 @@ export default function DeliveryLocations() {
     }
   };
 
+  const updateCity = (value: string) => {
+    const city = cities.find((item) => item.name === value);
+    setForm((current) => ({
+      ...current,
+      city: value,
+      haderCityId: city?.isHaderEnabled ? city.id : undefined,
+      validatedHaderCityId: undefined,
+    }));
+    setErrors((current) => ({
+      ...current,
+      city: '',
+      coordinates:
+        city?.isHaderEnabled
+          ? 'Please select a delivery location within the selected Hader City boundary.'
+          : '',
+    }));
+  };
+
   const validate = () => {
     const newErrors: Record<string, string> = {};
 
@@ -135,6 +175,9 @@ export default function DeliveryLocations() {
     }
     if (!areOptionalCoordinatesValid(form)) {
       newErrors.coordinates = 'Selected map coordinates are invalid.';
+    }
+    if (!boundarySelectionValid) {
+      newErrors.coordinates = 'Please select a delivery location within the selected Hader City boundary.';
     }
 
     setErrors(newErrors);
@@ -161,6 +204,7 @@ export default function DeliveryLocations() {
                   name: form.name,
                   streetAddress: form.streetAddress,
                   city: form.city,
+                  haderCityId: form.haderCityId,
                   region: form.region,
                   country: form.country,
                   postalCode: form.postalCode,
@@ -182,6 +226,7 @@ export default function DeliveryLocations() {
         siteId: '',
         streetAddress: form.streetAddress,
         city: form.city,
+        haderCityId: form.haderCityId,
         region: form.region,
         country: form.country,
         postalCode: form.postalCode,
@@ -205,6 +250,8 @@ export default function DeliveryLocations() {
       name: location.name,
       streetAddress: location.streetAddress,
       city: location.city,
+      haderCityId: location.haderCityId,
+      validatedHaderCityId: undefined,
       region: location.region,
       country: location.country,
       postalCode: location.postalCode,
@@ -309,7 +356,7 @@ export default function DeliveryLocations() {
                     value={form.city}
                     error={errors.city}
                     autoComplete="shipping address-level2"
-                    onChange={(value) => updateField('city', value)}
+                    onChange={updateCity}
                     options={Array.from(
                       new Set([form.city, ...cities.map((city) => city.name)].filter(Boolean)),
                     )}
@@ -356,7 +403,7 @@ export default function DeliveryLocations() {
                       <div className="flex items-center gap-2">
                         <h2 className="text-[14px] font-semibold text-[#3f3940]">Map Location</h2>
                         <span className="rounded-full bg-[#eee9ee] px-2 py-0.5 text-xs font-semibold text-[#6c666c]">
-                          Optional
+                          {selectedCity?.isHaderEnabled ? 'Required' : 'Optional'}
                         </span>
                       </div>
                       {getFormCoordinates(form) ? (
@@ -453,7 +500,8 @@ export default function DeliveryLocations() {
                   <button
                     type="button"
                     onClick={addLocation}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-md border border-[#7c6e7d] text-[#625c62] font-semibold hover:bg-[#faf7fb] transition-colors"
+                    disabled={!boundarySelectionValid}
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-md border border-[#7c6e7d] text-[#625c62] font-semibold hover:bg-[#faf7fb] disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
                   >
                     {editingId ? <Save size={18} /> : <Plus size={18} />}
 
@@ -501,6 +549,8 @@ export default function DeliveryLocations() {
                         type: 'location',
                         locationId: location.id,
                         locationName: location.name,
+                        city: location.city,
+                        haderCityId: location.haderCityId,
                         coordinates,
                       });
                     }}
@@ -548,11 +598,20 @@ export default function DeliveryLocations() {
         <LocationPickerMap
           initialCoordinates={getMapTargetCoordinates(mapTarget, form) ?? undefined}
           locationLabel={getMapTargetLabel(mapTarget, form)}
+          haderCity={
+            mapTarget.type === 'form'
+              ? selectedCity
+              : cities.find((city) => city.id === mapTarget.haderCityId) ??
+                cities.find((city) => city.name === mapTarget.city) ??
+                null
+          }
+          validateHaderCoordinates={validateRegistrationHaderZone}
           onCancel={() => setMapTarget(null)}
           onConfirm={(location) => {
             if (mapTarget.type === 'form') {
               setForm((current) => ({
                 ...applySelectedLocation(current, location, cities.map((city) => city.name)),
+                validatedHaderCityId: selectedCity?.isHaderEnabled ? selectedCity.id : undefined,
               }));
               setErrors((current) => ({
                 ...current,
@@ -640,7 +699,9 @@ function applySelectedLocation<T extends DeliveryLocationForm | DeliveryLocation
     latitude: location.latitude,
     longitude: location.longitude,
     streetAddress: location.street ?? location.formattedAddress ?? current.streetAddress,
-    city: resolveLocationCity(location.city, cityOptions) ?? current.city,
+    city: current.haderCityId
+      ? current.city
+      : resolveLocationCity(location.city, cityOptions) ?? current.city,
     region: location.region ?? current.region,
     country: location.country ?? current.country,
     postalCode: location.postalCode?.replace(/\D/g, '').slice(0, 5) ?? current.postalCode,

@@ -234,6 +234,22 @@ export class LoadingPointsService {
     return result.rows.map(mapPoint);
   }
 
+  async refreshAvailability(id: string, executor: Executor = pool) {
+    await executor.query(
+      `update hader_loading_points points
+       set status=case
+         when points.status='INACTIVE' then 'INACTIVE'
+         when (select count(*) from shipments active_shipments
+               where active_shipments.loading_point_id=points.id
+                 and active_shipments.loading_status in ('AT_GATE','LOADING')) >= points.max_trucks
+           then 'BUSY'
+         else 'AVAILABLE'
+       end,updated_at=now()
+       where points.id=$1`,
+      [id],
+    );
+  }
+
   async products() {
     const result = await pool.query<ProductRow>(
       `select id,product_code,product_name,packaging_type,uom

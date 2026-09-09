@@ -1,7 +1,6 @@
 import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
 import {
   AlertTriangle,
-  ArrowLeft,
   BriefcaseBusiness,
   Check,
   CheckCircle2,
@@ -14,6 +13,11 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { SalesQuotationPreview } from '../../components/sales/SalesQuotationPreview';
+import { DetailBreadcrumb } from '../../components/customer-detail/DetailBreadcrumb';
+import { DocumentHeader } from '../../components/customer-detail/DocumentHeader';
+import { useSalesAuth } from '../../context/SalesAuthContext';
+import { getSalesLandingPath } from '../../utils/salesRouting';
+import { formatCommercialTonValue } from '../../utils/commercialQuantity';
 import {
   approveSalesQuotation,
   createContractFromSalesQuotation,
@@ -37,6 +41,7 @@ type PricingInput = Record<
 
 export function SalesQuotationDetailsPage() {
   const { id = '' } = useParams();
+  const { user } = useSalesAuth();
   const [quotation, setQuotation] = useState<SalesQuotationDetails | null>(null);
   const [prices, setPrices] = useState<PricingInput>({});
   const [validUntil, setValidUntil] = useState('');
@@ -194,7 +199,7 @@ export function SalesQuotationDetailsPage() {
     setContractForm({
       startDate: today(),
       endDate: quotation.validUntil ?? today(),
-      totalQuantityTons: acceptedQuantity.toFixed(3),
+      totalQuantityTons: formatCommercialTonValue(acceptedQuantity),
       pickupLocationId: quotation.fulfilmentType === 'PICKUP' ? (quotation.destination?.id ?? '') : '',
       internalNotes: '',
     });
@@ -283,27 +288,26 @@ export function SalesQuotationDetailsPage() {
 
   return (
     <div className="space-y-4 pb-8">
-      <header className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
-        <div className="min-w-0">
-          <Link
-            to="/sales/quotations"
-            className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-[#64748b] hover:text-[#54247a]"
-          >
-            <ArrowLeft size={14} /> Quotations
-          </Link>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold text-[#1a1b23]">Quotation / {quotation.reference}</h1>
-            <Status status={quotation.status} />
-          </div>
-          <p className="mt-1 text-sm text-[#64748b]">
+      <DetailBreadcrumb
+        homePath={user ? getSalesLandingPath(user.role) : '/sales'}
+        listLabel="Quotations"
+        listPath="/sales/quotations"
+        current={quotation.reference ?? 'Quotation'}
+      />
+      <DocumentHeader
+        number={quotation.reference ?? 'Quotation'}
+        status={<Status status={quotation.status} />}
+        description={
+          <p>
             Customer:{' '}
             <span className="font-semibold text-[#1a1b23]">{quotation.customer.companyName}</span>
             <span className="mx-2 text-[#cbd5e1]">|</span>
             Customer ID:{' '}
             <span className="break-all font-semibold text-[#1a1b23]">{quotation.customer.id}</span>
           </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+        }
+        actions={
+          <>
           <button type="button" onClick={() => setPreview(true)} className={secondaryButton}>
             <Eye size={15} /> Preview Customer Quote
           </button>
@@ -348,8 +352,9 @@ export function SalesQuotationDetailsPage() {
               <BriefcaseBusiness size={15} /> Contract {quotation.contract.reference ?? 'created'}
             </Link>
           )}
-        </div>
-      </header>
+          </>
+        }
+      />
 
       {(error || validation) && (
         <div
@@ -404,6 +409,16 @@ export function SalesQuotationDetailsPage() {
 
       <section className={sectionClass}>
         <SectionTitle>Customer Requirement</SectionTitle>
+        {quotation.specialPriceRequested && (
+          <div className="mb-4 flex items-start gap-3 rounded-lg border border-[#d8c7e3] bg-[#f6f2fa] px-4 py-3">
+            <span className="rounded-full bg-[#54247a] px-2.5 py-1 text-xs font-semibold text-white">
+              Special Price Requested
+            </span>
+            <p className="pt-0.5 text-sm text-[#54247a]">
+              Customer asked to review this RFQ for a special commercial rate.
+            </p>
+          </div>
+        )}
         <div className="grid gap-5 text-sm sm:grid-cols-2 xl:grid-cols-4">
           <InfoGroup
             rows={[
@@ -484,7 +499,7 @@ export function SalesQuotationDetailsPage() {
                       </div>
                     </td>
                     <td className="p-3 text-center">
-                      <div className="font-semibold">{formatQuantity(item.quantityTon)} TON</div>
+                      <div className="font-semibold">{formatCommercialTonValue(item.quantityTon)} TON</div>
                       <div className="mt-1 text-[11px] text-[#64748b]">
                         {item.packagingQuantity === null
                           ? 'Bulk'
@@ -923,9 +938,8 @@ function ContractCreationModal({
                 </Field>
                 <Field label="Contract Quantity (TON)">
                   <input
-                    type="number"
+                    type="text"
                     disabled
-                    step="0.001"
                     value={form.totalQuantityTons}
                     className={inputClass}
                   />
@@ -1391,6 +1405,7 @@ const statusMap: Record<SalesQuotationStatus, { label: string; dot: string; text
 };
 const actionLabels: Record<string, string> = {
   CUSTOMER_SUBMITTED: 'Customer submitted',
+  SPECIAL_PRICE_REQUESTED: 'Special price requested',
   SALES_STARTED_REVIEW: 'Sales started review',
   PRICING_UPDATED: 'Commercial pricing updated',
   SUBMITTED_FOR_APPROVAL: 'Submitted for approval',

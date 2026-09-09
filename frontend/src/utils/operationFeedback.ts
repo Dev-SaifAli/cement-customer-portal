@@ -38,6 +38,7 @@ function feedbackMessage(method: string, path: string) {
   if (path.endsWith('/submit')) return 'Submitted successfully.';
   if (path.endsWith('/approve')) return 'Approved successfully.';
   if (path.endsWith('/reject')) return 'Rejected successfully.';
+  if (path.endsWith('/cancel')) return 'Shipment cancelled successfully.';
   if (path.endsWith('/activate')) return 'Activated successfully.';
   if (path.endsWith('/deactivate')) return 'Deactivated successfully.';
   if (path.endsWith('/start-processing')) return 'Order processing started successfully.';

@@ -263,7 +263,7 @@ export function AdminLoadingPoints() {
   );
 }
 
-function LoadingPointForm({
+export function LoadingPointForm({
   pointType,
   point,
   products,
@@ -370,21 +370,21 @@ function LoadingPointForm({
     >
       <form
         onSubmit={(event) => void submit(event)}
-        className="w-full max-w-xl rounded-2xl bg-white shadow-2xl"
+        className="w-full max-w-xl rounded-lg bg-[var(--customer-surface)] text-[var(--customer-text)] shadow-xl"
       >
-        <header className="flex items-start justify-between border-b border-[#e3e1e8] px-5 py-4">
+        <header className="flex items-start justify-between border-b border-[var(--customer-border)] px-5 py-4">
           <div>
-            <h2 className="text-lg font-bold">
+            <h2 className="text-lg font-bold text-[var(--customer-text)]">
               {point ? 'Edit' : 'Add'} {pointType === 'SILO' ? 'Silo' : 'Bagging Line'}
             </h2>
-            <p className="mt-1 text-sm text-[#64748b]">
+            <p className="mt-1 text-sm text-[var(--customer-text-muted)]">
               Only compatible {pointType === 'SILO' ? 'bulk' : 'bag'} products are available.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-[#64748b] hover:bg-[#f6f2fa]"
+            className="rounded-md p-2 text-[var(--customer-text-muted)] hover:bg-[var(--customer-surface-secondary)]"
             aria-label="Close"
           >
             <X size={18} />
@@ -394,7 +394,7 @@ function LoadingPointForm({
           {point && (
             <div className="sm:col-span-5">
               <Field label={pointType === 'SILO' ? 'Silo ID' : 'Bagging Line ID'} required={false}>
-                <div className="flex h-11 items-center rounded-lg border border-[#e2e8f0] bg-slate-50 px-3 text-sm text-[#64748b]">
+                <div className="flex h-11 items-center rounded-md border border-[var(--customer-border)] bg-[var(--customer-surface-secondary)] px-3 text-sm text-[var(--customer-text-muted)]">
                   {point.pointNumber}
                 </div>
               </Field>
@@ -470,7 +470,7 @@ function LoadingPointForm({
               />
             </Field>
             {pointType === 'BAGGING_LINE' && (
-              <p className="mt-1.5 text-xs font-normal text-[#64748b]">
+              <p className="mt-1.5 text-xs font-normal text-[var(--customer-text-muted)]">
                 Operational processing/loading capacity of this bagging line.
               </p>
             )}
@@ -494,22 +494,22 @@ function LoadingPointForm({
             </div>
           )}
           {error && (
-            <p className="sm:col-span-12 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-[#b42318]">
+            <p className="sm:col-span-12 rounded-md border border-[var(--customer-danger)] bg-[var(--customer-danger-soft)] px-3 py-2 text-sm text-[var(--customer-danger)]">
               {error}
             </p>
           )}
         </div>
-        <footer className="flex justify-end gap-2 border-t border-[#e3e1e8] px-5 py-4">
+        <footer className="flex justify-end gap-2 border-t border-[var(--customer-border)] px-5 py-4">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-[#e3e1e8] px-4 py-2 text-sm font-semibold"
+            className="rounded-md border border-[var(--customer-border)] px-4 py-2 text-sm font-semibold text-[var(--customer-text)] hover:bg-[var(--customer-surface-secondary)]"
           >
             Cancel
           </button>
           <button
             disabled={busy}
-            className="rounded-lg bg-[#54247a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#472066] disabled:opacity-50"
+            className="rounded-md bg-[var(--customer-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--customer-primary-hover)] disabled:opacity-50"
           >
             {busy ? 'Saving...' : `Save ${pointType === 'SILO' ? 'Silo' : 'Bagging Line'}`}
           </button>
@@ -550,11 +550,11 @@ function Field({
   required?: boolean;
 }) {
   return (
-    <label className="block text-sm font-semibold text-[#1a1b23]">
+    <label className="block text-sm font-semibold text-[var(--customer-text)]">
       {text}
-      {required && <span className="text-red-600"> *</span>}
+      {required && <span className="text-[var(--customer-danger)]"> *</span>}
       <span className="mt-1.5 block">{children}</span>
-      {error && <span className="mt-1.5 block text-xs font-medium text-[#b42318]">{error}</span>}
+      {error && <span className="mt-1.5 block text-xs font-medium text-[var(--customer-danger)]">{error}</span>}
     </label>
   );
 }
@@ -622,7 +622,7 @@ function formatRelativeTimestamp(value: string) {
   return `${years} ${years === 1 ? 'year' : 'years'} ago`;
 }
 const inputClass =
-  'h-11 w-full rounded-lg border border-[#e2e8f0] bg-white px-3 text-sm outline-none focus:border-[#54247a]';
+  'h-11 w-full rounded-md border border-[var(--customer-border)] bg-[var(--customer-input-bg)] px-3 text-sm text-[var(--customer-text)] outline-none focus:border-[var(--customer-primary)]';
 
 function fieldErrorsForLoadingPointError(code: string | undefined, message: string) {
   if (

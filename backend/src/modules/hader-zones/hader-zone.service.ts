@@ -3,9 +3,16 @@ import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import type { SalesUser } from '../sales-auth/sales-auth.types.js';
 import type { GeoJsonPolygon, HaderCityBoundary, HaderZoneStatus } from './hader-zone.types.js';
-import { geoJsonPolygonSchema } from './hader-zone.validation.js';
+import { geoJsonPolygonSchema, haderCityIdSchema } from './hader-zone.validation.js';
 
 type QueryExecutor = Pick<PoolClient, 'query'>;
+
+export interface DeliveryLocationBoundaryInput {
+  haderCityId?: string | null | undefined;
+  city?: string | null | undefined;
+  latitude?: number | null | undefined;
+  longitude?: number | null | undefined;
+}
 
 interface CityBoundaryRow {
   id: string;
@@ -31,6 +38,9 @@ export class HaderZoneService {
   }
 
   async getCity(cityId: string, executor: QueryExecutor = pool): Promise<HaderCityBoundary> {
+    if (!haderCityIdSchema.safeParse(cityId).success) {
+      throw new AppError('Hader city id is invalid.', 400, 'HADER_CITY_ID_INVALID');
+    }
     const result = await executor.query<CityBoundaryRow>(
       `select cities.id,cities.name,cities.is_hader_enabled,cities.is_active,
               cities.delivery_boundary,cities.boundary_updated_at,
@@ -43,6 +53,31 @@ export class HaderZoneService {
     const row = result.rows[0];
     if (!row) throw new AppError('Hader city was not found.', 404, 'HADER_CITY_NOT_FOUND');
     return mapCity(row);
+  }
+
+  async resolveCity(
+    input: Pick<DeliveryLocationBoundaryInput, 'haderCityId' | 'city'>,
+    executor: QueryExecutor = pool,
+  ): Promise<HaderCityBoundary> {
+    const city = input.haderCityId
+      ? await this.getCity(input.haderCityId, executor)
+      : await this.getCityByName(input.city, executor);
+
+    if (!city.isActive) {
+      throw new AppError(
+        'The selected Hader city is not active.',
+        409,
+        'HADER_CITY_INACTIVE',
+      );
+    }
+    if (input.haderCityId && input.city && normalizeCityName(input.city) !== normalizeCityName(city.name)) {
+      throw new AppError(
+        'The selected city does not match the Hader city.',
+        400,
+        'HADER_CITY_MISMATCH',
+      );
+    }
+    return city;
   }
 
   async saveBoundary(cityId: string, boundary: GeoJsonPolygon, user: SalesUser) {
@@ -78,7 +113,18 @@ export class HaderZoneService {
     point: { latitude: number; longitude: number },
     executor: QueryExecutor = pool,
   ) {
+    validateCoordinates(point);
     const city = await this.getCity(cityId, executor);
+    if (!city.isActive) {
+      throw new AppError('The selected Hader city is not active.', 409, 'HADER_CITY_INACTIVE');
+    }
+    if (!city.isHaderEnabled) {
+      throw new AppError(
+        'Hader delivery is not configured for the selected city.',
+        409,
+        'HADER_CITY_NOT_ENABLED',
+      );
+    }
     if (!city.boundary) {
       throw new AppError(
         'Delivery boundary is not configured for the selected Hader city.',
@@ -90,6 +136,65 @@ export class HaderZoneService {
       ? 'WITHIN_HADER_ZONE'
       : 'OUTSIDE_HADER_ZONE';
     return { city: { id: city.id, name: city.name }, status };
+  }
+
+  async validateDeliveryLocation(
+    input: DeliveryLocationBoundaryInput,
+    executor: QueryExecutor = pool,
+    options: { requireHaderCity?: boolean } = {},
+  ) {
+    const city = await this.resolveCity(input, executor);
+    if (!city.isHaderEnabled) {
+      if (options.requireHaderCity) {
+        throw new AppError(
+          'Hader delivery is not configured for the selected city.',
+          409,
+          'HADER_CITY_NOT_ENABLED',
+        );
+      }
+      return { city, status: null };
+    }
+    if (input.latitude === null || input.latitude === undefined ||
+        input.longitude === null || input.longitude === undefined) {
+      throw new AppError(
+        'Map coordinates are required to validate the delivery location.',
+        409,
+        'DELIVERY_LOCATION_COORDINATES_REQUIRED',
+      );
+    }
+
+    const result = await this.validatePoint(
+      city.id,
+      { latitude: input.latitude, longitude: input.longitude },
+      executor,
+    );
+    if (result.status === 'OUTSIDE_HADER_ZONE') {
+      throw new AppError(
+        'Selected delivery location is outside the selected Hader City boundary.',
+        409,
+        'DELIVERY_LOCATION_OUTSIDE_HADER_BOUNDARY',
+      );
+    }
+    return { city, status: result.status };
+  }
+
+  private async getCityByName(cityName: string | null | undefined, executor: QueryExecutor) {
+    if (!cityName?.trim()) {
+      throw new AppError('Hader city is required.', 400, 'HADER_CITY_REQUIRED');
+    }
+    const result = await executor.query<CityBoundaryRow>(
+      `select cities.id,cities.name,cities.is_hader_enabled,cities.is_active,
+              cities.delivery_boundary,cities.boundary_updated_at,
+              users.name as boundary_updated_by
+       from ksa_cities cities
+       left join sales_users users on users.id=cities.boundary_updated_by_sales_user_id
+       where cities.name_key=lower(regexp_replace(btrim($1), '\\s+', ' ', 'g'))
+       limit 1`,
+      [cityName],
+    );
+    const row = result.rows[0];
+    if (!row) throw new AppError('Hader city was not found.', 404, 'HADER_CITY_NOT_FOUND');
+    return mapCity(row);
   }
 }
 
@@ -130,6 +235,27 @@ function pointOnSegment(px: number, py: number, ax: number, ay: number, bx: numb
     py >= Math.min(ay, by) - 1e-10 &&
     py <= Math.max(ay, by) + 1e-10
   );
+}
+
+function validateCoordinates(point: { latitude: number; longitude: number }) {
+  if (
+    !Number.isFinite(point.latitude) ||
+    !Number.isFinite(point.longitude) ||
+    point.latitude < -90 ||
+    point.latitude > 90 ||
+    point.longitude < -180 ||
+    point.longitude > 180
+  ) {
+    throw new AppError(
+      'Delivery location coordinates are invalid.',
+      400,
+      'DELIVERY_LOCATION_COORDINATES_INVALID',
+    );
+  }
+}
+
+function normalizeCityName(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
 }
 
 function mapCity(row: CityBoundaryRow): HaderCityBoundary {

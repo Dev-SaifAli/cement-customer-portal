@@ -1,7 +1,12 @@
 import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
+import { CommercialTonInput } from '../../components/ui/CommercialTonInput';
+import {
+  OrderPalletFields,
+  type OrderPalletState,
+  validateOrderPallet,
+} from '../../components/orders/OrderPalletFields';
 import {
   AlertCircle,
-  ArrowLeft,
   CalendarDays,
   CheckCircle2,
   Loader2,
@@ -15,11 +20,17 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ProductImage } from '../../components/customer/ProductImage';
+import { DetailBreadcrumb } from '../../components/customer-detail/DetailBreadcrumb';
+import {
+  DocumentHeader,
+  DocumentStateBadge,
+} from '../../components/customer-detail/DocumentHeader';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import {
   createDirectOrder,
   priceDirectOrder,
   type DirectOrderInput,
+  type DirectOrderPricingInput,
   type DirectOrderPricing,
   type CustomerOrder,
 } from '../../services/customerOrdersService';
@@ -34,6 +45,11 @@ import {
 } from '../../services/customerProductsService';
 import { getPickupLocations, type PickupLocation } from '../../services/customerQuotationsService';
 import { createClientId } from '../../utils/createClientId';
+import {
+  formatCommercialTons,
+  isWholeTonQuantity,
+  wholeTonQuantityMessage,
+} from '../../utils/commercialQuantity';
 
 type FulfilmentType = DirectOrderInput['fulfilmentType'];
 
@@ -56,8 +72,13 @@ export function CustomerDirectOrder() {
   const [pickupLocationId, setPickupLocationId] = useState('');
   const [requestedDeliveryDate, setRequestedDeliveryDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [pallet, setPallet] = useState<OrderPalletState>({
+    palletRequired: false,
+    palletType: '',
+    palletQuantity: '',
+  });
   const [pricingResponse, setPricing] = useState<{
-    input: DirectOrderInput;
+    input: DirectOrderPricingInput;
     result: DirectOrderPricing;
   } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -128,8 +149,8 @@ export function CustomerDirectOrder() {
     return () => window.clearTimeout(timer);
   }, [productSearch]);
 
-  const pricingPayload = useMemo<DirectOrderInput | null>(() => {
-    if (!selectedProductId || !Number.isFinite(quantityTons) || quantityTons <= 0) return null;
+  const pricingPayload = useMemo<DirectOrderPricingInput | null>(() => {
+    if (!selectedProductId || !isWholeTonQuantity(quantityTons)) return null;
     if (fulfilmentType === 'DELIVERY' && !shipToLocationId) return null;
     if (fulfilmentType === 'DELIVERY' && !selectedLocationMapped) return null;
     if (fulfilmentType === 'PICKUP' && !pickupLocationId) return null;
@@ -196,36 +217,47 @@ export function CustomerDirectOrder() {
 
   if (createdOrder) {
     return (
-      <div className="mx-auto flex min-h-[60vh] w-full max-w-2xl items-center justify-center">
+      <div className="mx-auto w-full max-w-[1450px] space-y-5">
+        <DetailBreadcrumb
+          listLabel="Direct Orders"
+          listPath="/customer/direct-orders"
+          current={createdOrder.orderNumber}
+        />
+        <DocumentHeader
+          number={createdOrder.orderNumber}
+          status={<DocumentStateBadge persisted status={createdOrder.status} />}
+        />
+        <div className="flex min-h-[50vh] items-center justify-center">
         <section className="customer-card customer-border w-full rounded-2xl border p-8 text-center">
           <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
             <CheckCircle2 size={30} />
           </span>
-          <h1 className="customer-text mt-5 text-2xl font-bold">Order Created Successfully</h1>
+          <h2 className="customer-text mt-5 text-xl font-bold">Order Created Successfully</h2>
           <p className="customer-secondary mt-2 text-sm">
             Your direct order was submitted and is ready for processing.
           </p>
           <div className="customer-surface-secondary customer-border mt-6 rounded-xl border p-4">
             <SummaryRow label="Order Number" value={createdOrder.orderNumber} strong />
             <div className="mt-3">
-              <SummaryRow label="Status" value="Submitted" />
+              <SummaryRow label="Status" value={formatOrderStatus(createdOrder.status)} />
             </div>
           </div>
           <div className="mt-6 flex flex-col-reverse justify-center gap-3 sm:flex-row">
             <Link
-              to="/customer/orders"
+              to="/customer/direct-orders"
               className="customer-surface customer-border customer-text inline-flex h-10 items-center justify-center rounded-lg border px-5 text-sm font-bold"
             >
-              Back to Orders
+              Back to Direct Orders
             </Link>
             <Link
-              to={`/customer/orders/${createdOrder.id}`}
+              to={`/customer/direct-orders/${createdOrder.id}`}
               className="inline-flex h-10 items-center justify-center rounded-lg bg-[var(--customer-primary)] px-5 text-sm font-bold text-white hover:bg-[var(--customer-primary-hover)]"
             >
-              View Order
+              View Direct Order
             </Link>
           </div>
         </section>
+        </div>
       </div>
     );
   }
@@ -233,8 +265,7 @@ export function CustomerDirectOrder() {
   const validateAndReview = () => {
     setError('');
     if (!selectedProduct) return setError('Select a product to continue.');
-    if (!Number.isFinite(quantityTons) || quantityTons <= 0)
-      return setError('Enter a quantity greater than zero TON.');
+    if (!isWholeTonQuantity(quantityTons)) return setError(wholeTonQuantityMessage);
     if (fulfilmentType === 'DELIVERY' && !hasMappedLocations)
       return setError(
         'Set a delivery location on the map before creating a Direct Order. Open Delivery Locations, edit the location, and select its map position.',
@@ -249,6 +280,8 @@ export function CustomerDirectOrder() {
       return setError('Select a requested delivery date.');
     if (fulfilmentType === 'PICKUP' && !pickupLocationId)
       return setError('Select a pickup location.');
+    const palletError = validateOrderPallet(pallet);
+    if (palletError) return setError(palletError);
     if (!pricing || pricingLoading)
       return setError('Wait for pricing to be calculated before continuing.');
     setReviewOpen(true);
@@ -264,6 +297,9 @@ export function CustomerDirectOrder() {
         requestedDeliveryDate:
           fulfilmentType === 'DELIVERY' && requestedDeliveryDate ? requestedDeliveryDate : null,
         notes: notes.trim() || null,
+        palletRequired: pallet.palletRequired,
+        palletType: pallet.palletRequired ? pallet.palletType : null,
+        palletQuantity: pallet.palletRequired ? Number(pallet.palletQuantity) : null,
         clientRequestId: requestId.current,
       });
       setReviewOpen(false);
@@ -278,16 +314,16 @@ export function CustomerDirectOrder() {
 
   return (
     <div className="mx-auto w-full max-w-[1450px] space-y-4">
-      <div>
-        <Link
-          to="/customer/orders"
-          className="customer-secondary inline-flex items-center gap-2 text-sm font-semibold hover:text-[var(--customer-primary)]"
-        >
-          <ArrowLeft size={16} /> Orders
-        </Link>
-        <h1 className="customer-text mt-2 text-2xl font-bold">New Direct Order</h1>
-        <p className="customer-secondary mt-1 text-sm">Create a new cement order request.</p>
-      </div>
+      <DetailBreadcrumb
+        listLabel="Direct Orders"
+        listPath="/customer/direct-orders"
+        current="New Direct Order"
+      />
+      <DocumentHeader
+        number="New Direct Order"
+        status={<DocumentStateBadge persisted={false} />}
+        description="Create a new cement order request."
+      />
 
       {error && (
         <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
@@ -393,12 +429,13 @@ export function CustomerDirectOrder() {
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <Field label="Quantity TON" required>
                 <div className="relative">
-                  <input
-                    type="number"
-                    min="0.001"
-                    step="0.001"
+                  <CommercialTonInput
                     value={quantity}
-                    onChange={(event) => setQuantity(event.target.value)}
+                    onValueChange={(value) => {
+                      setQuantity(value);
+                      setError('');
+                    }}
+                    onInvalidValue={setError}
                     placeholder="Enter quantity"
                     className={`${fieldClass} pr-14`}
                   />
@@ -412,8 +449,8 @@ export function CustomerDirectOrder() {
                   {pricing?.equivalentPackagingUnits !== null &&
                   pricing?.equivalentPackagingUnits !== undefined
                     ? `${formatNumber(pricing.equivalentPackagingUnits)} Bags`
-                    : selectedProduct?.uom === 'TON' && quantityTons > 0
-                      ? `${formatNumber(quantityTons)} TON (Bulk)`
+                    : selectedProduct?.uom === 'TON' && isWholeTonQuantity(quantityTons)
+                      ? `${formatCommercialTons(quantityTons)} (Bulk)`
                       : 'Calculated from product weight'}
                 </div>
               </Field>
@@ -520,6 +557,18 @@ export function CustomerDirectOrder() {
               </div>
             )}
           </Section>
+
+          <div className="customer-card customer-border rounded-2xl border p-5">
+            <OrderPalletFields
+              contractPalletRequired={false}
+              divided={false}
+              value={pallet}
+              onChange={(value) => {
+                setPallet(value);
+                setError('');
+              }}
+            />
+          </div>
         </div>
 
         <aside className="customer-card customer-border rounded-2xl border p-5 xl:sticky xl:top-20">
@@ -535,7 +584,7 @@ export function CustomerDirectOrder() {
             />
             <SummaryRow
               label="Quantity"
-              value={quantityTons > 0 ? `${formatNumber(quantityTons)} TON` : 'Not entered'}
+              value={isWholeTonQuantity(quantityTons) ? formatCommercialTons(quantityTons) : 'Not entered'}
             />
             <SummaryRow
               label="Fulfilment"
@@ -549,6 +598,13 @@ export function CustomerDirectOrder() {
                   : (selectedPickup?.name ?? 'Not selected')
               }
             />
+            <SummaryRow label="Pallet Required" value={pallet.palletRequired ? 'Yes' : 'No'} />
+            {pallet.palletRequired && (
+              <>
+                <SummaryRow label="Pallet Type" value={pallet.palletType || 'Not selected'} />
+                <SummaryRow label="Pallet Quantity" value={pallet.palletQuantity || 'Not entered'} />
+              </>
+            )}
           </div>
 
           {pricingLoading ? (
@@ -601,6 +657,7 @@ export function CustomerDirectOrder() {
               : [selectedPickup?.name, selectedPickup?.city].filter(Boolean).join(', ')
           }
           submitting={submitting}
+          pallet={pallet}
           onCancel={() => setReviewOpen(false)}
           onSubmit={() => void submit()}
         />
@@ -709,12 +766,14 @@ function SummaryRow({
 function ReviewDialog({
   pricing,
   location,
+  pallet,
   submitting,
   onCancel,
   onSubmit,
 }: {
   pricing: DirectOrderPricing;
   location: string;
+  pallet: OrderPalletState;
   submitting: boolean;
   onCancel: () => void;
   onSubmit: () => void;
@@ -751,7 +810,7 @@ function ReviewDialog({
             <SummaryRow label="Packaging" value={pricing.product.packaging} />
           </div>
           <div className="mt-3">
-            <SummaryRow label="Requested TON" value={`${formatNumber(pricing.quantityTons)} TON`} />
+            <SummaryRow label="Requested TON" value={formatCommercialTons(pricing.quantityTons)} />
           </div>
           {pricing.equivalentPackagingUnits !== null && (
             <div className="mt-3">
@@ -775,6 +834,19 @@ function ReviewDialog({
           <div className="mt-3">
             <SummaryRow label="Location" value={location || 'Not provided'} />
           </div>
+          <div className="mt-3">
+            <SummaryRow label="Pallet Required" value={pallet.palletRequired ? 'Yes' : 'No'} />
+          </div>
+          {pallet.palletRequired && (
+            <>
+              <div className="mt-3">
+                <SummaryRow label="Pallet Type" value={pallet.palletType} />
+              </div>
+              <div className="mt-3">
+                <SummaryRow label="Pallet Quantity" value={pallet.palletQuantity} />
+              </div>
+            </>
+          )}
           <div className="customer-border-soft mt-4 space-y-3 border-t pt-4">
             <SummaryRow label="Customer Rate / TON" value={money(pricing.customerRatePerTon)} />
             <SummaryRow label="Subtotal" value={money(pricing.subtotal)} />
@@ -844,6 +916,13 @@ function hasMapCoordinates(location: CustomerLocation | null): location is Custo
 
 function formatNumber(value: number) {
   return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+}
+
+function formatOrderStatus(value: string) {
+  return value
+    .split('_')
+    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+    .join(' ');
 }
 
 function money(value: number) {

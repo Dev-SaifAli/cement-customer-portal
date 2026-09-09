@@ -2,9 +2,7 @@ import type { PoolClient } from 'pg';
 import { AppError } from '../../errors/app-error.js';
 import { pool } from '../../database/pool.js';
 import { ordersRepository } from '../customer-orders/orders.repository.js';
-import { createDeliveryRequestForOrder } from '../hader-delivery/hader-delivery.service.js';
 import { nextDocumentReference } from '../document-numbering/document-numbering.service.js';
-import { notificationEvents } from '../notifications/notification-events.js';
 import type { SalesUser } from '../sales-auth/sales-auth.types.js';
 import type { ListSalesOrdersQuery, RejectDirectOrderPayload } from './sales-orders.validation.js';
 
@@ -31,6 +29,9 @@ interface DirectOrderApprovalRow {
   grand_total: string;
   preferred_delivery_date: Date | string | null;
   delivery_notes: string | null;
+  pallet_required: boolean;
+  pallet_type: string | null;
+  pallet_quantity: number | null;
   product_id: string;
   product_code: string;
   product_name: string;
@@ -157,115 +158,9 @@ export class SalesOrdersService {
     return this.getById(id);
   }
 
-  async startProcessing(id: string, salesUser: SalesUser) {
-    const client = await pool.connect();
-    let createdDeliveryRequest: Awaited<ReturnType<typeof createDeliveryRequestForOrder>> | null =
-      null;
-    try {
-      await client.query('begin');
-      const order = await ordersRepository.getProcessingCandidateForUpdate(id, client);
-      if (!order) throw new AppError('Order was not found.', 404, 'SALES_ORDER_NOT_FOUND');
-      validateOrderForProcessing(order);
-
-      if (order.fulfilment_type === 'DELIVERY') {
-        createdDeliveryRequest = await createDeliveryRequestForOrder(client, {
-          orderId: order.id,
-          customerAccountId: order.customer_account_id,
-          haderCityId: order.hader_city_id,
-          shipToLocationId: order.ship_to_location_id,
-          quantityTon: Number(order.requested_quantity_tons),
-          requestedDate: order.preferred_delivery_date as Date | string,
-          haderZoneStatus: order.hader_zone_status,
-          salesUserId: salesUser.id,
-        });
-      }
-
-      await ordersRepository.markProcessing(order.id, salesUser.id, client);
-      await ordersRepository.addProcessingStartedEvent(order, salesUser.id, client);
-      await client.query('commit');
-    } catch (error) {
-      await client.query('rollback');
-      throw error;
-    } finally {
-      client.release();
-    }
-
-    const order = await this.getById(id);
-    await notificationEvents.orderProcessingStarted(order.customer.id, order.id, order.orderNumber);
-    if (createdDeliveryRequest?.created) {
-      await notificationEvents.deliveryRequestCreated(createdDeliveryRequest.id, order.orderNumber);
-    }
-    return order;
-  }
 }
 
 export const salesOrdersService = new SalesOrdersService();
-
-function validateOrderForProcessing(order: {
-  status: string;
-  customer_status: string;
-  product_active: boolean;
-  requested_quantity_tons: string;
-  fulfilment_type: 'PICKUP' | 'DELIVERY';
-  hader_city_id: string | null;
-  hader_city_name: string | null;
-  ship_to_location_id: string | null;
-  ship_to_snapshot: unknown;
-  pickup_location_id: string | null;
-  pickup_location_name: string | null;
-  customer_account_id: string;
-  preferred_delivery_date: Date | string | null;
-}) {
-  if (!['SUBMITTED', 'APPROVED'].includes(order.status)) {
-    throw new AppError(
-      order.status === 'PROCESSING'
-        ? 'Order processing has already started.'
-        : 'Only submitted or approved orders can start processing.',
-      409,
-      order.status === 'PROCESSING' ? 'ORDER_ALREADY_PROCESSING' : 'ORDER_STATUS_INVALID',
-    );
-  }
-  if (order.customer_status !== 'ACTIVE') {
-    throw new AppError('The customer account is not active.', 409, 'ORDER_CUSTOMER_INACTIVE');
-  }
-  if (!order.product_active) {
-    throw new AppError('The order product is inactive.', 409, 'ORDER_PRODUCT_INACTIVE');
-  }
-  if (!(Number(order.requested_quantity_tons) > 0)) {
-    throw new AppError(
-      'Order quantity must be greater than zero TON.',
-      409,
-      'ORDER_QUANTITY_INVALID',
-    );
-  }
-  if (order.fulfilment_type === 'DELIVERY') {
-    if (
-      !order.hader_city_id ||
-      !order.hader_city_name?.trim() ||
-      !order.ship_to_location_id ||
-      !order.preferred_delivery_date ||
-      !validShipToSnapshot(order.ship_to_snapshot, order.ship_to_location_id)
-    ) {
-      throw new AppError(
-        'Delivery order requires a valid Hader city and ship-to location.',
-        409,
-        'ORDER_DELIVERY_DETAILS_INVALID',
-      );
-    }
-    return;
-  }
-  if (order.fulfilment_type === 'PICKUP') {
-    if (!order.pickup_location_id || !order.pickup_location_name?.trim()) {
-      throw new AppError(
-        'Pick-up order requires a valid pickup location.',
-        409,
-        'ORDER_PICKUP_DETAILS_INVALID',
-      );
-    }
-    return;
-  }
-  throw new AppError('Order fulfilment is invalid.', 409, 'ORDER_FULFILMENT_INVALID');
-}
 
 async function getDirectOrderApprovalCandidate(id: string, client: PoolClient) {
   const result = await client.query<DirectOrderApprovalRow>(
@@ -291,6 +186,9 @@ async function getDirectOrderApprovalCandidate(id: string, client: PoolClient) {
             orders.grand_total,
             orders.preferred_delivery_date,
             orders.delivery_notes,
+            orders.pallet_required,
+            orders.pallet_type,
+            orders.pallet_quantity,
             order_items.product_id,
             order_items.product_code,
             order_items.product_name,
@@ -385,6 +283,9 @@ async function createApprovedDirectOrderContract(
     amount: Number(order.amount),
     displayOrder: 0,
     source: 'DIRECT_ORDER',
+    palletRequired: order.pallet_required,
+    palletType: order.pallet_type,
+    palletQuantity: order.pallet_quantity,
   };
 
   const result = await client.query<{ id: string }>(
@@ -398,10 +299,10 @@ async function createApprovedDirectOrderContract(
        vat_rate, vat_amount, grand_total, payment_terms, customer_notes, items_snapshot,
        activated_at
      ) values (
-       $1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, $11, false, null,
-       $12, $12, null, null, $13, 'ACTIVE', 'DIRECT_ORDER', $14, $15, now(),
-       $16, $6, 0, $6, $17, $18, $19, $20, 'List price Direct Order approved.',
-       $21, $22::jsonb, now()
+       $1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, $11, $12, $13,
+       $14, $14, null, null, $15, 'ACTIVE', 'DIRECT_ORDER', $16, $17, now(),
+       $18, $6, 0, $6, $19, $20, $21, $22, 'List price Direct Order approved.',
+       $23, $24::jsonb, now()
      )
      on conflict (source_direct_order_id) do nothing
      returning id`,
@@ -417,6 +318,8 @@ async function createApprovedDirectOrderContract(
       order.pickup_location_id,
       order.ship_to_location_id,
       order.fulfilment_type === 'DELIVERY' ? order.hader_city_name : null,
+      order.pallet_required,
+      order.pallet_type,
       customerRate,
       salesUserId,
       order.order_number,
@@ -480,30 +383,4 @@ async function createApprovedDirectOrderContract(
     ],
   );
   return contractId;
-}
-
-function validShipToSnapshot(value: unknown, locationId: string) {
-  let snapshot: Record<string, unknown> | null = null;
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    snapshot = value as Record<string, unknown>;
-  }
-  if (typeof value !== 'string' && !snapshot) return false;
-  try {
-    if (!snapshot) {
-      const parsed = JSON.parse(value as string) as unknown;
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        snapshot = parsed as Record<string, unknown>;
-      }
-    }
-  } catch {
-    return false;
-  }
-  return Boolean(
-    snapshot &&
-    snapshot.id === locationId &&
-    typeof snapshot.name === 'string' &&
-    snapshot.name.trim() &&
-    typeof snapshot.city === 'string' &&
-    snapshot.city.trim(),
-  );
 }

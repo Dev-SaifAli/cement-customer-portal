@@ -18,6 +18,10 @@ adminPricingRouter.put(
   asyncHandler((req, res) => adminPricingController.updateListPriceDirectOrderApproval(req, res)),
 );
 adminPricingRouter.put(
+  '/approval-settings/contract-order-creation/:actor',
+  asyncHandler((req, res) => adminPricingController.updateContractOrderCreation(req, res)),
+);
+adminPricingRouter.put(
   '/products/:productId',
   asyncHandler((req, res) => adminPricingController.upsertProductPrice(req, res)),
 );

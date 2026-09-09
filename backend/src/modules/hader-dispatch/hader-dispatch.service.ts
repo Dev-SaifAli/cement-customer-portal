@@ -53,13 +53,12 @@ export class HaderDispatchService {
   async filters() {
     const [cities, products] = await Promise.all([
       pool.query<{ id: string; name: string }>(
-        `select distinct c.id,c.name from shipments s
-         join delivery_requests dr on dr.id=s.delivery_request_id
+        `select distinct c.id,c.name from delivery_requests dr
          join ksa_cities c on c.id=dr.hader_city_id order by c.name`,
       ),
       pool.query<{ id: string; code: string; name: string }>(
-        `select distinct p.id,p.product_code as code,p.product_name as name from shipments s
-         join orders o on o.id=s.order_id
+        `select distinct p.id,p.product_code as code,p.product_name as name from delivery_requests dr
+         join orders o on o.id=dr.order_id
          join order_items oi on oi.order_id=o.id
          join product_catalog p on p.id=oi.product_id order by p.product_name`,
       ),

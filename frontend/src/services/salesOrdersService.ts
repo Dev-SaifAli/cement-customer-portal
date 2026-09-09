@@ -4,7 +4,11 @@ const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1
 
 export interface SalesOrder extends CustomerOrder {
   customer: { id: string; companyName: string | null };
-  shipmentSummary: { count: number; latestStatus: string | null };
+  shipmentSummary: {
+    count: number;
+    latestStatus: string | null;
+    firstShipment: { id: string; shipmentNumber: string | null } | null;
+  };
   processing: { processedBySalesUserId: string | null; processedAt: string } | null;
 }
 
@@ -32,14 +36,6 @@ export async function listSalesOrders(
 export async function getSalesOrder(id: string) {
   const response = await request<{ success: boolean; data: { order: SalesOrder } }>(
     `/sales/orders/${encodeURIComponent(id)}`,
-  );
-  return response.data.order;
-}
-
-export async function startSalesOrderProcessing(id: string) {
-  const response = await request<{ success: boolean; data: { order: SalesOrder } }>(
-    `/sales/orders/${encodeURIComponent(id)}/start-processing`,
-    { method: 'POST' },
   );
   return response.data.order;
 }

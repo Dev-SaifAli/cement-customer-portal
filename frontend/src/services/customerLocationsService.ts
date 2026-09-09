@@ -1,4 +1,5 @@
 import type { Coordinates } from '../config/map';
+import type { GeoJsonPolygon } from './haderZoneService';
 
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
 
@@ -8,6 +9,7 @@ export interface CustomerLocation {
   siteId: string;
   streetAddress: string;
   city: string;
+  haderCityId?: string | undefined;
   region: string;
   country: string;
   postalCode: string;
@@ -66,7 +68,25 @@ export const getCustomerLocationCities = async () => {
 export interface CustomerLocationCity {
   id: string;
   name: string;
+  isHaderEnabled: boolean;
+  boundary: GeoJsonPolygon | null;
 }
+
+export const validateCustomerHaderZone = async (
+  cityId: string,
+  coordinates: Coordinates,
+  signal?: AbortSignal,
+) => {
+  const response = await request<{
+    success: boolean;
+    data: { status: 'WITHIN_HADER_ZONE' | 'OUTSIDE_HADER_ZONE' };
+  }>('/location/validate-hader-zone', {
+    method: 'POST',
+    body: JSON.stringify({ cityId, ...coordinates }),
+    ...(signal ? { signal } : {}),
+  });
+  return response.data.status;
+};
 
 export const createCustomerLocation = async (payload: CustomerLocationPayload) =>
   requestCustomerLocations('/customer/locations', {

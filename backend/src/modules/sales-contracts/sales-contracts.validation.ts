@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { coercedWholeCommercialTonsSchema } from '../products/commercial-quantity.validation.js';
 
 const uuidSchema = z.string().uuid();
 
@@ -47,7 +48,7 @@ export const salesContractIdSchema = z.object({
 
 export const salesContractExtensionSchema = z
   .object({
-    additionalQuantityTons: z.coerce.number().positive().optional(),
+    additionalQuantityTons: coercedWholeCommercialTonsSchema.optional(),
     endDate: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'End date must use YYYY-MM-DD format.')
@@ -64,11 +65,15 @@ export const salesContractExtensionSchema = z
     }
   });
 
+export const rejectSalesContractSchema = z.object({
+  reason: z.string().trim().min(1, 'Reason is required.').max(500),
+});
+
 export const salesContractPayloadSchema = z
   .object({
     customerAccountId: uuidSchema,
     productId: uuidSchema,
-    quantity: z.coerce.number().positive('Quantity must be greater than zero.'),
+    quantity: coercedWholeCommercialTonsSchema,
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must use YYYY-MM-DD format.'),
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'End date must use YYYY-MM-DD format.'),
     fulfilment: z.enum(['PICKUP', 'DELIVERY']),
@@ -136,6 +141,7 @@ export const createContractFromAcceptedQuotationSchema = z
 export type ListSalesContractsQuery = z.infer<typeof listSalesContractsSchema>;
 export type SalesContractPayload = z.infer<typeof salesContractPayloadSchema>;
 export type SalesContractExtensionPayload = z.infer<typeof salesContractExtensionSchema>;
+export type RejectSalesContractPayload = z.infer<typeof rejectSalesContractSchema>;
 export type CreateContractFromAcceptedQuotationPayload = z.infer<
   typeof createContractFromAcceptedQuotationSchema
 >;

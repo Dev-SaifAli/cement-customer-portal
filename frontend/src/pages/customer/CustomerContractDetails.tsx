@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Lock } from 'lucide-react';
+import { ArrowRight, Lock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -6,7 +6,13 @@ import {
   getCustomerContract,
   type CustomerContractDetails,
 } from '../../services/customerContractsService';
+import { formatCommercialTons } from '../../utils/commercialQuantity';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import { DetailBreadcrumb } from '../../components/customer-detail/DetailBreadcrumb';
+import {
+  DocumentHeader,
+  DocumentStateBadge,
+} from '../../components/customer-detail/DocumentHeader';
 
 export function CustomerContractDetailsPage() {
   const { user } = useCustomerAuth();
@@ -60,20 +66,15 @@ export function CustomerContractDetailsPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <Link
-          to="/customer/contracts"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-[#64748b] hover:text-[#54247a]"
-        >
-          <ArrowLeft size={16} /> Contracts
-        </Link>
-        <div className="mt-2 flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-[#1a1b23]">{contract.reference}</h1>
-          <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" /> Active
-          </span>
-        </div>
-      </div>
+      <DetailBreadcrumb
+        listLabel="Contracts"
+        listPath="/customer/contracts"
+        current={contract.reference ?? 'Contract'}
+      />
+      <DocumentHeader
+        number={contract.reference ?? 'Contract'}
+        status={<DocumentStateBadge persisted status={contract.status} />}
+      />
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
         <InfoCard title="Contract Information">
@@ -115,16 +116,16 @@ export function CustomerContractDetailsPage() {
             </p>
           </div>
           <p className="text-sm font-bold text-[#1a1b23]">
-            {formatNumber(remainingTons)} TON remaining
+            {formatCommercialTons(remainingTons)} remaining
           </p>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-[#f4edf7]">
           <div className="h-full rounded-full bg-[#54247a]" style={{ width: `${usagePercent}%` }} />
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <Field label="Total Contract Quantity" value={`${formatNumber(totalTons)} TON`} strong />
-          <Field label="Used Quantity" value={`${formatNumber(usedTons)} TON`} />
-          <Field label="Remaining Quantity" value={`${formatNumber(remainingTons)} TON`} strong />
+          <Field label="Total Contract Quantity" value={formatCommercialTons(totalTons)} strong />
+          <Field label="Used Quantity" value={formatCommercialTons(usedTons)} />
+          <Field label="Remaining Quantity" value={formatCommercialTons(remainingTons)} strong />
         </div>
       </section>
 
@@ -153,7 +154,9 @@ export function CustomerContractDetailsPage() {
                     <p className="text-xs text-[#64748b]">{item.productCode}</p>
                   </td>
                   <td className="px-4 py-3">{item.packagingType}</td>
-                  <td className="px-4 py-3">{formatNumber(item.quantityTon)} TON</td>
+                  <td className="px-4 py-3">
+                    {item.quantityTon === null ? 'Not provided' : formatCommercialTons(item.quantityTon)}
+                  </td>
                   <td className="px-4 py-3">{item.commercialUom}</td>
                   <td className="px-4 py-3">
                     {item.packagingQuantity === null
@@ -175,7 +178,7 @@ export function CustomerContractDetailsPage() {
             <p className="customer-text font-bold">Create an order from this contract</p>
             <p className="customer-secondary mt-1 text-xs">
               {remainingTons > 0
-                ? `${formatNumber(remainingTons)} TON is available to order.`
+                ? `${formatCommercialTons(remainingTons)} is available to order.`
                 : 'The contract quantity has been fully used.'}
             </p>
           </div>

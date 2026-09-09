@@ -1,7 +1,14 @@
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
 
 export type CustomerShipmentStatus =
-  'CREATED' | 'ASSIGNED' | 'LOADING' | 'DISPATCHED' | 'IN_TRANSIT' | 'DELIVERED' | 'CLOSED';
+  | 'CREATED'
+  | 'ASSIGNED'
+  | 'LOADING'
+  | 'DISPATCHED'
+  | 'IN_TRANSIT'
+  | 'DELIVERED'
+  | 'CLOSED'
+  | 'CANCELLED';
 
 export interface CustomerShipmentEvent {
   id: string;

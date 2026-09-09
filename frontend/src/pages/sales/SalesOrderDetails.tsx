@@ -1,14 +1,11 @@
 import {
   ArrowLeft,
-  CheckCircle2,
   FileText,
   Loader2,
   Lock,
   MapPin,
   Package,
-  PlayCircle,
   Truck,
-  X,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -16,17 +13,15 @@ import {
   approveDirectOrder,
   getSalesOrder,
   rejectDirectOrder,
-  startSalesOrderProcessing,
   type SalesOrder,
 } from '../../services/salesOrdersService';
+import { formatCommercialTons } from '../../utils/commercialQuantity';
 
 export function SalesOrderDetailsPage() {
   const { id } = useParams();
   const [order, setOrder] = useState<SalesOrder | null>(null);
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
   const [approvalAction, setApprovalAction] = useState<'approve' | 'reject' | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -46,25 +41,6 @@ export function SalesOrderDetailsPage() {
       cancelled = true;
     };
   }, [id]);
-
-  const startProcessing = async () => {
-    if (!id) return;
-    setProcessing(true);
-    setError('');
-    try {
-      setOrder(await startSalesOrderProcessing(id));
-      setConfirmOpen(false);
-    } catch (processingError) {
-      setConfirmOpen(false);
-      setError(
-        processingError instanceof Error
-          ? processingError.message
-          : 'Unable to start order processing.',
-      );
-    } finally {
-      setProcessing(false);
-    }
-  };
 
   const decideDirectOrder = async (action: 'approve' | 'reject') => {
     if (!id) return;
@@ -121,15 +97,6 @@ export function SalesOrderDetailsPage() {
             </button>
           </div>
         )}
-        {['SUBMITTED', 'APPROVED'].includes(order.status) && (
-          <button
-            type="button"
-            onClick={() => setConfirmOpen(true)}
-            className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#54247a] px-5 text-sm font-bold text-white hover:bg-[#472066]"
-          >
-            <PlayCircle size={17} /> Start Processing
-          </button>
-        )}
       </div>
 
       {error && (
@@ -157,7 +124,13 @@ export function SalesOrderDetailsPage() {
           <Field label="Product" value={order.product.name} />
           <Field label="Product Code" value={order.product.code} />
           <Field label="Packaging" value={order.product.packaging} />
-          <Field label="Quantity" value={`${number(order.requestedQuantityTons)} TON`} />
+          <Field label="Quantity" value={formatCommercialTons(order.requestedQuantityTons)} />
+          <Field label="Pallet Required" value={order.palletRequired ? 'Yes' : 'No'} />
+          <Field label="Pallet Type" value={order.palletType} />
+          <Field
+            label="Pallet Quantity"
+            value={order.palletQuantity == null ? null : String(order.palletQuantity)}
+          />
           <Field
             label="Equivalent Bags"
             value={
@@ -206,59 +179,6 @@ export function SalesOrderDetailsPage() {
         </Card>
       )}
 
-      {confirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="start-processing-title"
-            className="w-full max-w-md rounded-2xl border border-[#e3e1e8] bg-white p-5 shadow-xl"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 id="start-processing-title" className="text-lg font-bold text-[#1a1b23]">
-                  Start Processing?
-                </h2>
-                <p className="mt-2 text-sm text-[#64748b]">
-                  Confirm that this order has been reviewed and is ready for operational processing.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setConfirmOpen(false)}
-                disabled={processing}
-                className="rounded-lg p-2 text-[#64748b] hover:bg-[#f6f2fa]"
-                aria-label="Close confirmation"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="mt-5 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setConfirmOpen(false)}
-                disabled={processing}
-                className="h-10 rounded-lg border border-[#e3e1e8] px-4 text-sm font-bold text-[#1a1b23] disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void startProcessing()}
-                disabled={processing}
-                className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#54247a] px-5 text-sm font-bold text-white hover:bg-[#472066] disabled:opacity-60"
-              >
-                {processing ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <CheckCircle2 size={16} />
-                )}
-                {processing ? 'Starting...' : 'Start Processing'}
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
     </div>
   );
 }

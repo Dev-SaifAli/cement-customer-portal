@@ -42,6 +42,30 @@ export class NotificationsService {
       return;
     }
 
+    if (input.recipients.kind === 'SALES_USERS') {
+      await pool.query(
+        `insert into notifications (
+           recipient_kind, recipient_user_id, type, title, message,
+           entity_type, entity_id, action_url, event_key
+         )
+         select 'SALES', users.id, $2, $3, $4, $5, $6, $7, $8
+         from sales_users users
+         where users.is_active = true and users.id = any($1::uuid[])
+         on conflict (recipient_kind, recipient_user_id, event_key) do nothing`,
+        [
+          input.recipients.userIds,
+          input.type,
+          input.title,
+          input.message,
+          input.entityType,
+          input.entityId,
+          input.actionUrl,
+          eventKey,
+        ],
+      );
+      return;
+    }
+
     const roles = input.recipients.roles ?? [
       'CUSTOMER_ADMIN',
       'PURCHASER',

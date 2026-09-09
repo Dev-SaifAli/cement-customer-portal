@@ -1,7 +1,12 @@
 import { NativeTomSelect } from '../../components/ui/NativeTomSelect';
+import { CommercialTonInput } from '../../components/ui/CommercialTonInput';
 import { useToast } from '../../components/ui/ToastProvider';
+import { DetailBreadcrumb } from '../../components/customer-detail/DetailBreadcrumb';
 import {
-  Badge,
+  DocumentHeader,
+  DocumentStateBadge,
+} from '../../components/customer-detail/DocumentHeader';
+import {
   Button,
   Dialog,
   DialogContent,
@@ -75,7 +80,12 @@ import {
   type QuotationFulfilmentType,
 } from '../../services/customerQuotationsService';
 import { createClientId } from '../../utils/createClientId';
-import { packagingQuantityForTons } from '../../utils/commercialQuantity';
+import {
+  formatCommercialTonValue,
+  isWholeTonQuantity,
+  packagingQuantityForTons,
+  wholeTonQuantityMessage,
+} from '../../utils/commercialQuantity';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 type FormItem = {
@@ -89,6 +99,7 @@ type FormState = {
   pickupLocationId: string;
   shipToLocationId: string;
   requestedDate: string;
+  specialPriceRequested: boolean;
   palletRequired: boolean;
   palletType: string;
   palletQuantity: string;
@@ -112,6 +123,7 @@ const createInitialForm = (): FormState => ({
   pickupLocationId: '',
   shipToLocationId: '',
   requestedDate: '',
+  specialPriceRequested: false,
   palletRequired: false,
   palletType: '',
   palletQuantity: '',
@@ -173,9 +185,7 @@ export function CustomerQuotationNew() {
   const primaryActionLabel = isSavedDraft ? 'Submit' : 'Save';
   const statusBadgeLabel = isSubmitted
     ? formatQuotationStatus(quotation?.status)
-    : quotationId
-      ? 'Saved'
-      : 'Draft';
+    : 'Draft';
   const formBusy = saving || submitting;
   const allRowsSelected =
     form.items.length > 0 && form.items.every((item) => selectedRows.has(item.key));
@@ -517,22 +527,25 @@ export function CustomerQuotationNew() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1500px] bg-[var(--customer-surface)] text-[var(--customer-text)] [&_button:focus-visible]:outline [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-[var(--customer-primary)]" onKeyDown={handleKeyboardShortcuts}>
-      <section className={`overflow-visible transition-opacity ${formBusy ? 'opacity-75' : 'opacity-100'}`} aria-busy={formBusy}>
-        <header className="flex min-h-[58px] flex-col gap-3 border-b border-[var(--customer-border)] px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <h1 className="text-lg font-semibold text-[var(--customer-text)]">{documentTitle}</h1>
-            <Badge
-              variant="outline"
-              className={statusBadgeLabel === 'Draft'
-                ? 'border-[var(--customer-danger)] bg-[var(--customer-danger-soft)] text-[var(--customer-danger)]'
-                : 'border-[var(--customer-border)] bg-[var(--customer-primary-soft)] text-[var(--customer-primary)]'}
-            >
-              {statusBadgeLabel}
-            </Badge>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
+    <div className="mx-auto w-full max-w-[1500px] space-y-3 text-[var(--customer-text)] [&_button:focus-visible]:outline [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-[var(--customer-primary)]" onKeyDown={handleKeyboardShortcuts}>
+      <DetailBreadcrumb
+        listLabel="RFQs"
+        listPath="/customer/quotations"
+        current={documentTitle}
+      />
+      <section className={`overflow-visible bg-[var(--customer-surface)] transition-opacity ${formBusy ? 'opacity-75' : 'opacity-100'}`} aria-busy={formBusy}>
+        <DocumentHeader
+          number={documentTitle}
+          status={
+            <DocumentStateBadge
+              persisted={Boolean(quotationId)}
+              status={quotation?.status ?? null}
+              label={statusBadgeLabel}
+            />
+          }
+          className="min-h-[58px] bg-[var(--customer-surface)] px-5 py-3"
+          actions={
+            <>
             {!isSubmitted && (
               <Button
                 type="button"
@@ -591,8 +604,9 @@ export function CustomerQuotationNew() {
                 </div>
               )}
             </div>
-          </div>
-        </header>
+            </>
+          }
+        />
 
         <div role="tablist" aria-label="RFQ sections" className="mx-4 flex border-b border-[var(--customer-border)] sm:mx-5">
           {(['Details', 'Items', 'Review'] as const).map((label) => {
@@ -859,6 +873,27 @@ export function CustomerQuotationNew() {
             )}
           </div>
       </DocumentSection>
+          <DocumentSection title="Commercial Request">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p
+                  id="special-price-requested-label"
+                  className="text-sm font-semibold text-[var(--customer-text)]"
+                >
+                  Request Special Price
+                </p>
+                <p className="mt-0.5 text-xs text-[var(--customer-text-muted)]">
+                  Ask Sales to review this RFQ for a special commercial rate.
+                </p>
+              </div>
+              <Switch
+                checked={form.specialPriceRequested}
+                disabled={isSubmitted}
+                onCheckedChange={(specialPriceRequested) => updateForm({ specialPriceRequested })}
+                aria-labelledby="special-price-requested-label"
+              />
+            </div>
+          </DocumentSection>
           <DocumentSection title="Special Instructions">
             <div>
               <label htmlFor="rfq-notes" className="sr-only">
@@ -1088,6 +1123,8 @@ type QuotationItemRowProps = {
 
 function QuotationItemRow(props: QuotationItemRowProps) {
   const { item, errors } = props;
+  const [quantityInputError, setQuantityInputError] = useState('');
+  const quantityError = errors.quantity || quantityInputError;
   const packagingQuantity = item.product
     ? packagingQuantityForTons(Number(item.quantity), item.product.unitWeightKg, item.product.uom)
     : null;
@@ -1181,28 +1218,21 @@ function QuotationItemRow(props: QuotationItemRowProps) {
         </div>
 
         <div className="pr-3">
-          <input
-            type="text"
-            inputMode="decimal"
+          <CommercialTonInput
             autoComplete="off"
             value={item.quantity}
             disabled={props.readOnly}
-            onKeyDown={handleTonQuantityKeyDown}
-            onPaste={(event) => {
-              const pastedValue = event.clipboardData.getData('text');
-              if (!isValidTonQuantityPaste(pastedValue)) event.preventDefault();
+            onValueChange={(value) => {
+              setQuantityInputError('');
+              props.onChange({ quantity: value });
             }}
-            onChange={(event) => {
-              if (isPermittedTonQuantityInput(event.target.value)) {
-                props.onChange({ quantity: event.target.value });
-              }
-            }}
+            onInvalidValue={setQuantityInputError}
             aria-label={`Quantity (TON) for ${item.product?.productName ?? 'blank item'}`}
-            aria-describedby={errors.quantity ? `quantity-error-${item.key}` : undefined}
+            aria-describedby={quantityError ? `quantity-error-${item.key}` : undefined}
             className={`${fieldClass} h-9`}
-            aria-invalid={Boolean(errors.quantity)}
+            aria-invalid={Boolean(quantityError)}
           />
-          {errors.quantity && <RowError id={`quantity-error-${item.key}`} message={errors.quantity} />}
+          {quantityError && <RowError id={`quantity-error-${item.key}`} message={quantityError} />}
           {packagingQuantity !== null && (
             <p className="mt-1 text-[11px] text-[var(--customer-text-muted)]">
               Equivalent: {formatQuantity(packagingQuantity)} bags
@@ -1314,6 +1344,10 @@ function ReviewSummary({
         <ReviewRow label="Delivery Date" value={formatReviewDate(form.requestedDate)} />
         <ReviewRow label="Fulfilment" value={fulfilmentLabel} />
         <ReviewRow
+          label="Special Price Requested"
+          value={form.specialPriceRequested ? 'Yes' : 'No'}
+        />
+        <ReviewRow
           label={form.fulfilmentType === 'DELIVERY' ? 'Delivery Location' : 'Pickup From'}
           value={locationLabel}
         />
@@ -1347,7 +1381,9 @@ function ReviewSummary({
                   <span className="truncate pr-4 font-medium text-[var(--customer-text)]">
                     {item.product?.productName ?? 'Not selected'}
                   </span>
-                  <span className="text-[var(--customer-text)]">{item.quantity || 'Not provided'}</span>
+                  <span className="text-[var(--customer-text)]">
+                    {item.quantity ? formatCommercialTonValue(Number(item.quantity)) : 'Not provided'}
+                  </span>
                   <span className="text-[var(--customer-text-secondary)]">
                     {item.product ? 'TON' : 'Not provided'}
                   </span>
@@ -1612,8 +1648,7 @@ function getRequestedDateError(form: FormState) {
 function getItemErrors(item: FormItem, index: number) {
   const errors: Partial<Record<'product' | 'quantity', string>> = {};
   if (!item.product) errors.product = `Item ${index + 1} is required.`;
-  if (!isValidTonQuantityValue(item.quantity) || Number(item.quantity) <= 0)
-    errors.quantity = 'Quantity (TON) must be greater than zero.';
+  if (!isWholeTonQuantity(Number(item.quantity))) errors.quantity = wholeTonQuantityMessage;
   return errors;
 }
 
@@ -1640,31 +1675,6 @@ function isPermittedTextInputKey(event: KeyboardEvent<HTMLInputElement>) {
     'Home',
     'End',
   ].includes(event.key);
-}
-
-function handleTonQuantityKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-  if (isPermittedTextInputKey(event)) return;
-
-  const nextValue = valueAfterKeyPress(event.currentTarget, event.key);
-  if (!isPermittedTonQuantityInput(nextValue)) event.preventDefault();
-}
-
-function valueAfterKeyPress(input: HTMLInputElement, key: string) {
-  const start = input.selectionStart ?? input.value.length;
-  const end = input.selectionEnd ?? input.value.length;
-  return `${input.value.slice(0, start)}${key}${input.value.slice(end)}`;
-}
-
-function isPermittedTonQuantityInput(value: string) {
-  return value === '' || /^\d+(\.\d*)?$/.test(value);
-}
-
-function isValidTonQuantityPaste(value: string) {
-  return /^\d+(\.\d+)?$/.test(value);
-}
-
-function isValidTonQuantityValue(value: string) {
-  return /^\d+(\.\d+)?$/.test(value);
 }
 
 function validateForm(form: FormState) {
@@ -1716,6 +1726,7 @@ function toPayload(form: FormState): CustomerQuotationPayload {
     fulfilmentType: form.fulfilmentType,
     shipToLocationId: form.shipToLocationId,
     requestedDate: form.requestedDate,
+    specialPriceRequested: form.specialPriceRequested,
     items: form.items.map((item) => {
       const line: CustomerQuotationPayload['items'][number] = {
         productId: item.product?.id ?? '',
@@ -1743,6 +1754,7 @@ function fromQuotation(quotation: CustomerQuotation): FormState {
     pickupLocationId: quotation.pickupLocationId ?? '',
     shipToLocationId: quotation.shipToLocationId ?? '',
     requestedDate: quotation.requestedDate ?? '',
+    specialPriceRequested: quotation.specialPriceRequested,
     palletRequired: Boolean(palletLine),
     palletType: palletLine?.palletType ?? '',
     palletQuantity: palletLine?.palletQuantity ? String(palletLine.palletQuantity) : '',
@@ -1771,6 +1783,7 @@ function serializeForm(form: FormState) {
     pickupLocationId: form.pickupLocationId,
     shipToLocationId: form.shipToLocationId,
     requestedDate: form.requestedDate,
+    specialPriceRequested: form.specialPriceRequested,
     palletRequired: form.palletRequired,
     palletType: form.palletType,
     palletQuantity: form.palletQuantity,

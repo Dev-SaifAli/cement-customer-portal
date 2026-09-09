@@ -47,9 +47,10 @@ export class LoadingPointRequestError extends Error {
 
 export async function listLoadingPoints(query: {
   page: number;
-  search?: string;
+  search?: string | undefined;
   pointType: LoadingPointType;
-  status?: LoadingPointStatus | '';
+  status?: LoadingPointStatus | '' | undefined;
+  signal?: AbortSignal | undefined;
 }) {
   const params = new URLSearchParams({ page: String(query.page), pointType: query.pointType });
   if (query.search) params.set('search', query.search);
@@ -62,7 +63,7 @@ export async function listLoadingPoints(query: {
         products: LoadingPointProduct[];
         pagination: { page: number; pageSize: number; total: number; totalPages: number };
       };
-    }>(`/admin/loading-points?${params}`)
+    }>(`/admin/loading-points?${params}`, query.signal ? { signal: query.signal } : {})
   ).data;
 }
 
@@ -92,7 +93,8 @@ async function request<T>(path: string, options: RequestInit = {}) {
       credentials: 'include',
       headers: { 'content-type': 'application/json', ...(options.headers ?? {}) },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
     throw new Error('Unable to connect to the loading-point service.');
   }
   const body = (await response.json().catch(() => ({}))) as T & {

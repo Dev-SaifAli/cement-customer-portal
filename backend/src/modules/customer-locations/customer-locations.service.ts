@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import type { CustomerUser } from '../customer-auth/customer-auth.types.js';
+import { haderZoneService } from '../hader-zones/hader-zone.service.js';
 import type { CustomerLocationInput } from './customer-locations.validation.js';
 
 export interface CustomerLocation {
@@ -11,6 +12,7 @@ export interface CustomerLocation {
   siteId: string;
   streetAddress: string;
   city: string;
+  haderCityId?: string | undefined;
   region: string;
   country: string;
   postalCode: string;
@@ -34,16 +36,16 @@ export class CustomerLocationsService {
   }
 
   async listCities() {
-    const result = await pool.query<{ id: string; name: string }>(
-      `select id, name from ksa_cities where is_active = true order by name`,
-    );
-    return result.rows;
+    return (await haderZoneService.listCities())
+      .filter((city) => city.isActive)
+      .map(({ id, name, isHaderEnabled, boundary }) => ({ id, name, isHaderEnabled, boundary }));
   }
 
   async addLocation(customerUser: CustomerUser, input: CustomerLocationInput) {
     const client = await pool.connect();
     try {
       await client.query('begin');
+      const boundary = await haderZoneService.validateDeliveryLocation(input, client);
       const locations = await this.getLocations(customerUser, client);
       const id = randomUUID();
       const siteId = await nextSiteId(client);
@@ -56,7 +58,7 @@ export class CustomerLocationsService {
       const next = normalizePrimaryLocations(
         [
           {
-            ...toLocation(input, id, siteId, new Date().toISOString()),
+            ...toLocation(input, boundary.city, id, siteId, new Date().toISOString()),
             isPrimary: locations.length === 0 || input.isPrimary === true,
           },
           ...locations,
@@ -80,12 +82,13 @@ export class CustomerLocationsService {
     if (!exists) {
       throw new AppError('Delivery location was not found.', 404, 'CUSTOMER_LOCATION_NOT_FOUND');
     }
+    const boundary = await haderZoneService.validateDeliveryLocation(input);
 
     const next = normalizePrimaryLocations(
       locations.map((location) =>
         location.id === id
           ? {
-              ...toLocation(input, id, location.siteId, location.createdAt),
+              ...toLocation(input, boundary.city, id, location.siteId, location.createdAt),
               isPrimary: input.isPrimary === true || location.isPrimary,
             }
           : location,
@@ -184,6 +187,7 @@ export const customerLocationsService = new CustomerLocationsService();
 
 function toLocation(
   input: CustomerLocationInput,
+  city: { id: string; name: string; isHaderEnabled: boolean },
   id: string,
   siteId: string,
   createdAt: string | null,
@@ -193,7 +197,8 @@ function toLocation(
     name: input.name.trim(),
     siteId,
     streetAddress: input.streetAddress.trim(),
-    city: input.city.trim(),
+    city: city.name,
+    haderCityId: city.isHaderEnabled ? city.id : undefined,
     region: input.region.trim(),
     country: input.country.trim(),
     postalCode: input.postalCode?.trim() ?? '',
@@ -216,6 +221,7 @@ function safeLocation(value: unknown): CustomerLocation {
     siteId: stringOrNull(location.siteId) ?? `LOC-${id.slice(0, 8).toUpperCase()}`,
     streetAddress: stringOrNull(location.streetAddress) ?? '',
     city: stringOrNull(location.city) ?? '',
+    haderCityId: stringOrNull(location.haderCityId) ?? undefined,
     region: stringOrNull(location.region) ?? '',
     country: stringOrNull(location.country) ?? 'Saudi Arabia',
     postalCode: stringOrNull(location.postalCode) ?? '',

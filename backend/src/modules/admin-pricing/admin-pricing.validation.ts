@@ -24,6 +24,8 @@ export const updateHaderCitySchema = z.object({ isHaderEnabled: z.boolean() });
 export const updateListPriceDirectOrderApprovalSchema = z.object({
   value: z.enum(['AUTO_APPROVE', 'MUST_APPROVE']),
 });
+export const contractOrderCreationActorSchema = z.enum(['hader', 'dispatch']);
+export const updateContractOrderCreationSchema = z.object({ value: z.boolean() });
 
 export type UpsertProductPrice = z.infer<typeof upsertProductPriceSchema>;
 export type UpsertDeliveryPrice = z.infer<typeof upsertDeliveryPriceSchema>;

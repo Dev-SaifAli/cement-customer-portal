@@ -5,7 +5,6 @@ import { haderLoadingController as c } from './hader-loading.controller.js';
 const access = requireSalesRole(
   'HADER_MANAGER',
   'HADER_OPERATIONS',
-  'DISPATCH_USER',
   'LOADING_USER',
 );
 export const haderLoadingRouter = Router();

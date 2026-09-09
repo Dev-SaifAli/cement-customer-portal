@@ -1,7 +1,11 @@
 import type { PoolClient } from 'pg';
 import { pool } from '../../database/pool.js';
 
-export type OrderScope = { customerAccountId?: string };
+export type OrderScope = {
+  customerAccountId?: string;
+  fulfilmentType?: 'PICKUP' | 'DELIVERY';
+  contractOrdersOnly?: boolean;
+};
 export type OrderListFilters = {
   page: number;
   search?: string | undefined;
@@ -30,11 +34,15 @@ interface OrderReadRow {
   ship_to_snapshot: unknown;
   pickup_location_id: string | null;
   pickup_location_name: string | null;
+  pickup_location_city: string | null;
   customer_truck_id: string | null;
   customer_driver_id: string | null;
   pickup_truck_snapshot: unknown;
   pickup_driver_snapshot: unknown;
   hader_city_name: string | null;
+  pallet_required: boolean;
+  pallet_type: string | null;
+  pallet_quantity: number | null;
   submitted_at: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
@@ -49,15 +57,23 @@ interface OrderReadRow {
   packaging_quantity: string | null;
   shipment_count?: string;
   latest_shipment_status?: string | null;
+  first_shipment_id?: string | null;
+  first_shipment_number?: string | null;
   delivery_request_id: string | null;
   delivery_request_number: string | null;
   delivery_request_status: string | null;
   hader_zone_status: 'WITHIN_HADER_ZONE' | 'OUTSIDE_HADER_ZONE' | null;
+  created_by_customer_user_id: string | null;
+  created_by_sales_user_id: string | null;
+  creator_customer_name: string | null;
+  creator_sales_name: string | null;
+  creator_sales_role: string | null;
 }
 
 export interface OrderProcessingCandidate {
   id: string;
   order_number: string;
+  contract_id: string | null;
   status: string;
   customer_status: string;
   product_active: boolean;
@@ -102,6 +118,13 @@ export class OrdersRepository {
       values.push(scope.customerAccountId);
       clauses.push(`orders.customer_account_id = $${values.length}`);
     }
+    if (scope.fulfilmentType) {
+      values.push(scope.fulfilmentType);
+      clauses.push(`orders.fulfilment_type = $${values.length}`);
+    }
+    if (scope.contractOrdersOnly) {
+      clauses.push("orders.contract_id is not null and orders.order_number not like 'DO%'");
+    }
     if (filters.status) {
       values.push(filters.status);
       clauses.push(`orders.status = $${values.length}`);
@@ -117,6 +140,8 @@ export class OrdersRepository {
         or lower(order_items.product_name) like $${values.length}
         or lower(order_items.product_code) like $${values.length}
         or lower(coalesce(customer_accounts.company_name, '')) like $${values.length}
+        or lower(coalesce(creator_customer.name, '')) like $${values.length}
+        or lower(coalesce(creator_sales.name, '')) like $${values.length}
       )`);
     }
     const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
@@ -152,6 +177,13 @@ export class OrdersRepository {
       values.push(scope.customerAccountId);
       clauses.push(`orders.customer_account_id = $${values.length}`);
     }
+    if (scope.fulfilmentType) {
+      values.push(scope.fulfilmentType);
+      clauses.push(`orders.fulfilment_type = $${values.length}`);
+    }
+    if (scope.contractOrdersOnly) {
+      clauses.push("orders.contract_id is not null and orders.order_number not like 'DO%'");
+    }
     const result = await pool.query<OrderReadRow>(
       `${orderSelectSql} where ${clauses.join(' and ')}`,
       values,
@@ -161,7 +193,7 @@ export class OrdersRepository {
 
   async getProcessingCandidateForUpdate(id: string, client: PoolClient) {
     const result = await client.query<OrderProcessingCandidate>(
-      `select orders.id, orders.order_number, orders.status, orders.customer_account_id,
+      `select orders.id, orders.order_number, orders.contract_id, orders.status, orders.customer_account_id,
               customer_accounts.status as customer_status,
               product_catalog.is_active as product_active,
               orders.requested_quantity_tons, orders.fulfilment_type, orders.preferred_delivery_date,
@@ -186,19 +218,20 @@ export class OrdersRepository {
     return result.rows[0] ?? null;
   }
 
-  async markProcessing(id: string, salesUserId: string, client: PoolClient) {
+  async markProcessing(id: string, internalUserId: string, client: PoolClient) {
     await client.query(
       `update orders
        set status = 'PROCESSING', processed_by_sales_user_id = $2,
            processed_at = now(), updated_at = now()
        where id = $1`,
-      [id, salesUserId],
+      [id, internalUserId],
     );
   }
 
   async addProcessingStartedEvent(
     order: Pick<OrderProcessingCandidate, 'id' | 'order_number' | 'status'>,
-    salesUserId: string,
+    internalUserId: string,
+    actorRole: string,
     client: PoolClient,
   ) {
     await client.query(
@@ -209,8 +242,12 @@ export class OrdersRepository {
       [
         order.id,
         order.status,
-        salesUserId,
-        JSON.stringify({ orderReference: order.order_number, actorType: 'SALES' }),
+        internalUserId,
+        JSON.stringify({
+          orderReference: order.order_number,
+          actorType: 'HADER',
+          actorRole,
+        }),
       ],
     );
   }
@@ -221,7 +258,11 @@ export const ordersRepository = new OrdersRepository();
 const orderJoinSql = `from orders
  left join contracts on contracts.id = orders.contract_id
  left join delivery_requests on delivery_requests.order_id = orders.id
+ left join pickup_locations on pickup_locations.id::text = orders.pickup_location_id
+ left join ksa_cities pickup_cities on pickup_cities.id = pickup_locations.city_id
  inner join customer_accounts on customer_accounts.id = orders.customer_account_id
+ left join customer_users creator_customer on creator_customer.id = orders.created_by_customer_user_id
+ left join sales_users creator_sales on creator_sales.id = orders.created_by_sales_user_id
  inner join lateral (
    select order_items.*
    from order_items
@@ -236,13 +277,17 @@ const orderSelectSql = `select orders.*,
   delivery_requests.request_number as delivery_request_number,
   delivery_requests.status as delivery_request_status,
   customer_accounts.company_name,
+  creator_customer.name as creator_customer_name,
+  creator_sales.name as creator_sales_name,
+  creator_sales.role as creator_sales_role,
   order_items.product_id,
   order_items.product_code,
   order_items.product_name,
   order_items.packaging,
   order_items.contract_uom,
   order_items.unit_weight_kg,
-  order_items.packaging_quantity
+  order_items.packaging_quantity,
+  pickup_cities.name as pickup_location_city
  ${orderJoinSql}`;
 
 const orderSelectWithShipmentSql = `select orders.*,
@@ -251,6 +296,9 @@ const orderSelectWithShipmentSql = `select orders.*,
   delivery_requests.request_number as delivery_request_number,
   delivery_requests.status as delivery_request_status,
   customer_accounts.company_name,
+  creator_customer.name as creator_customer_name,
+  creator_sales.name as creator_sales_name,
+  creator_sales.role as creator_sales_role,
   order_items.product_id,
   order_items.product_code,
   order_items.product_name,
@@ -258,12 +306,17 @@ const orderSelectWithShipmentSql = `select orders.*,
   order_items.contract_uom,
   order_items.unit_weight_kg,
   order_items.packaging_quantity,
+  pickup_cities.name as pickup_location_city,
   shipment_summary.shipment_count,
-  shipment_summary.latest_shipment_status
+  shipment_summary.latest_shipment_status,
+  shipment_summary.first_shipment_id,
+  shipment_summary.first_shipment_number
  ${orderJoinSql}
  left join lateral (
    select count(*)::text as shipment_count,
-     (array_agg(shipments.status order by shipments.created_at desc))[1] as latest_shipment_status
+     (array_agg(shipments.status order by shipments.created_at desc))[1] as latest_shipment_status,
+     (array_agg(shipments.id order by shipments.created_at asc))[1] as first_shipment_id,
+     (array_agg(shipments.shipment_number order by shipments.created_at asc))[1] as first_shipment_number
    from shipments where shipments.order_id=orders.id
  ) shipment_summary on true`;
 
@@ -275,6 +328,21 @@ function mapOrderReadRow(row: OrderReadRow) {
     contract: row.contract_id ? { id: row.contract_id, reference: row.contract_reference } : null,
     orderType: isDirectOrder ? ('DIRECT' as const) : ('CONTRACT' as const),
     customer: { id: row.customer_account_id, companyName: row.company_name },
+    creator: row.created_by_customer_user_id && row.creator_customer_name
+      ? {
+          type: 'CUSTOMER' as const,
+          id: row.created_by_customer_user_id,
+          name: row.creator_customer_name,
+          role: null,
+        }
+      : row.created_by_sales_user_id && row.creator_sales_name
+        ? {
+            type: 'INTERNAL' as const,
+            id: row.created_by_sales_user_id,
+            name: row.creator_sales_name,
+            role: row.creator_sales_role,
+          }
+        : null,
     status: row.status,
     fulfilmentType: row.fulfilment_type,
     requestedQuantityTons: Number(row.requested_quantity_tons),
@@ -284,9 +352,18 @@ function mapOrderReadRow(row: OrderReadRow) {
         : Number(row.remaining_contract_quantity_snapshot),
     preferredDeliveryDate: dateOnly(row.preferred_delivery_date),
     deliveryNotes: row.delivery_notes,
+    palletRequired: row.pallet_required,
+    palletType: row.pallet_type,
+    palletQuantity: row.pallet_quantity,
     shipTo: objectValue(row.ship_to_snapshot),
     pickupLocation: row.pickup_location_id
-      ? { id: row.pickup_location_id, name: row.pickup_location_name }
+      ? {
+          id: row.pickup_location_id,
+          name: row.pickup_location_name,
+          city:
+            row.pickup_location_city ??
+            (row.pickup_location_id === 'ALSAFWA_PLANT_MAIN' ? 'Jeddah' : null),
+        }
       : null,
     pickupTruck: objectValue(row.pickup_truck_snapshot),
     pickupDriver: objectValue(row.pickup_driver_snapshot),
@@ -328,6 +405,10 @@ function mapOrderReadRow(row: OrderReadRow) {
           shipmentSummary: {
             count: Number(row.shipment_count),
             latestStatus: row.latest_shipment_status,
+            firstShipment:
+              row.first_shipment_id && row.first_shipment_number
+                ? { id: row.first_shipment_id, shipmentNumber: row.first_shipment_number }
+                : null,
           },
         }
       : {}),

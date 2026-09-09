@@ -1,6 +1,7 @@
 import { Download, Loader2, Printer, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { SalesQuotationDetails } from '../../services/salesService';
+import { formatCommercialTonValue } from '../../utils/commercialQuantity';
 import '../customer/QuotationDocument.css';
 
 export function SalesQuotationPreview({
@@ -158,7 +159,7 @@ export function SalesQuotationPreview({
                       <td className={`${td} text-right`}>{formatQuantity(item.quantity)}</td>
                       <td className={`${td} text-center`}>{item.uom}</td>
                       <td className={`${td} text-right`}>
-                        {formatQuantity(item.equivalentTons)} TON
+                        {formatCommercialTonValue(item.equivalentTons)} TON
                       </td>
                       <td className={`${td} text-right`}>{money(item.customerRate)}</td>
                       <td className={`${td} text-right font-bold`}>{money(item.amount)}</td>

@@ -2,12 +2,22 @@ import type { Request, Response } from 'express';
 import { AppError } from '../../errors/app-error.js';
 import { registrationService } from './registration.service.js';
 import { createRegistrationSchema, updateRegistrationSchema } from './registration.validation.js';
+import { haderZoneService } from '../hader-zones/hader-zone.service.js';
+import { validateHaderZoneSchema } from '../hader-zones/hader-zone.validation.js';
 
 export class RegistrationController {
   async listCities(_request: Request, response: Response) {
     response
       .status(200)
       .json({ success: true, data: { cities: await registrationService.listCities() } });
+  }
+
+  async validateHaderZone(request: Request, response: Response) {
+    const input = validateHaderZoneSchema.parse(request.body);
+    response.status(200).json({
+      success: true,
+      data: await haderZoneService.validatePoint(input.cityId, input),
+    });
   }
 
   async create(request: Request, response: Response) {

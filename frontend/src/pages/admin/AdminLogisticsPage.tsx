@@ -8,6 +8,7 @@ import {
   listLogistics,
   updateLogistics,
   uploadLogisticsDocument,
+  LogisticsApiError,
   type HaderDriver,
   type HaderTruck,
   type LogisticsKind,
@@ -329,12 +330,27 @@ function LogisticsForm({
   const [values, setValues] = useState<Record<string, string>>(initial);
   const [files, setFiles] = useState<Record<string, File>>({});
   const [saving, setSaving] = useState(false),
-    [error, setError] = useState('');
-  const set = (key: string, value: string) => setValues((v) => ({ ...v, [key]: value }));
+    [error, setError] = useState(''),
+    [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const set = (key: string, value: string) => {
+    setValues((current) => ({ ...current, [key]: value }));
+    setFieldErrors((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    setSaving(true);
     setError('');
+    setFieldErrors({});
+    const clientErrors = validateLogisticsForm(kind, values);
+    if (Object.keys(clientErrors).length > 0) {
+      setFieldErrors(clientErrors);
+      return;
+    }
+    setSaving(true);
     try {
       const payload = payloadFor(kind, values);
       const saved = record
@@ -348,6 +364,7 @@ function LogisticsForm({
       }
       await onSaved();
     } catch (e) {
+      if (e instanceof LogisticsApiError) setFieldErrors(e.fieldErrors);
       setError(e instanceof Error ? e.message : 'Unable to save record.');
     } finally {
       setSaving(false);
@@ -373,6 +390,7 @@ function LogisticsForm({
               key={f.key}
               field={f}
               value={values[f.key] ?? ''}
+              {...(fieldErrors[f.key] ? { error: fieldErrors[f.key] } : {})}
               onChange={(v) => set(f.key, v)}
             />
           ))}
@@ -421,15 +439,20 @@ type FieldDef = {
   label: string;
   type?: string;
   required?: boolean;
+  min?: number;
+  max?: number;
+  step?: number | string;
   options?: { value: string; label: string }[];
 };
 function Field({
   field,
   value,
+  error,
   onChange,
 }: {
   field: FieldDef;
   value: string;
+  error?: string;
   onChange: (v: string) => void;
 }) {
   return (
@@ -456,10 +479,22 @@ function Field({
         <input
           required={field.required}
           type={field.type ?? 'text'}
+          min={field.min}
+          max={field.max}
+          step={field.step}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="h-10 w-full rounded-lg border px-3 outline-none focus:border-[#54247a]"
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${field.key}-error` : undefined}
+          className={`h-10 w-full rounded-lg border px-3 outline-none focus:border-[#54247a] ${
+            error ? 'border-red-500' : ''
+          }`}
         />
+      )}
+      {error && (
+        <span id={`${field.key}-error`} className="mt-1 block text-xs font-medium text-[#b42318]">
+          {error}
+        </span>
       )}
     </label>
   );
@@ -613,8 +648,16 @@ function fields(kind: LogisticsKind, refs: LogisticsReferences): FieldDef[] {
     return [
       { key: 'plateNumber', label: 'Plate Number', required: true },
       { key: 'vehicleType', label: 'Vehicle Type', required: true },
-      { key: 'capacityTon', label: 'Capacity TON', required: true, type: 'number' },
-      { key: 'modelYear', label: 'Model / Year', type: 'number' },
+      {
+        key: 'capacityTon',
+        label: 'Capacity TON',
+        required: true,
+        type: 'number',
+        min: 0.001,
+        max: 9999.999,
+        step: 0.001,
+      },
+      { key: 'modelYear', label: 'Model / Year', type: 'number', min: 1950, max: 2200, step: 1 },
       {
         key: 'assignedDriverId',
         label: 'Assigned Driver',
@@ -649,6 +692,24 @@ function payloadFor(kind: LogisticsKind, v: Record<string, string>) {
   }
   if (kind === 'transporter-costs') return { ...clean, costPerTon: Number(v.costPerTon) };
   return clean;
+}
+function validateLogisticsForm(kind: LogisticsKind, values: Record<string, string>) {
+  const errors: Record<string, string> = {};
+  if (kind === 'fleet') {
+    const capacityTon = Number(values.capacityTon);
+    if (!Number.isFinite(capacityTon) || capacityTon <= 0) {
+      errors.capacityTon = 'Capacity TON must be greater than zero.';
+    } else if (capacityTon > 9999.999) {
+      errors.capacityTon = 'Capacity TON must not exceed 9,999.999 TON.';
+    }
+    if (values.modelYear) {
+      const modelYear = Number(values.modelYear);
+      if (!Number.isInteger(modelYear) || modelYear < 1950 || modelYear > 2200) {
+        errors.modelYear = 'Model / Year must be a whole year between 1950 and 2200.';
+      }
+    }
+  }
+  return errors;
 }
 function toForm(record: LogisticsRecord | null) {
   if (!record) return {};

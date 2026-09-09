@@ -19,6 +19,8 @@ interface CustomerContractRow {
   quantity: string;
   fulfilment: 'PICKUP' | 'DELIVERY';
   pickup_location_id: string | null;
+  pickup_location_name: string | null;
+  pickup_location_city: string | null;
   delivery_location_id: string | null;
   delivery_city: string | null;
   registration_delivery_locations: unknown;
@@ -36,11 +38,14 @@ interface CustomerContractRow {
   payment_terms: string | null;
   commercial_notes: string | null;
   customer_notes: string | null;
+  pallet_required: boolean;
+  pallet_type: string | null;
   items_snapshot: unknown;
   status: 'ACTIVE';
   activated_at: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  order_count: string;
 }
 
 interface DeliveryLocation {
@@ -134,11 +139,19 @@ const customerContractSelectSql = `select
   contracts.*,
   registration_drafts.delivery_locations as registration_delivery_locations,
   product_catalog.product_code,
-  product_catalog.product_name
+  product_catalog.product_name,
+  pickup_locations.name as pickup_location_name,
+  pickup_cities.name as pickup_location_city,
+  contract_orders.order_count
  from contracts
  inner join customer_accounts on customer_accounts.id = contracts.customer_account_id
  inner join registration_drafts on registration_drafts.id = customer_accounts.registration_id
- inner join product_catalog on product_catalog.id = contracts.product_id`;
+ inner join product_catalog on product_catalog.id = contracts.product_id
+ left join pickup_locations on pickup_locations.id::text = contracts.pickup_location_id
+ left join ksa_cities pickup_cities on pickup_cities.id = pickup_locations.city_id
+ left join lateral (
+   select count(*)::text as order_count from orders where orders.contract_id = contracts.id
+ ) contract_orders on true`;
 
 function mapCustomerContractSummary(row: CustomerContractRow) {
   const deliveryLocation = resolveDeliveryLocation(row);
@@ -169,8 +182,8 @@ function mapCustomerContractSummary(row: CustomerContractRow) {
     pickupLocation: row.pickup_location_id
       ? {
           id: row.pickup_location_id,
-          name: row.pickup_location_id === 'ALSAFWA_PLANT_MAIN' ? 'AlSafwa Cement Plant' : row.pickup_location_id,
-          city: row.pickup_location_id === 'ALSAFWA_PLANT_MAIN' ? 'Jeddah' : null,
+          name: row.pickup_location_name ?? (row.pickup_location_id === 'ALSAFWA_PLANT_MAIN' ? 'AlSafwa Cement Plant' : row.pickup_location_id),
+          city: row.pickup_location_city ?? (row.pickup_location_id === 'ALSAFWA_PLANT_MAIN' ? 'Jeddah' : null),
         }
       : null,
     shipTo: deliveryLocation
@@ -191,6 +204,9 @@ function mapCustomerContractSummary(row: CustomerContractRow) {
     endDate: dateOnly(row.end_date),
     status: row.status,
     customerRate: Number(row.product_price) + Number(row.delivery_price ?? 0),
+    palletRequired: row.pallet_required,
+    palletType: row.pallet_type,
+    orderCount: Number(row.order_count),
     activatedAt: row.activated_at ? dateTime(row.activated_at) : null,
   };
 }

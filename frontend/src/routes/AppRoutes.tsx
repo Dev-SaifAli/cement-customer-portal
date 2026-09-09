@@ -31,6 +31,7 @@ export function AppRoutes() {
       <Route element={<InternalSessionRoutes />}>
         <Route path="/sales/*" element={<SalesRoutes />} />
         <Route path="/hader/*" element={<HaderRoutes />} />
+        <Route path="/dispatch/*" element={<HaderRoutes />} />
         <Route
           path="/admin/login"
           element={

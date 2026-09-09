@@ -7,6 +7,7 @@ export const dispatchListQuerySchema = z.object({
   status: z.string().trim().max(40).optional(),
   haderCityId: z.uuid().optional(),
   requestedDate: z.iso.date().optional(),
+  scheduledDate: z.iso.date().optional(),
   productId: z.uuid().optional(),
 });
 export const assignShipmentSchema = z.object({

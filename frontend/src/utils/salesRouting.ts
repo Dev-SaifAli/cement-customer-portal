@@ -3,7 +3,8 @@ import type { SalesUser } from '../services/salesService';
 export function getSalesLandingPath(role: SalesUser['role']) {
   if (role === 'PORTAL_ADMINISTRATOR') return '/portal-admin/users';
   if (role === 'PRICING_ADMIN') return '/admin/products';
-  if (role === 'HADER_MANAGER' || role === 'HADER_OPERATIONS' || role === 'DISPATCH_USER') {
+  if (role === 'DISPATCH_USER') return '/dispatch/orders';
+  if (role === 'HADER_MANAGER' || role === 'HADER_OPERATIONS') {
     return '/hader/delivery-requests';
   }
   if (role === 'LOADING_USER') return '/hader/loading-control';

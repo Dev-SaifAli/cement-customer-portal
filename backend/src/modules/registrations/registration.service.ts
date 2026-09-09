@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import { notificationEvents } from '../notifications/notification-events.js';
+import { haderZoneService } from '../hader-zones/hader-zone.service.js';
 import type { RegistrationDraft } from './registration.types.js';
 import type { UpdateRegistrationInput } from './registration.validation.js';
 
@@ -55,18 +56,20 @@ const isValidOptionalLongitude = (value: unknown) =>
 
 export class RegistrationService {
   async listCities() {
-    const result = await pool.query<{ id: string; name: string }>(
-      'select id, name from ksa_cities where is_active = true order by name',
-    );
-    return result.rows;
+    return (await haderZoneService.listCities())
+      .filter((city) => city.isActive)
+      .map(({ id, name, isHaderEnabled, boundary }) => ({ id, name, isHaderEnabled, boundary }));
   }
 
   async createDraft(input: UpdateRegistrationInput = {}) {
     const administrator = safeAdministrator(input.administrator);
     const password = input.administrator?.password;
     const passwordHash = password ? await bcrypt.hash(password, 12) : undefined;
-    const deliveryLocations = input.deliveryLocations
-      ? await ensureDeliveryLocationIds(input.deliveryLocations, [])
+    const validatedLocations = input.deliveryLocations
+      ? await validateDeliveryLocations(input.deliveryLocations)
+      : undefined;
+    const deliveryLocations = validatedLocations
+      ? await ensureDeliveryLocationIds(validatedLocations, [])
       : [];
 
     const result = await pool.query(
@@ -131,8 +134,11 @@ export class RegistrationService {
     const administrator = safeAdministrator(input.administrator);
     const password = input.administrator?.password;
     const passwordHash = password ? await bcrypt.hash(password, 12) : undefined;
-    const deliveryLocations = input.deliveryLocations
-      ? await ensureDeliveryLocationIds(input.deliveryLocations, current.deliveryLocations)
+    const validatedLocations = input.deliveryLocations
+      ? await validateDeliveryLocations(input.deliveryLocations)
+      : undefined;
+    const deliveryLocations = validatedLocations
+      ? await ensureDeliveryLocationIds(validatedLocations, current.deliveryLocations)
       : undefined;
 
     const result = await pool.query(
@@ -182,6 +188,7 @@ export class RegistrationService {
       'select admin_password_hash from registration_drafts where id = $1',
       [id],
     );
+    await validateStoredDeliveryLocations(draft.deliveryLocations);
     this.validateCompleteDraft(draft, Boolean(passwordResult.rows[0]?.admin_password_hash));
     const reference = draft.reference ?? (await this.createUniqueReference());
 
@@ -341,6 +348,35 @@ export class RegistrationService {
 }
 
 export const registrationService = new RegistrationService();
+
+async function validateDeliveryLocations(
+  locations: NonNullable<UpdateRegistrationInput['deliveryLocations']>,
+) {
+  return Promise.all(
+    locations.map(async (location) => {
+      const validation = await haderZoneService.validateDeliveryLocation(location);
+      return {
+        ...location,
+        city: validation.city.name,
+        haderCityId: validation.city.isHaderEnabled ? validation.city.id : undefined,
+      };
+    }),
+  );
+}
+
+async function validateStoredDeliveryLocations(locations: unknown[]) {
+  await Promise.all(
+    locations.map((value) => {
+      const location = toRecord(value);
+      return haderZoneService.validateDeliveryLocation({
+        haderCityId: typeof location.haderCityId === 'string' ? location.haderCityId : undefined,
+        city: typeof location.city === 'string' ? location.city : undefined,
+        latitude: typeof location.latitude === 'number' ? location.latitude : undefined,
+        longitude: typeof location.longitude === 'number' ? location.longitude : undefined,
+      });
+    }),
+  );
+}
 
 async function ensureDeliveryLocationIds(
   locations: UpdateRegistrationInput['deliveryLocations'],
