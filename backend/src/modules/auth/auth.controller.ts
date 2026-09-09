@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { authService } from './auth.service.js';
-import { forgotPasswordSchema, loginSchema } from './auth.validation.js';
+import { forgotPasswordSchema, loginSchema, resetPasswordSchema } from './auth.validation.js';
 
 export class AuthController {
   async createCaptchaChallenge(_request: Request, response: Response) {
@@ -17,6 +17,12 @@ export class AuthController {
   async forgotPassword(request: Request, response: Response) {
     const payload = forgotPasswordSchema.parse(request.body);
     const result = await authService.forgotPassword(payload);
+    response.status(200).json(result);
+  }
+
+  async resetPassword(request: Request, response: Response) {
+    const payload = resetPasswordSchema.parse(request.body);
+    const result = await authService.resetPassword(payload);
     response.status(200).json(result);
   }
 }

@@ -12,8 +12,7 @@ export default function CheckEmail() {
         </div>
         <h1>Check Your Email</h1>
         <p>
-          If an account exists for this email address, you will receive instructions to reset your
-          password.
+          If an account exists and delivery is available, a password reset link has been sent.
         </p>
         <Button
           variant="secondary"

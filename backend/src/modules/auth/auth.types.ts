@@ -7,7 +7,12 @@ export interface LoginRequestBody {
 }
 
 export interface ForgotPasswordRequestBody {
-  email: string;
+  identifier: string;
   captchaChallengeId: string;
   captchaAnswer: string;
+}
+
+export interface ResetPasswordRequestBody {
+  token: string;
+  newPassword: string;
 }

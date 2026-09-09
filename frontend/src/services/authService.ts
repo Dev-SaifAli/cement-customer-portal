@@ -8,6 +8,8 @@ export type AuthErrorCode =
   | 'CAPTCHA_UNAVAILABLE'
   | 'INVALID_CREDENTIALS'
   | 'NETWORK_ERROR'
+  | 'PASSWORD_RESET_EXPIRED'
+  | 'PASSWORD_RESET_INVALID'
   | 'RATE_LIMITED'
   | 'VALIDATION_ERROR';
 
@@ -65,7 +67,13 @@ export const login = (payload: {
 }) => postAuth('/auth/login', payload);
 
 export const requestPasswordReset = (payload: {
-  email: string;
+  identifier: string;
   captchaChallengeId: string;
   captchaAnswer: string;
 }) => postAuth<{ success: boolean; message: string }>('/auth/forgot-password', payload);
+
+export const resetPassword = (payload: { token: string; newPassword: string }) =>
+  postAuth<{ success: boolean; message: string; loginPath: string }>(
+    '/auth/reset-password',
+    payload,
+  );

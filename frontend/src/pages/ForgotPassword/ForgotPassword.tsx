@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, Mail } from 'lucide-react';
+import { ArrowLeft, ArrowRight, AtSign } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AuthLayout, { visualPresets } from '../../components/AuthLayout/AuthLayout';
 import Button from '../../components/Button/Button';
@@ -8,11 +8,12 @@ import Input from '../../components/Input/Input';
 import { AuthApiError, requestPasswordReset } from '../../services/authService';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-type ForgotErrors = Partial<Record<'email' | 'captcha', string>>;
+const mobilePattern = /^\+9665\d{8}$/;
+type ForgotErrors = Partial<Record<'identifier' | 'captcha', string>>;
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [captchaChallengeId, setCaptchaChallengeId] = useState('');
   const [captchaAnswer, setCaptchaAnswer] = useState('');
   const [captchaResetKey, setCaptchaResetKey] = useState(0);
@@ -35,8 +36,14 @@ export default function ForgotPassword() {
 
   const validate = () => {
     const next: ForgotErrors = {};
-    if (!email.trim()) next.email = 'Email address is required.';
-    else if (!emailPattern.test(email.trim())) next.email = 'Please enter a valid email address.';
+    const normalizedIdentifier = identifier.trim();
+    if (!normalizedIdentifier) next.identifier = 'Email address or mobile number is required.';
+    else if (
+      !emailPattern.test(normalizedIdentifier) &&
+      !mobilePattern.test(normalizedIdentifier)
+    ) {
+      next.identifier = 'Enter a valid email or mobile number in +9665XXXXXXXX format.';
+    }
     if (!captchaChallengeId || !captchaAnswer.trim()) {
       next.captcha = 'Please complete the security verification.';
     }
@@ -51,7 +58,7 @@ export default function ForgotPassword() {
     setSubmitting(true);
     try {
       await requestPasswordReset({
-        email: email.trim(),
+        identifier: identifier.trim(),
         captchaChallengeId,
         captchaAnswer,
       });
@@ -89,19 +96,20 @@ export default function ForgotPassword() {
     <AuthLayout visual={visualPresets.forgotPassword} activeDot={1}>
       <div className="auth-head">
         <h1>Forgot Password?</h1>
-        <p>Enter your registered email address to reset your password.</p>
+        <p>Enter your registered email address or mobile number to reset your password.</p>
       </div>
       <form onSubmit={handleSubmit} noValidate>
         <Input
-          id="forgotEmail"
-          label="Email Address"
+          id="forgotIdentifier"
+          label="Email or Mobile"
           required
           type="text"
-          placeholder="name@company.com"
-          icon={<Mail size={17} />}
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          error={errors.email}
+          placeholder="name@company.com or +9665XXXXXXXX"
+          icon={<AtSign size={17} />}
+          value={identifier}
+          onChange={(event) => setIdentifier(event.target.value)}
+          error={errors.identifier}
+          autoComplete="username"
         />
         <Captcha
           id="forgotCaptchaAnswer"
