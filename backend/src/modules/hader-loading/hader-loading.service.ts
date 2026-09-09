@@ -22,9 +22,23 @@ export class HaderLoadingService {
       values.push(query.productId);
       clauses.push(`oi.product_id=$${values.length}`);
     }
+    if (query.search) {
+      values.push(`%${query.search.toLowerCase()}%`);
+      clauses.push(`(
+        lower(s.shipment_number) like $${values.length}
+        or lower(o.order_number) like $${values.length}
+        or lower(ca.company_name) like $${values.length}
+        or lower(coalesce(ht.plate_number, '')) like $${values.length}
+      )`);
+    }
     const where = `where ${clauses.join(' and ')}`;
     const count = await pool.query<{ total: string }>(
-      `select count(*)::text total from shipments s join order_items oi on oi.order_id=s.order_id ${where}`,
+      `select count(*)::text total from shipments s
+       join orders o on o.id=s.order_id
+       join customer_accounts ca on ca.id=s.customer_account_id
+       join order_items oi on oi.order_id=s.order_id
+       left join hader_trucks ht on ht.id=s.hader_truck_id
+       ${where}`,
       values,
     );
     const [summary, products] = await Promise.all([
@@ -245,19 +259,7 @@ export class HaderLoadingService {
         [id, actor.id],
       );
       if (row.loading_point_id)
-        await client.query(
-          `update hader_loading_points points
-           set status=case
-             when points.status='INACTIVE' then 'INACTIVE'
-             when (select count(*) from shipments active_shipments
-                   where active_shipments.loading_point_id=points.id
-                     and active_shipments.loading_status in ('AT_GATE','LOADING')) >= points.max_trucks
-               then 'BUSY'
-             else 'AVAILABLE'
-           end,updated_at=now()
-           where points.id=$1`,
-          [row.loading_point_id],
-        );
+        await loadingPointsService.refreshAvailability(row.loading_point_id, client);
       await event(client, id, 'LOADING_COMPLETED', 'LOADING', 'LOADED', actor.id, {
         loadingPointId: row.loading_point_id,
       });

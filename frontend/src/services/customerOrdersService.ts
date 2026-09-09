@@ -1,3 +1,5 @@
+import type { OrderCreator } from '../utils/orderCreator';
+
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
 
 export type OrderStatus =
@@ -29,12 +31,17 @@ export interface CustomerOrder {
   orderNumber: string;
   contract: { id: string; reference: string | null } | null;
   orderType: 'DIRECT' | 'CONTRACT';
+  creator: OrderCreator | null;
+  customer: { id: string; companyName: string | null };
   status: OrderStatus;
   fulfilmentType: 'PICKUP' | 'DELIVERY';
   requestedQuantityTons: number;
   remainingContractQuantityTons: number | null;
   preferredDeliveryDate: string | null;
   deliveryNotes: string | null;
+  palletRequired: boolean;
+  palletType: string | null;
+  palletQuantity: number | null;
   shipTo: {
     id?: string;
     name?: string;
@@ -42,10 +49,15 @@ export interface CustomerOrder {
     region?: string;
     streetAddress?: string;
   } | null;
-  pickupLocation: { id: string; name: string | null } | null;
+  pickupLocation: { id: string; name: string | null; city: string | null } | null;
   pickupTruck: PickupTruckSnapshot | null;
   pickupDriver: PickupDriverSnapshot | null;
   haderCity: string | null;
+  shipmentSummary?: {
+    count: number;
+    latestStatus: string | null;
+    firstShipment: { id: string; shipmentNumber: string | null } | null;
+  };
   deliveryRequest: {
     id: string;
     requestNumber: string | null;
@@ -70,7 +82,7 @@ export interface CustomerOrder {
   updatedAt: string;
 }
 
-export interface DirectOrderInput {
+export interface DirectOrderPricingInput {
   productId: string;
   quantityTons: number;
   fulfilmentType: 'DELIVERY' | 'PICKUP';
@@ -78,6 +90,12 @@ export interface DirectOrderInput {
   pickupLocationId: string | null;
   requestedDeliveryDate: string | null;
   notes: string | null;
+}
+
+export interface DirectOrderInput extends DirectOrderPricingInput {
+  palletRequired: boolean;
+  palletType: string | null;
+  palletQuantity: number | null;
 }
 
 export interface DirectOrderPricing {
@@ -129,6 +147,9 @@ export async function createCustomerOrder(
     deliveryNotes: string | null;
     truckId: string | null;
     driverId: string | null;
+    palletRequired: boolean;
+    palletType: string | null;
+    palletQuantity: number | null;
   },
 ) {
   const response = await request<{ success: boolean; data: { order: CustomerOrder } }>(
@@ -138,7 +159,7 @@ export async function createCustomerOrder(
   return response.data.order;
 }
 
-export async function priceDirectOrder(payload: DirectOrderInput, signal?: AbortSignal) {
+export async function priceDirectOrder(payload: DirectOrderPricingInput, signal?: AbortSignal) {
   const response = await request<{ success: boolean; data: { pricing: DirectOrderPricing } }>(
     '/customer/orders/price',
     { method: 'POST', body: JSON.stringify(payload), ...(signal ? { signal } : {}) },

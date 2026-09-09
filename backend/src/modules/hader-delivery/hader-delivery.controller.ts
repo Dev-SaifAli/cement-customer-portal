@@ -3,6 +3,7 @@ import { AppError } from '../../errors/app-error.js';
 import type { SalesAuthenticatedRequest } from '../sales-auth/sales-auth.types.js';
 import { haderDeliveryService } from './hader-delivery.service.js';
 import {
+  cancelShipmentSchema,
   createShipmentSchema,
   haderIdSchema,
   haderListQuerySchema,
@@ -55,6 +56,15 @@ export class HaderDeliveryController {
     response.json({
       success: true,
       data: { shipment: await haderDeliveryService.getShipment(getId(request)) },
+    });
+  }
+  async cancelShipment(request: SalesAuthenticatedRequest, response: Response) {
+    const { reason } = cancelShipmentSchema.parse(request.body);
+    response.json({
+      success: true,
+      data: {
+        shipment: await haderDeliveryService.cancelShipment(getId(request), getUser(request), reason),
+      },
     });
   }
 }

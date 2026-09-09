@@ -244,6 +244,38 @@ describe('Sales order review and processing API', () => {
     );
   });
 
+  it('rejects an approved direct order before fulfilment processing', async () => {
+    query.mockResolvedValueOnce({ rows: [salesUserRow] });
+    connect.mockResolvedValueOnce({ query: clientQuery, release });
+    clientQuery.mockImplementation((sql: string) => {
+      if (sql.includes('for update of orders')) {
+        return Promise.resolve({
+          rows: [processingCandidate({ order_number: 'DO26000008', status: 'APPROVED' })],
+        });
+      }
+      return Promise.resolve({ rows: [] });
+    });
+
+    const response = await request(createApp())
+      .post(`/api/v1/sales/orders/${orderId}/start-processing`)
+      .set('Authorization', authHeader());
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toMatchObject({
+      code: 'ORDER_TYPE_INVALID',
+      message: 'Only contract orders can be processed for fulfilment.',
+    });
+    expect(clientQuery).not.toHaveBeenCalledWith(
+      expect.stringContaining('insert into delivery_requests'),
+      expect.anything(),
+    );
+    expect(clientQuery).not.toHaveBeenCalledWith(
+      expect.stringContaining("set status = 'PROCESSING'"),
+      expect.anything(),
+    );
+    expect(clientQuery).toHaveBeenCalledWith('rollback');
+  });
+
   it('reuses an existing delivery request instead of duplicating the handoff', async () => {
     query.mockResolvedValueOnce({ rows: [salesUserRow] });
     connect.mockResolvedValueOnce({ query: clientQuery, release });

@@ -1,4 +1,22 @@
 export const commercialUom = 'TON' as const;
+export const wholeTonQuantityMessage = 'Quantity must be a whole number of tons.';
+
+export function isWholeTonQuantity(value: number) {
+  return Number.isFinite(value) && Number.isInteger(value) && value > 0;
+}
+
+export function isPermittedWholeTonInput(value: string) {
+  return value === '' || /^\d+$/.test(value);
+}
+
+export function formatCommercialTonValue(value: number) {
+  if (!Number.isFinite(value)) return 'Not provided';
+  return value.toLocaleString('en-US', { maximumFractionDigits: 6 });
+}
+
+export function formatCommercialTons(value: number) {
+  return `${formatCommercialTonValue(value)} TON`;
+}
 
 export function packagingQuantityForTons(
   quantityTons: number,

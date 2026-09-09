@@ -10,7 +10,7 @@ import { haderZoneController } from './hader-zone.controller.js';
 export const adminHaderCitiesRouter = Router();
 adminHaderCitiesRouter.use(
   requireSalesAuth,
-  requireSalesRole('PRICING_ADMIN', 'HADER_MANAGER', 'HADER_OPERATIONS', 'DISPATCH_USER'),
+  requireSalesRole('PRICING_ADMIN', 'HADER_MANAGER', 'HADER_OPERATIONS'),
 );
 adminHaderCitiesRouter.get(
   '/',

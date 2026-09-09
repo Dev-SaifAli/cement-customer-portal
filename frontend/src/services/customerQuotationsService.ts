@@ -68,6 +68,7 @@ export interface CustomerQuotationPayload {
   pickupLocationId?: string;
   shipToLocationId?: string;
   requestedDate?: string;
+  specialPriceRequested: boolean;
   notes?: string;
   items: CustomerQuotationItemPayload[];
 }
@@ -82,6 +83,7 @@ export interface CustomerQuotation {
   shipToLocationId: string | null;
   shipToLocation: CustomerLocation | null;
   requestedDate: string | null;
+  specialPriceRequested: boolean;
   notes: string | null;
   submittedAt: string | null;
   createdAt: string;

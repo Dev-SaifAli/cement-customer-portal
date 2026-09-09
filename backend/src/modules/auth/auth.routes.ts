@@ -37,3 +37,9 @@ authRouter.post(
   createAuthLimiter(env.AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX),
   asyncHandler((request, response) => authController.forgotPassword(request, response)),
 );
+
+authRouter.post(
+  '/reset-password',
+  createAuthLimiter(env.AUTH_FORGOT_PASSWORD_RATE_LIMIT_MAX),
+  asyncHandler((request, response) => authController.resetPassword(request, response)),
+);

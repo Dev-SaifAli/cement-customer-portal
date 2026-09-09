@@ -4,20 +4,21 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--customer-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--customer-bg)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--customer-primary,var(--color-primary,#54247a))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--customer-bg,var(--color-background,#f6f5fa))] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
         default:
-          'bg-[var(--customer-primary)] text-white shadow-sm hover:bg-[var(--customer-primary-hover)]',
+          'bg-[var(--customer-primary,var(--color-primary,#54247a))] text-white shadow-sm hover:bg-[var(--customer-primary-hover,var(--color-primary-hover,#472066))]',
         destructive:
-          'bg-[var(--customer-danger)] text-white shadow-sm hover:opacity-90',
+          'bg-[var(--customer-danger,var(--color-danger,#b42318))] text-white shadow-sm hover:opacity-90',
         outline:
-          'border border-[var(--customer-border)] bg-[var(--customer-surface)] text-[var(--customer-text)] shadow-sm hover:bg-[var(--customer-surface-secondary)] hover:text-[var(--customer-primary)]',
+          'border border-[var(--customer-border,var(--color-border,#e5e2ed))] bg-[var(--customer-surface,var(--color-surface,#ffffff))] text-[var(--customer-text,var(--color-text,#1c1625))] shadow-sm hover:bg-[var(--customer-surface-secondary,var(--color-background,#f2eff7))] hover:text-[var(--customer-primary,var(--color-primary,#54247a))]',
         secondary:
-          'bg-[var(--customer-surface-secondary)] text-[var(--customer-text)] shadow-sm hover:bg-[var(--customer-primary-soft)] hover:text-[var(--customer-primary)]',
-        ghost: 'text-[var(--customer-text-secondary)] hover:bg-[var(--customer-surface-secondary)] hover:text-[var(--customer-primary)]',
-        link: 'text-[var(--customer-primary)] underline-offset-4 hover:underline',
+          'bg-[var(--customer-surface-secondary,var(--color-background,#f2eff7))] text-[var(--customer-text,var(--color-text,#1c1625))] shadow-sm hover:text-[var(--customer-primary,var(--color-primary,#54247a))]',
+        ghost:
+          'text-[var(--customer-text-secondary,var(--color-secondary,#5f586b))] hover:bg-[var(--customer-surface-secondary,var(--color-background,#f2eff7))] hover:text-[var(--customer-primary,var(--color-primary,#54247a))]',
+        link: 'text-[var(--customer-primary,var(--color-primary,#54247a))] underline-offset-4 hover:underline',
       },
       size: {
         default: 'h-10 px-4 py-2',

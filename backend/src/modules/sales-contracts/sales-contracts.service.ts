@@ -3,13 +3,16 @@ import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import type { SalesUser } from '../sales-auth/sales-auth.types.js';
 import { pickupLocationsService } from '../pickup-locations/pickup-locations.service.js';
+import { notificationEvents } from '../notifications/notification-events.js';
 import type {
   CreateContractFromAcceptedQuotationPayload,
   ListSalesContractsQuery,
+  RejectSalesContractPayload,
   SalesContractExtensionPayload,
   SalesContractPayload,
 } from './sales-contracts.validation.js';
 import { nextDocumentReference } from '../document-numbering/document-numbering.service.js';
+import { haderZoneService } from '../hader-zones/hader-zone.service.js';
 
 type ContractStatus =
   | 'DRAFT'
@@ -38,6 +41,7 @@ interface ContractRow {
   end_date: Date | string;
   fulfilment: Fulfilment;
   pickup_location_id: string | null;
+  pickup_location_city: string | null;
   delivery_location_id: string | null;
   delivery_city: string | null;
   pallet_required: boolean;
@@ -73,6 +77,7 @@ interface ContractRow {
   activated_at: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  order_count: string;
 }
 
 interface ContractStatusEventRow {
@@ -85,6 +90,7 @@ interface ContractStatusEventRow {
   changed_by: string;
   changed_by_name: string | null;
   changed_by_email: string | null;
+  changed_by_role: string | null;
   created_at: Date | string;
 }
 
@@ -110,6 +116,9 @@ interface DeliveryLocation {
   name?: string;
   city?: string;
   region?: string;
+  haderCityId?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 interface AcceptedQuotationRow {
@@ -139,6 +148,10 @@ interface AcceptedQuotationRow {
   delivery_locations: Array<Record<string, unknown>> | null;
   existing_contract_id: string | null;
   existing_contract_reference: string | null;
+  product_price_changed: boolean;
+  delivery_price_changed: boolean;
+  hader_approval_status: string;
+  price_approval_status: string;
 }
 
 interface AcceptedQuotationItemRow {
@@ -280,13 +293,14 @@ export class SalesContractsService {
            product_price,
            delivery_list_price,
            delivery_price,
+           pricing_city_id,
            sales_user_id,
            status
          )
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-           $11, $12, $13, $14, $15, $16, $17, $18, $19, 'DRAFT')
+           $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 'DRAFT')
          returning *`,
-        [reference, ...payloadValues(payload, related.product, salesUser.id)],
+        [reference, ...payloadValues(payload, related.product, related.deliveryCity, salesUser.id)],
       );
 
       const contract = result.rows[0];
@@ -310,6 +324,7 @@ export class SalesContractsService {
         newStatus: 'DRAFT',
         reason: null,
         salesUserId: salesUser.id,
+        eventData: { actorRole: salesUser.role },
       });
       await client.query('commit');
 
@@ -383,6 +398,30 @@ export class SalesContractsService {
         items.reduce((sum, item) => sum + Number(item.equivalent_tons), 0),
       );
       const destination = await resolveAcceptedDestination(quotation);
+      if (quotation.fulfilment_type === 'DELIVERY') {
+        await haderZoneService.validateDeliveryLocation(
+          {
+            haderCityId: quotation.pricing_city_id,
+            city: stringValue(destination?.city),
+            latitude: numberValue(destination?.latitude),
+            longitude: numberValue(destination?.longitude),
+          },
+          client,
+          { requireHaderCity: true },
+        );
+      }
+
+      const haderApprovalComplete =
+        !quotation.delivery_price_changed || quotation.hader_approval_status === 'APPROVED';
+      const priceApprovalComplete =
+        !quotation.product_price_changed || quotation.price_approval_status === 'APPROVED';
+      if (!haderApprovalComplete || !priceApprovalComplete) {
+        throw new AppError(
+          'Required quotation approvals are incomplete.',
+          409,
+          'QUOTATION_APPROVAL_INCOMPLETE',
+        );
+      }
       const firstItem = items[0];
       if (!firstItem) {
         throw new AppError(
@@ -495,18 +534,19 @@ export class SalesContractsService {
         contract.id,
         null,
         'DRAFT',
-        'CREATE_FROM_ACCEPTED_QUOTATION',
+        'CONTRACT_CREATED_FROM_RFQ',
         `Accepted quotation ${quotation.reference} converted to contract ${reference}.`,
         salesUser.id,
       );
       await insertContractEvent(client, {
         contractId: contract.id,
-        eventType: 'CONTRACT_CREATED',
+        eventType: 'CONTRACT_CREATED_FROM_RFQ',
         previousStatus: null,
         newStatus: 'DRAFT',
         reason: `Accepted quotation ${quotation.reference} converted to contract ${reference}.`,
         salesUserId: salesUser.id,
         eventData: {
+          actorRole: salesUser.role,
           sourceQuotationId: quotation.id,
           sourceQuotationReference: quotation.reference,
         },
@@ -556,6 +596,7 @@ export class SalesContractsService {
          contract_status_events.changed_by,
          sales_users.name as changed_by_name,
          sales_users.email as changed_by_email,
+         sales_users.role as changed_by_role,
          contract_status_events.created_at
        from contract_status_events
        left join sales_users on sales_users.id = contract_status_events.changed_by
@@ -574,8 +615,12 @@ export class SalesContractsService {
     try {
       await client.query('begin');
       const current = await getContractForUpdate(client, id);
-      if (current.status !== 'DRAFT') {
-        throw new AppError('Only draft contracts can be updated.', 409, 'CONTRACT_NOT_EDITABLE');
+      if (!['DRAFT', 'CHANGES_REQUESTED'].includes(current.status)) {
+        throw new AppError(
+          'Only draft contracts or contracts with requested changes can be updated.',
+          409,
+          'CONTRACT_NOT_EDITABLE',
+        );
       }
 
       const result = await client.query<ContractRow>(
@@ -597,16 +642,40 @@ export class SalesContractsService {
              product_price = $15,
              delivery_list_price = $16,
              delivery_price = $17,
-             sales_user_id = $18,
+             pricing_city_id = $18,
+             sales_user_id = $19,
              updated_at = now()
-         where id = $19
+         where id = $20
          returning *`,
-        [...payloadValues(payload, related.product, salesUser.id), id],
+        [...payloadValues(payload, related.product, related.deliveryCity, salesUser.id), id],
       );
 
       if (!result.rows[0]) {
         throw contractNotFoundError();
       }
+
+      const changedFields = contractChangedFields(current, payload);
+      const updateReason = changedFields.length
+        ? `Updated fields: ${changedFields.join(', ')}.`
+        : 'Contract saved without field changes.';
+      await insertStatusEvent(
+        client,
+        id,
+        current.status,
+        current.status,
+        'CONTRACT_UPDATED',
+        updateReason,
+        salesUser.id,
+      );
+      await insertContractEvent(client, {
+        contractId: id,
+        eventType: 'CONTRACT_UPDATED',
+        previousStatus: current.status,
+        newStatus: current.status,
+        reason: updateReason,
+        salesUserId: salesUser.id,
+        eventData: { actorRole: salesUser.role, changedFields },
+      });
 
       await client.query('commit');
       return this.getById(id);
@@ -619,27 +688,89 @@ export class SalesContractsService {
   }
 
   async submit(id: string, salesUser: SalesUser) {
-    return this.activate(id, salesUser);
-  }
-
-  async activate(id: string, salesUser: SalesUser) {
+    if (salesUser.role !== 'SALES_REP') {
+      throw new AppError('Only a Sales representative can submit Contracts.', 403, 'CONTRACT_SUBMIT_FORBIDDEN');
+    }
     const client = await pool.connect();
+    let submitted: ContractRow | null = null;
 
     try {
       await client.query('begin');
       const current = await getContractForUpdate(client, id);
-      if (current.status !== 'DRAFT') {
+      if (!['DRAFT', 'CHANGES_REQUESTED'].includes(current.status)) {
         throw new AppError(
-          'Only draft contracts can be activated.',
+          'Only draft contracts or contracts with requested changes can be submitted.',
           409,
-          'CONTRACT_NOT_ACTIVATABLE',
+          'CONTRACT_NOT_SUBMITTABLE',
         );
       }
 
       await validateContractActivationReadiness(client, current);
+      const result = await client.query<ContractRow>(
+        `update contracts
+         set status = 'UNDER_REVIEW', updated_at = now()
+         where id = $1
+         returning *`,
+        [id],
+      );
+      submitted = result.rows[0] ?? null;
+      if (!submitted) throw contractNotFoundError();
 
+      await insertStatusEvent(
+        client,
+        id,
+        current.status,
+        'UNDER_REVIEW',
+        'CONTRACT_SUBMITTED_FOR_APPROVAL',
+        'Contract submitted for Commercial Director approval.',
+        salesUser.id,
+      );
+      await insertContractEvent(client, {
+        contractId: id,
+        eventType: 'CONTRACT_SUBMITTED_FOR_APPROVAL',
+        previousStatus: current.status,
+        newStatus: 'UNDER_REVIEW',
+        reason: 'Contract submitted for Commercial Director approval.',
+        salesUserId: salesUser.id,
+        eventData: { actorRole: salesUser.role },
+      });
+      await client.query('commit');
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    const contract = await this.getById(id);
+    await notificationEvents.contractApprovalRequired(
+      id,
+      submitted?.reference ?? contract.reference ?? 'Contract',
+      contract.updatedAt,
+    );
+    return contract;
+  }
+
+  async approve(id: string, salesUser: SalesUser) {
+    if (salesUser.role !== 'COMMERCIAL_DIRECTOR') {
+      throw new AppError('Only the Commercial Director can approve Contracts.', 403, 'CONTRACT_APPROVE_FORBIDDEN');
+    }
+    const client = await pool.connect();
+    let activated: ContractRow | null = null;
+
+    try {
+      await client.query('begin');
+      const current = await getContractForUpdate(client, id);
+      if (current.status !== 'UNDER_REVIEW') {
+        throw new AppError(
+          'Only contracts under review can be approved.',
+          409,
+          'CONTRACT_NOT_APPROVABLE',
+        );
+      }
+
+      await validateContractActivationReadiness(client, current);
       const reference = current.reference ?? (await nextReference(client));
-
       const result = await client.query<ContractRow>(
         `update contracts
          set reference = $2,
@@ -652,42 +783,126 @@ export class SalesContractsService {
          returning *`,
         [id, reference, salesUser.id],
       );
-
-      const updated = result.rows[0];
-      if (!updated) {
-        throw contractNotFoundError();
-      }
+      activated = result.rows[0] ?? null;
+      if (!activated) throw contractNotFoundError();
 
       await insertStatusEvent(
         client,
         id,
-        current.status,
+        'UNDER_REVIEW',
+        'APPROVED',
+        'CONTRACT_APPROVED',
+        'Contract approved by Commercial Director.',
+        salesUser.id,
+      );
+      await insertContractEvent(client, {
+        contractId: id,
+        eventType: 'CONTRACT_APPROVED',
+        previousStatus: 'UNDER_REVIEW',
+        newStatus: 'APPROVED',
+        reason: 'Contract approved by Commercial Director.',
+        salesUserId: salesUser.id,
+        eventData: { actorRole: salesUser.role },
+      });
+      await insertStatusEvent(
+        client,
+        id,
+        'APPROVED',
         'ACTIVE',
         'CONTRACT_ACTIVATED',
-        'Contract activated from accepted quotation commercial terms.',
+        'Contract activated after full Contract approval.',
         salesUser.id,
       );
       await insertContractEvent(client, {
         contractId: id,
         eventType: 'CONTRACT_ACTIVATED',
-        previousStatus: current.status,
+        previousStatus: 'APPROVED',
         newStatus: 'ACTIVE',
-        reason: 'Contract activated from accepted quotation commercial terms.',
+        reason: 'Contract activated after full Contract approval.',
         salesUserId: salesUser.id,
-        eventData: {
-          reference,
-          activatedFromAcceptedQuotation: Boolean(current.quotation_id),
-        },
+        eventData: { actorRole: salesUser.role, reference, approvalComplete: true },
       });
       await client.query('commit');
-
-      return this.getById(id);
     } catch (error) {
       await client.query('rollback');
       throw error;
     } finally {
       client.release();
     }
+
+    const contract = await this.getById(id);
+    await notificationEvents.contractActivated(
+      activated?.sales_user_id ?? contract.salesUserId ?? salesUser.id,
+      activated?.customer_account_id ?? contract.customerAccountId,
+      id,
+      activated?.reference ?? contract.reference ?? 'Contract',
+    );
+    return contract;
+  }
+
+  async reject(id: string, payload: RejectSalesContractPayload, salesUser: SalesUser) {
+    if (salesUser.role !== 'COMMERCIAL_DIRECTOR') {
+      throw new AppError('Only the Commercial Director can request Contract changes.', 403, 'CONTRACT_REJECT_FORBIDDEN');
+    }
+    const client = await pool.connect();
+    let changedContract: ContractRow | null = null;
+
+    try {
+      await client.query('begin');
+      const current = await getContractForUpdate(client, id);
+      if (current.status !== 'UNDER_REVIEW') {
+        throw new AppError(
+          'Only contracts under review can have changes requested.',
+          409,
+          'CONTRACT_NOT_REJECTABLE',
+        );
+      }
+
+      const result = await client.query<ContractRow>(
+        `update contracts set status = 'CHANGES_REQUESTED', updated_at = now()
+         where id = $1 returning *`,
+        [id],
+      );
+      changedContract = result.rows[0] ?? null;
+      if (!changedContract) throw contractNotFoundError();
+
+      await insertStatusEvent(
+        client,
+        id,
+        'UNDER_REVIEW',
+        'CHANGES_REQUESTED',
+        'CONTRACT_CHANGES_REQUESTED',
+        payload.reason,
+        salesUser.id,
+      );
+      await insertContractEvent(client, {
+        contractId: id,
+        eventType: 'CONTRACT_CHANGES_REQUESTED',
+        previousStatus: 'UNDER_REVIEW',
+        newStatus: 'CHANGES_REQUESTED',
+        reason: payload.reason,
+        salesUserId: salesUser.id,
+        eventData: { actorRole: salesUser.role },
+      });
+      await client.query('commit');
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    const contract = await this.getById(id);
+    const ownerId = changedContract?.sales_user_id ?? contract.salesUserId;
+    if (ownerId) {
+      await notificationEvents.contractChangesRequested(
+        ownerId,
+        id,
+        changedContract?.reference ?? contract.reference ?? 'Contract',
+        payload.reason,
+      );
+    }
+    return contract;
   }
 
   async extend(id: string, payload: SalesContractExtensionPayload, salesUser: SalesUser) {
@@ -801,6 +1016,7 @@ export class SalesContractsService {
       throw new AppError('Pickup location was not found.', 400, 'PICKUP_LOCATION_NOT_FOUND');
     }
 
+    let deliveryCity: Awaited<ReturnType<typeof haderZoneService.validateDeliveryLocation>>['city'] | null = null;
     if (payload.fulfilment === 'DELIVERY') {
       const locations = parseDeliveryLocations(account.delivery_locations);
       const deliveryLocation = locations.find(
@@ -814,6 +1030,18 @@ export class SalesContractsService {
           'DELIVERY_LOCATION_NOT_FOUND',
         );
       }
+      deliveryCity = (
+        await haderZoneService.validateDeliveryLocation(
+          {
+            haderCityId: deliveryLocation.haderCityId,
+            city: deliveryLocation.city,
+            latitude: deliveryLocation.latitude,
+            longitude: deliveryLocation.longitude,
+          },
+          pool,
+          { requireHaderCity: true },
+        )
+      ).city;
     }
 
     const isBag = product.packaging_type.toLowerCase().includes('bag');
@@ -821,7 +1049,7 @@ export class SalesContractsService {
       throw new AppError('Pallets are only available for bag products.', 400, 'PALLET_NOT_ALLOWED');
     }
 
-    return { account, product };
+    return { account, product, deliveryCity };
   }
 }
 
@@ -833,14 +1061,26 @@ const contractSelectSql = `select
   registration_drafts.delivery_locations as registration_delivery_locations,
   product_catalog.product_code,
   product_catalog.product_name,
-  sales_users.name as sales_user_name
+  sales_users.name as sales_user_name,
+  pickup_cities.name as pickup_location_city,
+  contract_orders.order_count
  from contracts
  inner join customer_accounts on customer_accounts.id = contracts.customer_account_id
  inner join registration_drafts on registration_drafts.id = customer_accounts.registration_id
  inner join product_catalog on product_catalog.id = contracts.product_id
- left join sales_users on sales_users.id = contracts.sales_user_id`;
+ left join sales_users on sales_users.id = contracts.sales_user_id
+ left join pickup_locations on pickup_locations.id::text = contracts.pickup_location_id
+ left join ksa_cities pickup_cities on pickup_cities.id = pickup_locations.city_id
+ left join lateral (
+   select count(*)::text as order_count from orders where orders.contract_id = contracts.id
+ ) contract_orders on true`;
 
-function payloadValues(payload: SalesContractPayload, product: ProductRow, salesUserId: string) {
+function payloadValues(
+  payload: SalesContractPayload,
+  product: ProductRow,
+  deliveryCity: { id: string; name: string } | null,
+  salesUserId: string,
+) {
   return [
     payload.customerAccountId,
     payload.productId,
@@ -852,15 +1092,36 @@ function payloadValues(payload: SalesContractPayload, product: ProductRow, sales
     payload.fulfilment,
     payload.fulfilment === 'PICKUP' ? payload.pickupLocationId : null,
     payload.fulfilment === 'DELIVERY' ? payload.deliveryLocationId : null,
-    payload.fulfilment === 'DELIVERY' ? (payload.deliveryCity ?? null) : null,
+    payload.fulfilment === 'DELIVERY' ? deliveryCity?.name ?? null : null,
     payload.palletRequired,
     payload.palletRequired ? (payload.palletType ?? null) : null,
     payload.productListPrice,
     payload.productPrice,
     payload.fulfilment === 'DELIVERY' ? (payload.deliveryListPrice ?? null) : null,
     payload.fulfilment === 'DELIVERY' ? (payload.deliveryPrice ?? null) : null,
+    payload.fulfilment === 'DELIVERY' ? deliveryCity?.id ?? null : null,
     salesUserId,
   ];
+}
+
+function contractChangedFields(current: ContractRow, payload: SalesContractPayload) {
+  const fields: Array<[string, unknown, unknown]> = [
+    ['customer', current.customer_account_id, payload.customerAccountId],
+    ['product', current.product_id, payload.productId],
+    ['quantity', Number(current.quantity), payload.quantity],
+    ['start date', dateOnly(current.start_date), payload.startDate],
+    ['end date', dateOnly(current.end_date), payload.endDate],
+    ['fulfilment', current.fulfilment, payload.fulfilment],
+    ['pickup location', current.pickup_location_id ?? '', payload.pickupLocationId ?? ''],
+    ['delivery location', current.delivery_location_id ?? '', payload.deliveryLocationId ?? ''],
+    ['pallet required', current.pallet_required, payload.palletRequired],
+    ['pallet type', current.pallet_type ?? '', payload.palletType ?? ''],
+    ['product list price', Number(current.product_list_price), payload.productListPrice],
+    ['product price', Number(current.product_price), payload.productPrice],
+    ['delivery list price', nullableNumber(current.delivery_list_price), payload.deliveryListPrice ?? null],
+    ['delivery price', nullableNumber(current.delivery_price), payload.deliveryPrice ?? null],
+  ];
+  return fields.filter(([, before, after]) => before !== after).map(([field]) => field);
 }
 
 async function getActivatedCustomerAccount(customerAccountId: string) {
@@ -1337,6 +1598,9 @@ function roundQuantity(value: number) {
 }
 
 function mapContractSummary(row: ContractRow) {
+  const deliveryLocation = parseDeliveryLocations(row.registration_delivery_locations).find(
+    (location) => location.id === row.delivery_location_id,
+  );
   return {
     id: row.id,
     reference: row.reference,
@@ -1363,6 +1627,12 @@ function mapContractSummary(row: ContractRow) {
     quantity: Number(row.quantity),
     uom: row.uom,
     fulfilment: row.fulfilment,
+    haderCity: row.fulfilment === 'DELIVERY' ? row.delivery_city : null,
+    shipToCity:
+      row.fulfilment === 'PICKUP'
+        ? row.pickup_location_city ?? (row.pickup_location_id === 'ALSAFWA_PLANT_MAIN' ? 'Jeddah' : null)
+        : deliveryLocation?.city ?? null,
+    orderCount: Number(row.order_count),
     status: row.status,
     startDate: dateOnly(row.start_date),
     endDate: dateOnly(row.end_date),
@@ -1428,6 +1698,7 @@ function mapContractDetails(row: ContractRow, events: ContractStatusEventRow[]) 
       changedBy: event.changed_by,
       changedByName: event.changed_by_name,
       changedByEmail: event.changed_by_email,
+      changedByRole: event.changed_by_role,
       createdAt: dateTime(event.created_at),
     })),
   };
@@ -1482,4 +1753,8 @@ function dateOnly(value: Date | string) {
 
 function stringValue(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function numberValue(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }

@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import { pool } from '../../database/pool.js';
 import { AppError } from '../../errors/app-error.js';
 import type { CustomerUser } from '../customer-auth/customer-auth.types.js';
+import type { SalesUser } from '../sales-auth/sales-auth.types.js';
 import { notificationEvents } from '../notifications/notification-events.js';
 import {
   packagingQuantityFromTons,
@@ -50,12 +51,15 @@ interface LockedContractRow {
   delivery_price: string | null;
   vat_rate: string | null;
   contract_item_id: string | null;
+  pallet_required: boolean;
+  pallet_type: string | null;
 }
 
 interface DeliveryLocationSnapshot {
   id?: string;
   name?: string;
   city?: string;
+  haderCityId?: string;
   region?: string;
   streetAddress?: string;
   postalCode?: string;
@@ -105,7 +109,8 @@ interface OrderRow {
   fulfilment_type: 'PICKUP' | 'DELIVERY';
   hader_city_id: string | null;
   hader_city_name: string | null;
-  created_by_customer_user_id: string;
+  created_by_customer_user_id: string | null;
+  created_by_sales_user_id: string | null;
   status: 'SUBMITTED' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
   requested_quantity_tons: string;
   remaining_contract_quantity_snapshot: string | null;
@@ -122,6 +127,9 @@ interface OrderRow {
   pickup_truck_snapshot: unknown;
   pickup_driver_snapshot: unknown;
   hader_zone_status: HaderZoneStatus | null;
+  pallet_required: boolean;
+  pallet_type: string | null;
+  pallet_quantity: number | null;
 }
 
 interface DirectProductRow {
@@ -169,10 +177,17 @@ interface AutoApprovedDirectOrderContractInput {
 }
 
 type QueryExecutor = Pick<PoolClient, 'query'>;
+type ContractOrderActor =
+  | { kind: 'CUSTOMER'; user: CustomerUser }
+  | { kind: 'OPERATIONS'; user: SalesUser; fulfilment: 'DELIVERY' | 'PICKUP'; setting: 'hader' | 'dispatch' };
 
 export class CustomerOrdersService {
   async list(customerUser: CustomerUser, query: ListCustomerOrdersQuery) {
-    return ordersRepository.list({ customerAccountId: customerUser.customerAccountId }, query);
+    return ordersRepository.list(
+      { customerAccountId: customerUser.customerAccountId },
+      query,
+      { includeShipmentSummary: true },
+    );
   }
 
   async getById(customerUser: CustomerUser, orderId: string) {
@@ -239,10 +254,10 @@ export class CustomerOrdersService {
            remaining_contract_quantity_snapshot, approved_customer_rate_per_ton,
            amount, client_request_id, preferred_delivery_date, delivery_notes,
            ship_to_snapshot, pickup_location_name, vat_rate, vat_amount, grand_total,
-           hader_zone_status, submitted_at
+           hader_zone_status, pallet_required, pallet_type, pallet_quantity, submitted_at
          ) values (
            $1, null, $2, $3, $4, $5, $6, $7, $8, $9, $10, null, $11, $12,
-           $13, $14, $15, $16::jsonb, $17, $18, $19, $20, $21, now()
+           $13, $14, $15, $16::jsonb, $17, $18, $19, $20, $21, $22, $23, $24, now()
          ) returning id`,
         [
           orderNumber,
@@ -266,6 +281,9 @@ export class CustomerOrdersService {
           context.vatAmount,
           context.grandTotal,
           context.zoneStatus,
+          payload.palletRequired,
+          payload.palletRequired ? payload.palletType : null,
+          payload.palletRequired ? payload.palletQuantity : null,
         ],
       );
       const orderId = orderResult.rows[0]?.id;
@@ -357,16 +375,57 @@ export class CustomerOrdersService {
     payload: CreateCustomerOrderPayload,
   ) {
     requireOrderWriteAccess(customerUser);
+    return this.createFromContractForActor(
+      { kind: 'CUSTOMER', user: customerUser },
+      contractId,
+      payload,
+    );
+  }
+
+  async createFromContractForOperations(
+    salesUser: SalesUser,
+    contractId: string,
+    payload: CreateCustomerOrderPayload,
+  ) {
+    const scope = operationalContractScope(salesUser);
+    return this.createFromContractForActor(
+      { kind: 'OPERATIONS', user: salesUser, ...scope },
+      contractId,
+      payload,
+    );
+  }
+
+  private async createFromContractForActor(
+    actor: ContractOrderActor,
+    contractId: string,
+    payload: CreateCustomerOrderPayload,
+  ) {
     const client = await pool.connect();
 
     try {
       await client.query('begin');
+      if (
+        actor.kind === 'OPERATIONS' &&
+        !(await applicationSettingsService.isContractOrderCreationAllowed(actor.setting, client))
+      ) {
+        throw new AppError(
+          'Contract order creation is disabled by the administrator.',
+          403,
+          'CONTRACT_ORDER_CREATION_DISABLED',
+        );
+      }
+      const contract = await getLockedCustomerContract(
+        client,
+        contractId,
+        actor.kind === 'CUSTOMER' ? actor.user.customerAccountId : null,
+        actor.kind === 'OPERATIONS' ? actor.fulfilment : null,
+      );
       await client.query(`select pg_advisory_xact_lock(hashtext($1), hashtext($2))`, [
-        customerUser.customerAccountId,
+        contract.customer_account_id,
         payload.clientRequestId,
       ]);
       const existingOrder = await ordersRepository.getByIdempotencyKey(
-        customerUser.customerAccountId,
+        contract.customer_account_id,
         payload.clientRequestId,
         client,
       );
@@ -381,8 +440,8 @@ export class CustomerOrdersService {
         await client.query('commit');
         return existingOrder;
       }
-      const contract = await getLockedCustomerContract(client, customerUser, contractId);
       validateContractForOrder(contract);
+      const pallet = resolveOrderPallet(contract, payload);
 
       if (contract.fulfilment === 'DELIVERY' && !payload.preferredDeliveryDate) {
         throw new AppError(
@@ -392,7 +451,7 @@ export class CustomerOrdersService {
         );
       }
 
-      const requestedQuantityTons = round(payload.requestedQuantityTons, 3);
+      const requestedQuantityTons = payload.requestedQuantityTons;
       const remainingBefore = contractRemainingTons(contract);
       if (requestedQuantityTons > remainingBefore) {
         throw new AppError(
@@ -404,7 +463,7 @@ export class CustomerOrdersService {
 
       const pickupFleet = await resolvePickupFleet(
         client,
-        customerUser,
+        contract.customer_account_id,
         contract,
         payload,
         requestedQuantityTons,
@@ -422,7 +481,18 @@ export class CustomerOrdersService {
       const shipToSnapshot = resolveDeliveryLocation(contract);
       const zoneStatus =
         contract.fulfilment === 'DELIVERY'
-          ? await resolveDeliveryZoneStatus(client, contract.pricing_city_id, shipToSnapshot)
+          ? (
+              await haderZoneService.validateDeliveryLocation(
+                {
+                  haderCityId: contract.pricing_city_id,
+                  city: contract.delivery_city,
+                  latitude: shipToSnapshot?.latitude,
+                  longitude: shipToSnapshot?.longitude,
+                },
+                client,
+                { requireHaderCity: true },
+              )
+            ).status
           : null;
       const orderNumber = await nextOrderNumber(client);
 
@@ -437,6 +507,7 @@ export class CustomerOrdersService {
            hader_city_id,
            hader_city_name,
            created_by_customer_user_id,
+           created_by_sales_user_id,
            status,
            requested_quantity_tons,
            remaining_contract_quantity_snapshot,
@@ -455,23 +526,28 @@ export class CustomerOrdersService {
            pickup_truck_snapshot,
            pickup_driver_snapshot,
            hader_zone_status,
+           pallet_required,
+           pallet_type,
+           pallet_quantity,
            submitted_at
          )
          values (
-           $1, $2, $3, $4, $5, $6, $7, $8, $9, 'SUBMITTED', $10, $11, $12, $13,
-           $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, now()
+           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'SUBMITTED', $11, $12, $13, $14,
+           $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
+           $28, $29, $30, now()
          )
          returning *`,
         [
           orderNumber,
           contract.id,
-          customerUser.customerAccountId,
+          contract.customer_account_id,
           contract.delivery_location_id,
           contract.pickup_location_id,
           contract.fulfilment,
           contract.pricing_city_id,
           contract.delivery_city,
-          customerUser.id,
+          actor.kind === 'CUSTOMER' ? actor.user.id : null,
+          actor.kind === 'OPERATIONS' ? actor.user.id : null,
           requestedQuantityTons,
           remainingAfter,
           customerRatePerTon,
@@ -491,6 +567,9 @@ export class CustomerOrdersService {
           pickupFleet ? JSON.stringify(pickupFleet.truck) : null,
           pickupFleet ? JSON.stringify(pickupFleet.driver) : null,
           zoneStatus,
+          pallet.required,
+          pallet.type,
+          pallet.quantity,
         ],
       );
       const order = orderResult.rows[0];
@@ -501,11 +580,12 @@ export class CustomerOrdersService {
       await client.query(
         `insert into order_events (
            order_id, event_type, previous_status, new_status,
-           changed_by_customer_user_id, event_data
-         ) values ($1, 'ORDER_CREATED', null, 'DRAFT', $2, $3::jsonb)`,
+           changed_by_customer_user_id, changed_by_sales_user_id, event_data
+         ) values ($1, 'ORDER_CREATED', null, 'DRAFT', $2, $3, $4::jsonb)`,
         [
           order.id,
-          customerUser.id,
+          actor.kind === 'CUSTOMER' ? actor.user.id : null,
+          actor.kind === 'OPERATIONS' ? actor.user.id : null,
           JSON.stringify({
             contractId: contract.id,
             customerTruckId: pickupFleet?.truck.id ?? null,
@@ -558,6 +638,7 @@ export class CustomerOrdersService {
            previous_status,
            new_status,
            changed_by_customer_user_id,
+           changed_by_sales_user_id,
            event_data
          )
          values (
@@ -566,16 +647,18 @@ export class CustomerOrdersService {
            'DRAFT',
            'SUBMITTED',
            $2,
+           $3,
            jsonb_build_object(
-             'contractId', $3::text,
-             'requestedQuantityTons', $4::numeric,
-             'remainingBeforeTons', $5::numeric,
-             'remainingAfterTons', $6::numeric
+             'contractId', $4::text,
+             'requestedQuantityTons', $5::numeric,
+             'remainingBeforeTons', $6::numeric,
+             'remainingAfterTons', $7::numeric
            )
          )`,
         [
           order.id,
-          customerUser.id,
+          actor.kind === 'CUSTOMER' ? actor.user.id : null,
+          actor.kind === 'OPERATIONS' ? actor.user.id : null,
           contract.id,
           requestedQuantityTons,
           remainingBefore,
@@ -618,7 +701,7 @@ async function resolveDirectOrderContext(
     );
   }
 
-  const quantityTons = round(payload.quantityTons, 3);
+  const quantityTons = payload.quantityTons;
   const unitWeightKg = Number(product.unit_weight_kg);
   requireProductWeightConfiguration(unitWeightKg, product.uom);
   const equivalentPackagingUnits = packagingQuantityFromTons(
@@ -694,10 +777,11 @@ async function resolveDirectOrderContext(
   const cityResult = await executor.query<PricingCityRow>(
     `select id, name, is_hader_enabled
      from ksa_cities
-     where name_key = lower(regexp_replace(btrim($1), '\\s+', ' ', 'g'))
+     where (($1::uuid is not null and id = $1::uuid)
+         or ($1::uuid is null and name_key = lower(regexp_replace(btrim($2), '\\s+', ' ', 'g'))))
        and is_active = true
      limit 1`,
-    [pricingCityName],
+    [shipTo?.haderCityId ?? null, pricingCityName],
   );
   const city = cityResult.rows[0];
   if (!city) {
@@ -710,6 +794,13 @@ async function resolveDirectOrderContext(
 
   let zoneStatus: HaderZoneStatus | null = null;
   if (payload.fulfilmentType === 'DELIVERY') {
+    if (!city.is_hader_enabled) {
+      throw new AppError(
+        'Hader delivery is not configured for the selected city.',
+        409,
+        'DIRECT_ORDER_HADER_CITY_UNAVAILABLE',
+      );
+    }
     zoneStatus = await resolveDeliveryZoneStatus(executor, city.id, shipTo);
     if (zoneStatus === 'OUTSIDE_HADER_ZONE') {
       throw new AppError(
@@ -734,13 +825,6 @@ async function resolveDirectOrderContext(
 
   let deliveryPrice = 0;
   if (payload.fulfilmentType === 'DELIVERY') {
-    if (!city.is_hader_enabled) {
-      throw new AppError(
-        'Hader delivery is not configured for the selected city.',
-        409,
-        'DIRECT_ORDER_HADER_CITY_UNAVAILABLE',
-      );
-    }
     const configuredDeliveryPrice = await pricingLookupService.getHaderDeliveryPrice(
       { cityId: city.id, isWhiteCement: product.is_white_cement },
       executor,
@@ -809,8 +893,9 @@ export const customerOrdersService = new CustomerOrdersService();
 
 async function getLockedCustomerContract(
   client: PoolClient,
-  customerUser: CustomerUser,
   contractId: string,
+  customerAccountId: string | null,
+  fulfilment: 'DELIVERY' | 'PICKUP' | null,
 ) {
   const result = await client.query<LockedContractRow>(
     `select
@@ -835,6 +920,8 @@ async function getLockedCustomerContract(
        contracts.product_price,
        contracts.delivery_price,
        contracts.vat_rate,
+       contracts.pallet_required,
+       contracts.pallet_type,
        (
          select contract_items.id
          from contract_items
@@ -848,9 +935,10 @@ async function getLockedCustomerContract(
      inner join customer_accounts on customer_accounts.id = contracts.customer_account_id
      inner join registration_drafts on registration_drafts.id = customer_accounts.registration_id
      where contracts.id = $1
-       and contracts.customer_account_id = $2
+       and ($2::uuid is null or contracts.customer_account_id = $2)
+       and ($3::text is null or contracts.fulfilment = $3)
      for update of contracts`,
-    [contractId, customerUser.customerAccountId],
+    [contractId, customerAccountId, fulfilment],
   );
 
   const contract = result.rows[0];
@@ -905,6 +993,32 @@ function contractRemainingTons(contract: LockedContractRow) {
   return round(value, 3);
 }
 
+function resolveOrderPallet(
+  contract: LockedContractRow,
+  payload: CreateCustomerOrderPayload,
+) {
+  const required = contract.pallet_required || payload.palletRequired === true;
+  if (!required) {
+    if (payload.palletType != null || payload.palletQuantity != null) {
+      throw new AppError(
+        'Pallet details must be empty when pallets are disabled.',
+        400,
+        'ORDER_PALLET_DETAILS_NOT_ALLOWED',
+      );
+    }
+    return { required: false, type: null, quantity: null } as const;
+  }
+
+  const type = (contract.pallet_required ? contract.pallet_type : payload.palletType)?.trim();
+  if (!type) {
+    throw new AppError('Pallet type is required.', 400, 'ORDER_PALLET_TYPE_REQUIRED');
+  }
+  if (!Number.isInteger(payload.palletQuantity) || Number(payload.palletQuantity) <= 0) {
+    throw new AppError('Pallet quantity must be a positive whole number.', 400, 'ORDER_PALLET_QUANTITY_INVALID');
+  }
+  return { required: true, type, quantity: Number(payload.palletQuantity) } as const;
+}
+
 function requireOrderWriteAccess(customerUser: CustomerUser) {
   if (!orderWritableRoles.has(customerUser.role)) {
     throw new AppError(
@@ -915,9 +1029,23 @@ function requireOrderWriteAccess(customerUser: CustomerUser) {
   }
 }
 
+function operationalContractScope(salesUser: SalesUser) {
+  if (salesUser.role === 'HADER_MANAGER' || salesUser.role === 'HADER_OPERATIONS') {
+    return { fulfilment: 'DELIVERY' as const, setting: 'hader' as const };
+  }
+  if (salesUser.role === 'DISPATCH_USER') {
+    return { fulfilment: 'PICKUP' as const, setting: 'dispatch' as const };
+  }
+  throw new AppError(
+    'You are not authorized to create orders from operational contracts.',
+    403,
+    'CONTRACT_ORDER_CREATION_FORBIDDEN',
+  );
+}
+
 async function resolvePickupFleet(
   client: PoolClient,
-  customerUser: CustomerUser,
+  customerAccountId: string,
   contract: LockedContractRow,
   payload: CreateCustomerOrderPayload,
   requestedQuantityTons: number,
@@ -936,7 +1064,7 @@ async function resolvePickupFleet(
      from customer_trucks
      where id = $1 and customer_account_id = $2
      for share`,
-    [payload.truckId, customerUser.customerAccountId],
+    [payload.truckId, customerAccountId],
   );
   const truck = truckResult.rows[0];
   if (!truck) {
@@ -962,7 +1090,7 @@ async function resolvePickupFleet(
      from customer_drivers
      where id = $1 and customer_account_id = $2
      for share`,
-    [payload.driverId, customerUser.customerAccountId],
+    [payload.driverId, customerAccountId],
   );
   const driver = driverResult.rows[0];
   if (!driver) {
@@ -1033,6 +1161,9 @@ async function createAutoApprovedDirectOrderContract(
     amount: context.subtotal,
     displayOrder: 0,
     source: 'DIRECT_ORDER',
+    palletRequired: payload.palletRequired,
+    palletType: payload.palletRequired ? payload.palletType : null,
+    palletQuantity: payload.palletRequired ? payload.palletQuantity : null,
   };
 
   const contractResult = await client.query<{ id: string }>(
@@ -1076,9 +1207,9 @@ async function createAutoApprovedDirectOrderContract(
      )
      values (
        $1, $2, $3, $4, $5, $6, $7, $7, $8, $9,
-       $10, $11, false, null, $12, $13, $14, $15, $16, 'ACTIVE',
-       'DIRECT_ORDER', $17, $18, now(), $19, $20, 0, $20, $21, $22,
-       $23, $24, 'List price Direct Order auto-approved.', $25, $26::jsonb, now()
+       $10, $11, $12, $13, $14, $15, $16, $17, $18, 'ACTIVE',
+       'DIRECT_ORDER', $19, $20, now(), $21, $22, 0, $22, $23, $24,
+       $25, $26, 'List price Direct Order auto-approved.', $27, $28::jsonb, now()
      )
      returning id`,
     [
@@ -1093,6 +1224,8 @@ async function createAutoApprovedDirectOrderContract(
       context.pickupLocation?.id ?? null,
       context.shipTo?.id ?? null,
       context.shipTo ? context.city.name : null,
+      payload.palletRequired,
+      payload.palletRequired ? payload.palletType : null,
       productPrice,
       productPrice,
       deliveryPrice,
@@ -1229,6 +1362,9 @@ function mapOrder(
     deliveryRequest: null,
     preferredDeliveryDate: payload.preferredDeliveryDate ?? null,
     deliveryNotes: payload.deliveryNotes ?? null,
+    palletRequired: order.pallet_required,
+    palletType: order.pallet_type,
+    palletQuantity: order.pallet_quantity,
     shipTo,
     pickupLocation: order.pickup_location_id
       ? {
@@ -1255,7 +1391,7 @@ function mapOrder(
     vatRate: Number(order.vat_rate),
     vatAmount: Number(order.vat_amount),
     grandTotal: Number(order.grand_total),
-    createdBy: order.created_by_customer_user_id,
+    createdBy: order.created_by_customer_user_id ?? order.created_by_sales_user_id,
     submittedAt: new Date(String(order.submitted_at)).toISOString(),
     createdAt: new Date(String(order.created_at)).toISOString(),
     updatedAt: new Date(String(order.updated_at)).toISOString(),

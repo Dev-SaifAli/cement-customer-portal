@@ -24,7 +24,3 @@ salesOrdersRouter.post(
   '/:id/reject-direct-order',
   asyncHandler((request, response) => salesOrdersController.rejectDirectOrder(request, response)),
 );
-salesOrdersRouter.post(
-  '/:id/start-processing',
-  asyncHandler((request, response) => salesOrdersController.startProcessing(request, response)),
-);

@@ -7,7 +7,6 @@ const view = requireSalesRole(
   'PRICING_ADMIN',
   'HADER_MANAGER',
   'HADER_OPERATIONS',
-  'DISPATCH_USER',
   'LOADING_USER',
 );
 const manage = requireSalesRole('PRICING_ADMIN', 'HADER_MANAGER', 'HADER_OPERATIONS');

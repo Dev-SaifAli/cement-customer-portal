@@ -7,6 +7,7 @@ import {
   nextDeliveryRequestReference,
   nextShipmentReference,
 } from '../document-numbering/document-numbering.service.js';
+import { loadingPointsService } from '../loading-points/loading-points.service.js';
 
 const PAGE_SIZE = 10;
 
@@ -67,6 +68,37 @@ interface ShipmentRow extends DeliveryRequestRow {
   driver_name: string | null;
   driver_mobile: string | null;
   driver_license_number: string | null;
+  loading_status: string | null;
+}
+
+interface DeliveryRequestShipmentRow {
+  id: string;
+  shipment_number: string;
+  quantity_ton: string;
+  status: string;
+  scheduled_date: Date | string | null;
+  loading_status: string | null;
+  transporter_id: string | null;
+  transporter_name: string | null;
+  hader_truck_id: string | null;
+  truck_number: string | null;
+  plate_number: string | null;
+  hader_driver_id: string | null;
+  driver_name: string | null;
+}
+
+interface ShipmentCancellationRow {
+  id: string;
+  status: string;
+  loading_status: string | null;
+  transporter_id: string | null;
+  hader_truck_id: string | null;
+  hader_driver_id: string | null;
+  scheduled_date: Date | string | null;
+  scheduled_time: string | null;
+  loading_point_id: string | null;
+  loading_point_type: string | null;
+  queue_position: number | null;
 }
 
 export class HaderDeliveryService {
@@ -93,7 +125,20 @@ export class HaderDeliveryService {
     const row = result.rows[0];
     if (!row)
       throw new AppError('Delivery request was not found.', 404, 'DELIVERY_REQUEST_NOT_FOUND');
-    return mapRequest(row);
+    const shipments = await pool.query<DeliveryRequestShipmentRow>(
+      `select s.id,s.shipment_number,s.quantity_ton,s.status,s.scheduled_date,s.loading_status,
+              s.transporter_id,t.name as transporter_name,
+              s.hader_truck_id,ht.truck_number,ht.plate_number,
+              s.hader_driver_id,hd.name as driver_name
+       from shipments s
+       left join transporters t on t.id=s.transporter_id
+       left join hader_trucks ht on ht.id=s.hader_truck_id
+       left join hader_drivers hd on hd.id=s.hader_driver_id
+       where s.delivery_request_id=$1
+       order by s.created_at asc`,
+      [id],
+    );
+    return { ...mapRequest(row), shipments: shipments.rows.map(mapDeliveryRequestShipment) };
   }
 
   async approve(id: string, user: SalesUser) {
@@ -134,7 +179,8 @@ export class HaderDeliveryService {
         }
       }
       const shipped = await client.query<{ total: string }>(
-        `select coalesce(sum(quantity_ton),0)::text as total from shipments where delivery_request_id=$1`,
+        `select coalesce(sum(quantity_ton),0)::text as total from shipments
+         where delivery_request_id=$1 and status<>'CANCELLED'`,
         [id],
       );
       const shippedTon = Number(shipped.rows[0]?.total ?? 0);
@@ -147,7 +193,11 @@ export class HaderDeliveryService {
           'SHIPMENT_QUANTITY_EXCEEDS_REMAINING',
         );
       }
-      const number = await nextShipmentReference(client, request.contract_id, request.contract_reference);
+      const number = await nextShipmentReference(
+        client,
+        request.contract_id,
+        request.contract_reference,
+      );
       const result = await client.query<{ id: string }>(
         `insert into shipments (shipment_number,delivery_request_id,order_id,customer_account_id,
           quantity_ton,status,scheduled_date,created_by_sales_user_id,client_request_id)
@@ -206,13 +256,18 @@ export class HaderDeliveryService {
   }
 
   async listShipments(query: HaderListQuery) {
-    const { values, where } = buildFilters(query, 's.status', [
-      's.shipment_number',
-      'o.order_number',
-      'ca.company_name',
-      'oi.product_name',
-      'oi.product_code',
-    ]);
+    const { values, where } = buildFilters(
+      query,
+      's.status',
+      [
+        's.shipment_number',
+        'o.order_number',
+        'ca.company_name',
+        'oi.product_name',
+        'oi.product_code',
+      ],
+      's.scheduled_date',
+    );
     return listRows<ShipmentRow>(
       `${shipmentSelect} ${where} order by s.created_at desc`,
       values,
@@ -226,6 +281,67 @@ export class HaderDeliveryService {
     const row = result.rows[0];
     if (!row) throw new AppError('Shipment was not found.', 404, 'SHIPMENT_NOT_FOUND');
     return mapShipment(row);
+  }
+
+  async cancelShipment(id: string, user: SalesUser, reason: string) {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      const result = await client.query<ShipmentCancellationRow>(
+        `select id,status,loading_status,transporter_id,hader_truck_id,hader_driver_id,
+          scheduled_date,scheduled_time,loading_point_id,loading_point_type,queue_position
+         from shipments where id=$1 for update`,
+        [id],
+      );
+      const shipment = result.rows[0];
+      if (!shipment) throw new AppError('Shipment was not found.', 404, 'SHIPMENT_NOT_FOUND');
+
+      const eligible =
+        shipment.status === 'CREATED' ||
+        (shipment.status === 'ASSIGNED' &&
+          ['WAITING', 'NOTIFIED', 'AT_GATE'].includes(shipment.loading_status ?? ''));
+      if (!eligible) {
+        throw new AppError(
+          'Shipment can only be cancelled before active loading starts.',
+          409,
+          'SHIPMENT_CANCELLATION_INVALID',
+        );
+      }
+
+      const previousState = {
+        mainStatus: shipment.status,
+        loadingStatus: shipment.loading_status,
+        transporterId: shipment.transporter_id,
+        truckId: shipment.hader_truck_id,
+        driverId: shipment.hader_driver_id,
+        scheduledDate: shipment.scheduled_date,
+        scheduledTime: shipment.scheduled_time,
+        loadingPointId: shipment.loading_point_id,
+        loadingPointType: shipment.loading_point_type,
+        queuePosition: shipment.queue_position,
+      };
+      await client.query(
+        `insert into shipment_events (shipment_id,event_type,previous_status,new_status,
+          changed_by_sales_user_id,notes,event_data)
+         values ($1,'SHIPMENT_CANCELLED',$2,'CANCELLED',$3,$4,$5::jsonb)`,
+        [id, shipment.status, user.id, reason, JSON.stringify(previousState)],
+      );
+      await client.query(
+        `update shipments set status='CANCELLED',queue_position=null,loading_point_id=null,
+          loading_point_type=null,loading_status=null,updated_at=now() where id=$1`,
+        [id],
+      );
+      if (shipment.loading_point_id) {
+        await loadingPointsService.refreshAvailability(shipment.loading_point_id, client);
+      }
+      await client.query('commit');
+      return this.getShipment(id);
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   private async changeRequestStatus(
@@ -333,7 +449,12 @@ export async function createDeliveryRequestForOrder(
   return { id: row.id, requestNumber: row.request_number, status: row.status, created: false };
 }
 
-function buildFilters(query: HaderListQuery, statusColumn: string, searchColumns: string[]) {
+function buildFilters(
+  query: HaderListQuery,
+  statusColumn: string,
+  searchColumns: string[],
+  scheduledDateColumn?: string,
+) {
   const values: unknown[] = [];
   const clauses: string[] = [];
   if (query.status) {
@@ -353,6 +474,10 @@ function buildFilters(query: HaderListQuery, statusColumn: string, searchColumns
   if (query.requestedDate) {
     values.push(query.requestedDate);
     clauses.push(`dr.requested_date=$${values.length}`);
+  }
+  if (query.scheduledDate && scheduledDateColumn) {
+    values.push(query.scheduledDate);
+    clauses.push(`${scheduledDateColumn}=$${values.length}`);
   }
   if (query.productId) {
     values.push(query.productId);
@@ -438,6 +563,7 @@ function mapShipment(row: ShipmentRow) {
     scheduledTime: row.scheduled_time ? String(row.scheduled_time).slice(0, 5) : null,
     assignedAt: dateTime(row.assigned_at),
     dispatchedAt: dateTime(row.dispatched_at),
+    loadingStatus: row.loading_status,
     assignment: row.transporter_id
       ? {
           transporter: { id: row.transporter_id, name: row.transporter_name },
@@ -463,6 +589,25 @@ function mapShipment(row: ShipmentRow) {
     deliveredAt: dateTime(row.delivered_at),
     createdAt: dateTime(row.shipment_created_at),
     deliveryRequest: mapRequest(row),
+  };
+}
+function mapDeliveryRequestShipment(row: DeliveryRequestShipmentRow) {
+  return {
+    id: row.id,
+    shipmentNumber: row.shipment_number,
+    quantityTon: Number(row.quantity_ton),
+    status: row.status,
+    scheduledDate: dateOnly(row.scheduled_date),
+    loadingStatus: row.loading_status,
+    assignment: {
+      transporter: row.transporter_id
+        ? { id: row.transporter_id, name: row.transporter_name }
+        : null,
+      truck: row.hader_truck_id
+        ? { id: row.hader_truck_id, number: row.truck_number, plateNumber: row.plate_number }
+        : null,
+      driver: row.hader_driver_id ? { id: row.hader_driver_id, name: row.driver_name } : null,
+    },
   };
 }
 function objectValue(value: unknown) {
@@ -497,13 +642,14 @@ const deliveryRequestColumns = `dr.*,o.order_number,o.contract_id,c.reference as
  contact.name as contact_name,contact.phone as contact_phone,oi.product_id,oi.product_code,oi.product_name,
  oi.packaging,oi.contract_uom,p.unit_weight_kg,o.hader_city_name,o.ship_to_snapshot,o.delivery_notes,
  o.approved_customer_rate_per_ton as customer_rate_per_ton,o.amount as total_amount,
- (select coalesce(sum(sx.quantity_ton),0)::text from shipments sx where sx.delivery_request_id=dr.id) as shipped_ton`;
+ (select coalesce(sum(sx.quantity_ton),0)::text from shipments sx
+  where sx.delivery_request_id=dr.id and sx.status<>'CANCELLED') as shipped_ton`;
 const deliveryRequestSelect = `select ${deliveryRequestColumns} ${commonJoin}`;
 const shipmentSelect = `select ${deliveryRequestColumns},s.id as shipment_id,s.shipment_number,
  s.quantity_ton as shipment_quantity_ton,s.status as shipment_status,s.scheduled_date,s.scheduled_time,
  s.assigned_at,s.dispatched_at,s.transporter_id,t.name as transporter_name,
  s.hader_truck_id,ht.truck_number,ht.plate_number,ht.vehicle_type,ht.capacity_ton as truck_capacity_ton,
- s.hader_driver_id,hd.name as driver_name,hd.mobile as driver_mobile,
+ s.hader_driver_id,hd.name as driver_name,hd.mobile as driver_mobile,s.loading_status,
  hd.license_number as driver_license_number,s.delivered_at,s.created_at as shipment_created_at
  ${commonJoin} inner join shipments s on s.delivery_request_id=dr.id
  left join transporters t on t.id=s.transporter_id

@@ -1,6 +1,6 @@
 import { AlertCircle, ArrowRight, BriefcaseBusiness, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import Logo from '../../components/Logo/Logo';
 import { useSalesAuth } from '../../context/SalesAuthContext';
 import { SalesApiError } from '../../services/salesService';
@@ -158,6 +158,12 @@ export function SalesLogin() {
               {fieldErrors.password && (
                 <p className="mt-2 text-xs text-red-600">{fieldErrors.password}</p>
               )}
+            </div>
+
+            <div className="flex justify-end">
+              <Link to="/forgot-password" className="customer-primary text-sm font-semibold">
+                Forgot password?
+              </Link>
             </div>
 
             <button

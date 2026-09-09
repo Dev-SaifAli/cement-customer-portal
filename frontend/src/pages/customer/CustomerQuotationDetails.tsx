@@ -13,8 +13,9 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
 import { ProductImage } from '../../components/customer/ProductImage';
+import { DetailBreadcrumb } from '../../components/customer-detail/DetailBreadcrumb';
+import { DocumentHeader } from '../../components/customer-detail/DocumentHeader';
 import {
   QuotationPreviewModal,
   type QuotationPreviewAction,
@@ -27,6 +28,7 @@ import {
   requestCustomerQuotationClarification,
   type CustomerQuotation,
 } from '../../services/customerQuotationsService';
+import { formatCommercialTons } from '../../utils/commercialQuantity';
 
 type Decision = 'accept' | 'reject' | 'clarification';
 
@@ -101,29 +103,25 @@ export function CustomerQuotationDetails({
 
   return (
     <div className="space-y-4 pb-8 text-[#1a1b23]">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <Link
-            to="/customer/quotations"
-            className="mb-2 inline-flex text-xs font-semibold text-slate-600 hover:text-[#54247a]"
-          >
-            ← RFQs
-          </Link>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight">
-              RFQ / {quotation.reference ?? 'Reference pending'}
-            </h1>
-            <Status status={quotation.status} />
-          </div>
-          <p className="mt-1 text-xs text-slate-600">
+      <DetailBreadcrumb
+        listLabel="RFQs"
+        listPath="/customer/quotations"
+        current={quotation.reference ?? 'Reference pending'}
+      />
+      <DocumentHeader
+        number={quotation.reference ?? 'Reference pending'}
+        status={<Status status={quotation.status} />}
+        description={
+          <p className="text-xs">
             Customer: <span className="font-semibold text-slate-800">{account.companyName}</span>
             <span className="mx-2 text-slate-300">|</span>
             Customer ID: <span className="font-medium">{account.id}</span>
             <span className="mx-2 text-slate-300">|</span>
             Created on: {formatDateTime(quotation.createdAt)}
           </p>
-        </div>
-        <div className="flex items-center gap-2">
+        }
+        actions={
+          <>
           <button
             type="button"
             onClick={() => setPreviewAction('preview')}
@@ -138,8 +136,9 @@ export function CustomerQuotationDetails({
           >
             <Download size={16} /> Download PDF
           </button>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       {success && (
         <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
@@ -198,6 +197,10 @@ export function CustomerQuotationDetails({
         <InfoGroup>
           <Info label="Payment Terms" value={quotation.paymentTerms} />
           <Info label="Valid Until" value={formatDate(quotation.validUntil)} />
+          <Info
+            label="Special Price Requested"
+            value={quotation.specialPriceRequested ? 'Yes' : 'No'}
+          />
           <Info label="Customer Notes" value={quotation.notes} />
         </InfoGroup>
       </section>
@@ -243,7 +246,7 @@ export function CustomerQuotationDetails({
                     </div>
                   </td>
                   <td className={`${cell} text-right`}>
-                    <div>{formatQuantity(item.quantityTon)} TON</div>
+                    <div>{formatCommercialTons(item.quantityTon)}</div>
                   </td>
                   <td className={cell}>{item.commercialUom}</td>
                   <td className={cell}>{item.packagingType}</td>

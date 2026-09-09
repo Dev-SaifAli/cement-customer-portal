@@ -4,9 +4,11 @@ import type { SalesAuthenticatedRequest } from '../sales-auth/sales-auth.types.j
 import { adminPricingService } from './admin-pricing.service.js';
 import {
   cityParamsSchema,
+  contractOrderCreationActorSchema,
   productPriceParamsSchema,
   updateHaderCitySchema,
   updateListPriceDirectOrderApprovalSchema,
+  updateContractOrderCreationSchema,
   upsertDeliveryPriceSchema,
   upsertProductPriceSchema,
 } from './admin-pricing.validation.js';
@@ -69,6 +71,16 @@ export class AdminPricingController {
       data: {
         setting: await adminPricingService.setListPriceDirectOrderApproval(value, user),
       },
+    });
+  }
+
+  async updateContractOrderCreation(request: SalesAuthenticatedRequest, response: Response) {
+    const user = requirePricingAdmin(request);
+    const actor = contractOrderCreationActorSchema.parse(request.params.actor);
+    const { value } = updateContractOrderCreationSchema.parse(request.body);
+    response.status(200).json({
+      success: true,
+      data: { setting: await adminPricingService.setContractOrderCreation(actor, value, user) },
     });
   }
 }

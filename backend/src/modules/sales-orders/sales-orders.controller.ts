@@ -19,17 +19,6 @@ export class SalesOrdersController {
     response.json({ success: true, data: { order: await salesOrdersService.getById(id) } });
   }
 
-  async startProcessing(request: SalesAuthenticatedRequest, response: Response) {
-    if (!request.salesUser) {
-      throw new AppError('Sales authentication is required.', 401, 'SALES_AUTH_REQUIRED');
-    }
-    const id = salesOrderIdSchema.parse(request.params.id);
-    response.json({
-      success: true,
-      data: { order: await salesOrdersService.startProcessing(id, request.salesUser) },
-    });
-  }
-
   async approveDirectOrder(request: SalesAuthenticatedRequest, response: Response) {
     if (!request.salesUser) {
       throw new AppError('Sales authentication is required.', 401, 'SALES_AUTH_REQUIRED');

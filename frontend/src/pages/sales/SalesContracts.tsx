@@ -7,9 +7,18 @@ import {
   type SalesContractDetails,
   type SalesContractsList,
 } from '../../services/salesService';
+import { formatCommercialTonValue } from '../../utils/commercialQuantity';
+import { LocationCityDisplay } from '../../components/list/LocationCityDisplay';
+import { TrackingQrCell } from '../../components/list/TrackingQrCell';
 
 const pageSize = 10;
-const statusOptions = ['', 'DRAFT', 'ACTIVE'] as const;
+const statusOptions = [
+  '',
+  'DRAFT',
+  'UNDER_REVIEW',
+  'CHANGES_REQUESTED',
+  'ACTIVE',
+] as const;
 
 type ContractFilters = {
   status: (typeof statusOptions)[number];
@@ -106,12 +115,17 @@ export function SalesContractsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-[1180px] w-full text-left text-sm">
+            <table className="min-w-[1780px] w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-[#e2e8f0] bg-[#f8fafc] text-xs font-bold uppercase tracking-wide text-[#64748b]">
+                  <th className="px-4 py-3">QR</th>
                   <th className="px-4 py-3">Contract No.</th>
                   <th className="px-4 py-3">Customer</th>
                   <th className="px-4 py-3">Product / Type</th>
+                  <th className="px-4 py-3">Fulfilment</th>
+                  <th className="px-4 py-3">Hader City</th>
+                  <th className="px-4 py-3">Ship-to City</th>
+                  <th className="px-4 py-3">Orders</th>
                   <th className="px-4 py-3">Total TON</th>
                   <th className="px-4 py-3">Remaining TON</th>
                   <th className="px-4 py-3">Start Date</th>
@@ -121,6 +135,7 @@ export function SalesContractsPage() {
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
                 <tr className="border-b border-[#e2e8f0] bg-white">
+                  <th className="px-4 py-2" />
                   <th className="px-4 py-2" />
                   <th className="px-4 py-2">
                     <FilterInput
@@ -136,6 +151,10 @@ export function SalesContractsPage() {
                       onChange={(value) => updateFilter('product', value)}
                     />
                   </th>
+                  <th className="px-4 py-2" />
+                  <th className="px-4 py-2" />
+                  <th className="px-4 py-2" />
+                  <th className="px-4 py-2" />
                   <th className="px-4 py-2" />
                   <th className="px-4 py-2" />
                   <th className="px-4 py-2">
@@ -160,6 +179,8 @@ export function SalesContractsPage() {
                     >
                       <option value="">All</option>
                       <option value="DRAFT">Draft</option>
+                      <option value="UNDER_REVIEW">Under Review</option>
+                      <option value="CHANGES_REQUESTED">Changes Requested</option>
                       <option value="ACTIVE">Active</option>
                     </NativeTomSelect>
                   </th>
@@ -171,14 +192,14 @@ export function SalesContractsPage() {
                 {loading ? (
                   Array.from({ length: 6 }).map((_, index) => (
                     <tr key={index}>
-                      <td colSpan={10} className="px-4 py-3">
+                      <td colSpan={15} className="px-4 py-3">
                         <div className="h-10 animate-pulse rounded-lg bg-slate-100" />
                       </td>
                     </tr>
                   ))
                 ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-12 text-center">
+                    <td colSpan={15} className="px-4 py-12 text-center">
                       <BriefcaseBusiness className="mx-auto text-slate-300" size={34} />
                       <p className="mt-3 text-sm font-bold text-[#1a1b23]">No contracts found</p>
                       <p className="mt-1 text-sm text-[#64748b]">
@@ -230,6 +251,9 @@ function ContractRow({ contract }: { contract: SalesContractDetails }) {
   return (
     <tr className="hover:bg-[#f8fafc]">
       <td className="px-4 py-3">
+        <TrackingQrCell documentType="CONTRACT" reference={contract.reference} viewTo={`/sales/contracts/${contract.id}`} />
+      </td>
+      <td className="px-4 py-3">
         <Link to={`/sales/contracts/${contract.id}`} className="font-bold text-[#54247a] hover:underline">
           {contract.reference ?? 'Draft contract'}
         </Link>
@@ -243,8 +267,12 @@ function ContractRow({ contract }: { contract: SalesContractDetails }) {
           {[contract.productCode, contract.packaging].filter(Boolean).join(' · ') || 'Not provided'}
         </p>
       </td>
-      <td className="px-4 py-3 text-[#1a1b23]">{formatNumber(contract.totalQuantityTons)}</td>
-      <td className="px-4 py-3 text-[#1a1b23]">{formatNumber(contract.remainingQuantityTons)}</td>
+      <td className="px-4 py-3">{contract.fulfilment === 'DELIVERY' ? 'Delivery' : 'Pick-Up'}</td>
+      <td className="px-4 py-3"><LocationCityDisplay city={contract.fulfilment === 'DELIVERY' ? contract.haderCity : null} /></td>
+      <td className="px-4 py-3"><LocationCityDisplay city={contract.shipToCity} /></td>
+      <td className="px-4 py-3 tabular-nums">{contract.orderCount ?? 0}</td>
+      <td className="px-4 py-3 text-[#1a1b23]">{contract.totalQuantityTons == null ? 'Not provided' : formatCommercialTonValue(contract.totalQuantityTons)}</td>
+      <td className="px-4 py-3 text-[#1a1b23]">{contract.remainingQuantityTons == null ? 'Not provided' : formatCommercialTonValue(contract.remainingQuantityTons)}</td>
       <td className="px-4 py-3 text-[#1a1b23]">{formatDate(contract.startDate)}</td>
       <td className="px-4 py-3 text-[#1a1b23]">{formatDate(contract.endDate)}</td>
       <td className="px-4 py-3">
@@ -324,10 +352,6 @@ function formatMoney(value?: number | null) {
   return value == null
     ? 'Not provided'
     : `${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR`;
-}
-
-function formatNumber(value?: number | null) {
-  return value == null ? 'Not provided' : value.toLocaleString(undefined, { maximumFractionDigits: 3 });
 }
 
 function formatDate(value?: string | null) {

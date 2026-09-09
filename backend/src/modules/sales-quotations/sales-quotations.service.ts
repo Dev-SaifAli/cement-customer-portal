@@ -47,6 +47,7 @@ interface QuotationRow {
   pickup_location_id: string | null;
   ship_to_location_id: string | null;
   requested_date: string | Date | null;
+  special_price_requested: boolean;
   notes: string | null;
   submitted_at: string | Date | null;
   created_at: string | Date;
@@ -253,9 +254,17 @@ export class SalesQuotationsService {
   async getById(id: string, user: SalesUser) {
     const quotation = await this.getQuotation(id);
     requireQuotationVisibility(quotation, user.role);
+    return this.loadDetails(quotation, user);
+  }
+
+  private async getAfterAuthorizedAction(id: string, user: SalesUser) {
+    return this.loadDetails(await this.getQuotation(id), user);
+  }
+
+  private async loadDetails(quotation: QuotationRow, user: SalesUser) {
     const [items, events] = await Promise.all([
-      this.getItems(id, quotation.pricing_city_id),
-      this.getEvents(id),
+      this.getItems(quotation.id, quotation.pricing_city_id),
+      this.getEvents(quotation.id),
     ]);
     return this.mapDetails(quotation, items, events, user, await resolveDestination(quotation));
   }
@@ -563,7 +572,7 @@ export class SalesQuotationsService {
     } finally {
       client.release();
     }
-    const details = await this.getById(id, user);
+    const details = await this.getAfterAuthorizedAction(id, user);
     await notificationEvents.quotationApprovalRequired(
       details.status === 'PENDING_HADER_APPROVAL'
         ? 'HADER_APPROVAL_REQUIRED'
@@ -613,7 +622,7 @@ export class SalesQuotationsService {
     } finally {
       client.release();
     }
-    const details = await this.getById(id, user);
+    const details = await this.getAfterAuthorizedAction(id, user);
     if (details.status === 'PENDING_PRICE_APPROVAL') {
       await notificationEvents.quotationApprovalRequired(
         'PRICE_APPROVAL_REQUIRED',
@@ -655,7 +664,7 @@ export class SalesQuotationsService {
     } finally {
       client.release();
     }
-    return this.getById(id, user);
+    return this.getAfterAuthorizedAction(id, user);
   }
 
   async sendToCustomer(id: string, user: SalesUser) {
@@ -779,6 +788,7 @@ export class SalesQuotationsService {
       },
       submittedBy: submittedBy?.customer_user_name ?? null,
       requestedDate: dateOnly(quotation.requested_date),
+      specialPriceRequested: quotation.special_price_requested,
       fulfilmentType: quotation.fulfilment_type,
       pricingCity: quotation.pricing_city_id
         ? { id: quotation.pricing_city_id, name: quotation.pricing_city_name }

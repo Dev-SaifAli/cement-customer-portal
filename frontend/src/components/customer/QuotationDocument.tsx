@@ -1,6 +1,7 @@
 import { forwardRef, type ReactNode } from 'react';
 import type { CustomerAuthAccount, CustomerAuthUser } from '../../services/customerAuthService';
 import type { CustomerQuotation } from '../../services/customerQuotationsService';
+import { formatCommercialTonValue } from '../../utils/commercialQuantity';
 import './QuotationDocument.css';
 
 interface QuotationDocumentProps {
@@ -135,7 +136,7 @@ export const QuotationDocument = forwardRef<HTMLDivElement, QuotationDocumentPro
                       {item.product.productName}
                     </td>
                     <td className="border border-[#d9d5de] px-2 py-2 text-right font-semibold">
-                      {formatQuantity(item.quantityTon)}
+                      {formatCommercialTonValue(item.quantityTon)}
                     </td>
                     <td className="border border-[#d9d5de] px-2 py-2 text-center">
                       {item.commercialUom}

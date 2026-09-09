@@ -90,7 +90,7 @@ describe('POST /api/v1/auth/forgot-password', () => {
     const response = await request(createApp())
       .post('/api/v1/auth/forgot-password')
       .send({
-        email: 'person@example.com',
+        identifier: 'person@example.com',
         captchaChallengeId: captcha.challengeId,
         captchaAnswer: solvePrompt(captcha.prompt),
       });
@@ -98,7 +98,7 @@ describe('POST /api/v1/auth/forgot-password', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
       success: true,
-      message: 'If an account exists for this email, password reset instructions will be sent.',
+      message: 'If an account exists, a password reset link has been sent.',
     });
   });
 
@@ -106,7 +106,7 @@ describe('POST /api/v1/auth/forgot-password', () => {
     const captcha = await getCaptcha();
 
     const response = await request(createApp()).post('/api/v1/auth/forgot-password').send({
-      email: 'person@example.com',
+      identifier: 'person@example.com',
       captchaChallengeId: captcha.challengeId,
       captchaAnswer: 'wrong',
     });

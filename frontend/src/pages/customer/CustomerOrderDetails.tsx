@@ -1,17 +1,37 @@
-import { ArrowLeft, FileText, Lock, MapPin } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { getCustomerOrder, type CustomerOrder } from '../../services/customerOrdersService';
+import { FileText, Lock, MapPin } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { DetailBreadcrumb } from '../../components/customer-detail/DetailBreadcrumb';
+import { DetailField } from '../../components/customer-detail/DetailField';
+import { DetailSection } from '../../components/customer-detail/DetailSection';
+import {
+  DocumentHeader,
+  DocumentStatusBadge,
+} from '../../components/customer-detail/DocumentHeader';
+import { DocumentReference } from '../../components/customer-detail/DocumentReference';
+import { ProductDisplay } from '../../components/customer-detail/ProductDisplay';
+import {
+  getCustomerOrder,
+  type CustomerOrder,
+  type OrderStatus,
+} from '../../services/customerOrdersService';
+import { formatCommercialTons } from '../../utils/commercialQuantity';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import { formatOrderCreator } from '../../utils/orderCreator';
 
-export function CustomerOrderDetails() {
+export function CustomerOrderDetails({ context }: { context: 'DIRECT' | 'CONTRACT' }) {
+  const { user } = useCustomerAuth();
   const { id } = useParams();
   const [order, setOrder] = useState<CustomerOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
-    getCustomerOrder(id)
+    setLoading(true);
+    setError('');
+    void getCustomerOrder(id)
       .then((data) => {
         if (!cancelled) setOrder(data);
       })
@@ -25,168 +45,193 @@ export function CustomerOrderDetails() {
       cancelled = true;
     };
   }, [id]);
+
   if (loading) return <State text="Loading order..." />;
   if (error || !order) return <State text={error || 'Order was not found.'} error />;
+
+  const isDirectOrder = context === 'DIRECT';
+  const listPath = isDirectOrder ? '/customer/direct-orders' : '/customer/orders';
+  const listLabel = isDirectOrder ? 'Direct Orders' : 'Orders';
+  const submittedDate = order.submittedAt ?? order.createdAt;
+  const submittedDateLabel = order.submittedAt ? 'Submitted On' : 'Created Date';
+
   return (
-    <div className="space-y-5">
-      <div>
-        <Link
-          to="/customer/orders"
-          className="customer-secondary inline-flex items-center gap-2 text-sm font-semibold hover:text-[var(--customer-primary)]"
-        >
-          <ArrowLeft size={16} /> Orders
-        </Link>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="customer-text text-2xl font-bold">{order.orderNumber}</h1>
-          <span className="customer-primary-soft customer-primary inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-bold">
-            <span className="h-2 w-2 rounded-full bg-amber-500" />
-            {title(order.status)}
-          </span>
-        </div>
-      </div>
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Card title="Order Information" icon={<FileText size={17} />}>
-          <Field
-            label="Order Type"
-            value={order.orderType === 'DIRECT' ? 'Direct Order' : 'Contract Order'}
+    <div className="mx-auto w-full max-w-[1450px] space-y-5">
+      <DetailBreadcrumb
+        listLabel={listLabel}
+        listPath={listPath}
+        current={order.orderNumber}
+      />
+
+      <DocumentHeader
+        number={order.orderNumber}
+        status={
+          <DocumentStatusBadge
+            label={formatStatus(order.status)}
+            tone={statusTone(order.status)}
           />
-          {order.contract && <Field label="Contract Number" value={order.contract.reference} />}
-          <Field label="Product" value={`${order.product.name} (${order.product.code})`} />
-          <Field label="Packaging" value={order.product.packaging} />
-          <Field label="Quantity" value={`${num(order.requestedQuantityTons)} TON`} />
-          {order.orderType === 'DIRECT' && order.product.equivalentPackagingUnits !== null && (
-            <Field
+        }
+      />
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <DetailSection title="Order Information" icon={<FileText size={17} />}>
+          <DetailField
+            label="Product"
+            value={<ProductDisplay name={order.product.name} code={order.product.code} />}
+            className="sm:col-span-2"
+          />
+          <DetailField label="Quantity" value={formatCommercialTons(order.requestedQuantityTons)} />
+          <DetailField label="Packaging" value={order.product.packaging} />
+          <DetailField label="Pallet Required" value={order.palletRequired ? 'Yes' : 'No'} />
+          <DetailField label="Pallet Type" value={order.palletType} />
+          <DetailField
+            label="Pallet Quantity"
+            value={order.palletQuantity == null ? null : String(order.palletQuantity)}
+          />
+          {isDirectOrder && order.product.equivalentPackagingUnits !== null && (
+            <DetailField
               label="Equivalent Bags"
-              value={`${num(order.product.equivalentPackagingUnits)} Bags`}
+              value={`${formatNumber(order.product.equivalentPackagingUnits)} Bags`}
             />
           )}
-          <Field
+          <DetailField
             label="Fulfilment"
             value={order.fulfilmentType === 'DELIVERY' ? 'Hader Delivery' : 'Pick-Up'}
           />
-          <Field label="Requested Date" value={date(order.submittedAt ?? order.createdAt)} />
-        </Card>
-        <Card title="Delivery / Pickup" icon={<MapPin size={17} />}>
-          <Field
-            label={order.fulfilmentType === 'DELIVERY' ? 'Ship-to' : 'Pickup Location'}
+          <DetailField label={submittedDateLabel} value={formatDate(submittedDate)} />
+          <DetailField label="Created By" value={formatOrderCreator(order.creator, user?.id)} />
+          <DetailField
+            label="Contract"
             value={
-              order.fulfilmentType === 'DELIVERY'
-                ? shipTo(order.shipTo)
-                : order.pickupLocation?.name
+              <DocumentReference
+                reference={order.contract?.reference}
+                entityId={order.contract?.id}
+                routeBase="/customer/contracts"
+                ariaLabel={
+                  order.contract?.reference
+                    ? `Open contract ${order.contract.reference}`
+                    : 'Contract not available'
+                }
+              />
             }
           />
-          <Field label="Hader City" value={order.haderCity} />
-          <Field
-            label="Preferred Delivery Date"
-            value={order.preferredDeliveryDate ? date(order.preferredDeliveryDate) : null}
-          />
-          <Field label="Notes" value={order.deliveryNotes} />
-          {order.fulfilmentType === 'PICKUP' && (
+        </DetailSection>
+
+        <DetailSection title="Delivery / Pickup" icon={<MapPin size={17} />}>
+          {order.fulfilmentType === 'DELIVERY' ? (
             <>
-              <Field label="Pickup Truck" value={order.pickupTruck?.plateNumber} />
-              <Field
+              <DetailField label="Ship-to" value={order.shipTo?.name} />
+              <DetailField label="Address" value={formatAddress(order.shipTo)} />
+              <DetailField label="Hader City" value={order.haderCity} />
+              <DetailField
+                label="Preferred Delivery Date"
+                value={order.preferredDeliveryDate ? formatDate(order.preferredDeliveryDate) : null}
+              />
+              <DetailField label="Notes" value={order.deliveryNotes} className="sm:col-span-2" />
+            </>
+          ) : (
+            <>
+              <DetailField label="Pickup Location" value={order.pickupLocation?.name} />
+              {order.preferredDeliveryDate && (
+                <DetailField
+                  label="Preferred Delivery Date"
+                  value={formatDate(order.preferredDeliveryDate)}
+                />
+              )}
+              <DetailField label="Pickup Truck" value={order.pickupTruck?.plateNumber} />
+              <DetailField
                 label="Truck Details"
                 value={
                   order.pickupTruck
-                    ? `${order.pickupTruck.vehicleType} · ${num(order.pickupTruck.capacityTon)} TON`
+                    ? `${order.pickupTruck.vehicleType} / ${formatNumber(order.pickupTruck.capacityTon)} TON`
                     : null
                 }
               />
-              <Field label="Driver" value={order.pickupDriver?.name} />
-              <Field
+              <DetailField label="Driver" value={order.pickupDriver?.name} />
+              <DetailField
                 label="Driver Details"
                 value={
                   order.pickupDriver
-                    ? `${order.pickupDriver.mobile} · ${order.pickupDriver.licenseNumber}`
+                    ? `${order.pickupDriver.mobile} / ${order.pickupDriver.licenseNumber}`
                     : null
                 }
               />
+              <DetailField label="Notes" value={order.deliveryNotes} className="sm:col-span-2" />
             </>
           )}
-        </Card>
+        </DetailSection>
       </div>
-      <section className="customer-card rounded-2xl border p-5">
-        <div className="flex items-center gap-2">
-          <Lock size={17} className="customer-primary" />
-          <h2 className="customer-primary text-sm font-bold">Commercial Summary</h2>
-        </div>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <Field label="Customer Rate / TON" value={money(order.customerRatePerTon)} />
-          <Field label="Subtotal" value={money(order.subtotal)} />
-          <Field label={`VAT (${order.vatRate}%)`} value={money(order.vatAmount)} />
-          <Field label="Grand Total" value={money(order.grandTotal)} strong />
-          {order.remainingContractQuantityTons !== null && (
-            <Field
-              label="Remaining Contract Quantity"
-              value={`${num(order.remainingContractQuantityTons)} TON`}
-            />
-          )}
-        </div>
-      </section>
-    </div>
-  );
-}
-function Card({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
-  return (
-    <section className="customer-card rounded-2xl border p-5">
-      <h2 className="customer-primary flex items-center gap-2 text-sm font-bold">
-        {icon}
-        {title}
-      </h2>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">{children}</div>
-    </section>
-  );
-}
-function Field({
-  label,
-  value,
-  strong = false,
-}: {
-  label: string;
-  value: string | null | undefined;
-  strong?: boolean;
-}) {
-  return (
-    <div>
-      <p className="customer-muted text-xs">{label}</p>
-      <p
-        className={`mt-1 text-sm ${strong ? 'customer-primary font-bold' : 'customer-text font-semibold'}`}
+
+      <DetailSection
+        title="Commercial Summary"
+        icon={<Lock size={17} />}
+        contentClassName="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4"
       >
-        {value || 'Not provided'}
-      </p>
+        <DetailField label="Customer Rate / TON" value={formatMoney(order.customerRatePerTon)} />
+        <DetailField label="Subtotal" value={formatMoney(order.subtotal)} />
+        <DetailField label={`VAT (${order.vatRate}%)`} value={formatMoney(order.vatAmount)} />
+        <DetailField label="Grand Total" value={formatMoney(order.grandTotal)} strong />
+        {!isDirectOrder && order.remainingContractQuantityTons !== null && (
+          <DetailField
+            label="Remaining Contract Quantity"
+            value={formatCommercialTons(order.remainingContractQuantityTons)}
+          />
+        )}
+      </DetailSection>
     </div>
   );
 }
+
 function State({ text, error = false }: { text: string; error?: boolean }) {
   return (
     <div
-      className={`customer-card rounded-2xl border p-8 text-sm font-semibold ${error ? 'text-red-600' : 'customer-secondary'}`}
+      className={`border border-[var(--customer-border)] bg-[var(--customer-surface)] p-8 text-sm font-semibold ${
+        error ? 'text-[var(--customer-danger)]' : 'text-[var(--customer-text-muted)]'
+      }`}
     >
       {text}
     </div>
   );
 }
-function title(value: string) {
+
+function statusTone(status: OrderStatus) {
+  if (status === 'REJECTED' || status === 'CANCELLED') return 'destructive' as const;
+  if (status === 'PENDING_APPROVAL' || status === 'SUBMITTED') return 'warning' as const;
+  if (status === 'APPROVED' || status === 'COMPLETED') return 'success' as const;
+  return 'secondary' as const;
+}
+
+function formatStatus(value: string) {
   return value
     .split('_')
     .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
     .join(' ');
 }
-function num(value: number) {
+
+function formatNumber(value: number) {
   return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
 }
-function money(value: number) {
-  return `${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR`;
+
+function formatMoney(value: number) {
+  return `${value.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} SAR`;
 }
-function date(value: string) {
-  return new Date(value).toLocaleDateString(undefined, {
+
+function formatDate(value: string) {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T00:00:00`)
+    : new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
   });
 }
-function shipTo(value: CustomerOrder['shipTo']) {
-  return value
-    ? [value.name, value.streetAddress, value.city, value.region].filter(Boolean).join(', ')
-    : 'Not provided';
+
+function formatAddress(value: CustomerOrder['shipTo']) {
+  if (!value) return null;
+  return [value.streetAddress, value.city, value.region].filter(Boolean).join(', ') || null;
 }

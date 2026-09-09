@@ -57,6 +57,7 @@ const deliveryLocationSchema = z
     siteId: z.string().optional(),
     streetAddress: z.string().trim().min(1, 'Street address is required'),
     city: z.string().trim().min(1, 'City is required'),
+    haderCityId: z.string().uuid().optional(),
     region: z.string().trim().min(1, 'Region is required'),
     country: z.string().trim().min(1, 'Country is required'),
     postalCode: z

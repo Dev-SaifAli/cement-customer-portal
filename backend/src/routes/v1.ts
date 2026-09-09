@@ -51,6 +51,8 @@ import { salesAuthRouter } from '../modules/sales-auth/sales-auth.routes.js';
 import { salesContractsRouter } from '../modules/sales-contracts/sales-contracts.routes.js';
 import { salesOrdersRouter } from '../modules/sales-orders/sales-orders.routes.js';
 import { salesQuotationsRouter } from '../modules/sales-quotations/sales-quotations.routes.js';
+import { operationalContractsRouter } from '../modules/operational-contracts/operational-contracts.routes.js';
+import { operationalOrdersRouter } from '../modules/operational-orders/operational-orders.routes.js';
 import { notificationsRouter } from '../modules/notifications/notifications.routes.js';
 import {
   adminHaderCitiesRouter,
@@ -101,6 +103,8 @@ v1Router.use('/health', healthRouter);
 v1Router.use('/notifications', notificationsRouter);
 v1Router.use('/location', customerLocationValidationRouter);
 v1Router.use('/hader/delivery-requests', haderDeliveryRequestsRouter);
+v1Router.use('/hader/contracts', operationalContractsRouter);
+v1Router.use('/hader/orders', operationalOrdersRouter);
 v1Router.use('/hader/dispatch', haderDispatchRouter);
 v1Router.use('/hader/loading-control', haderLoadingRouter);
 v1Router.use('/hader/delivery-team', haderDeliveryTeamRouter);

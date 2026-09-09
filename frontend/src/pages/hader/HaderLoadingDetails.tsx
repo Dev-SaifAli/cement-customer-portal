@@ -11,6 +11,7 @@ import {
   startShipmentLoading,
   type LoadingDetail,
 } from '../../services/haderDeliveryService';
+import { formatTonQuantity } from '../../utils/quantity';
 import { Status, date } from './HaderDeliveryRequests';
 
 export function HaderLoadingDetails() {
@@ -63,13 +64,13 @@ export function HaderLoadingDetails() {
         <Card title="Shipment">
           <Info label="Order" value={item.deliveryRequest.order.number} />
           <Info label="Customer" value={item.deliveryRequest.customer.companyName} />
-          <Info label="Quantity" value={`${item.quantityTon.toFixed(3)} TON`} />
+          <Info label="Quantity" value={formatTonQuantity(item.quantityTon)} />
           <Info label="Equivalent Bags" value={item.deliveryRequest.equivalentBags} />
         </Card>
         <Card title="Product & Queue">
           <Info label="Product" value={item.deliveryRequest.product.name} />
           <Info label="Packaging" value={item.deliveryRequest.product.packaging} />
-          <Info label="Product Queue" value={`#${l.queuePosition ?? '—'}`} />
+          <Info label="Queue Position" value={String(l.queuePosition ?? '—')} />
           <Info
             label="Scheduled"
             value={`${date(item.scheduledDate)} ${item.scheduledTime ?? ''}`}

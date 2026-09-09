@@ -2,7 +2,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { AlertCircle, CheckCircle2, LocateFixed, MapPin, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, Marker, Polygon, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import markerIconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIconUrl from 'leaflet/dist/images/marker-icon.png';
 import markerShadowUrl from 'leaflet/dist/images/marker-shadow.png';
@@ -11,6 +11,14 @@ import {
   reverseGeocodeLocation,
   type NormalizedLocationData,
 } from '../../services/locationReverseGeocodingService';
+import type { GeoJsonPolygon } from '../../services/haderZoneService';
+
+export type LocationPickerHaderCity = {
+  id: string;
+  name: string;
+  isHaderEnabled: boolean;
+  boundary: GeoJsonPolygon | null;
+};
 
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIconRetinaUrl,
@@ -21,6 +29,12 @@ L.Icon.Default.mergeOptions({
 type LocationPickerMapProps = {
   initialCoordinates?: Coordinates | undefined;
   locationLabel?: string | undefined;
+  haderCity?: LocationPickerHaderCity | null | undefined;
+  validateHaderCoordinates?: (
+    cityId: string,
+    coordinates: Coordinates,
+    signal: AbortSignal,
+  ) => Promise<'WITHIN_HADER_ZONE' | 'OUTSIDE_HADER_ZONE'>;
   onCancel: () => void;
   onConfirm: (location: NormalizedLocationData) => void;
 };
@@ -28,6 +42,8 @@ type LocationPickerMapProps = {
 export function LocationPickerMap({
   initialCoordinates,
   locationLabel,
+  haderCity,
+  validateHaderCoordinates,
   onCancel,
   onConfirm,
 }: LocationPickerMapProps) {
@@ -44,11 +60,62 @@ export function LocationPickerMap({
   const [lookupStatus, setLookupStatus] = useState('');
   const [reverseGeocoding, setReverseGeocoding] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [boundaryStatus, setBoundaryStatus] = useState<
+    'idle' | 'checking' | 'valid' | 'invalid'
+  >('idle');
+  const [boundaryError, setBoundaryError] = useState('');
 
   const center = useMemo<[number, number]>(
     () => [mapCenter.latitude, mapCenter.longitude],
     [mapCenter],
   );
+  const boundaryPositions = useMemo(
+    () =>
+      (haderCity?.boundary?.coordinates[0] ?? []).map(
+        ([longitude, latitude]) => [latitude ?? 0, longitude ?? 0] as [number, number],
+      ),
+    [haderCity?.boundary],
+  );
+
+  useEffect(() => {
+    if (!haderCity?.isHaderEnabled) {
+      setBoundaryStatus('valid');
+      setBoundaryError('');
+      return;
+    }
+    if (!selectedCoordinates) {
+      setBoundaryStatus('idle');
+      setBoundaryError('');
+      return;
+    }
+    if (!validateHaderCoordinates) {
+      setBoundaryStatus('invalid');
+      setBoundaryError('Unable to validate the selected delivery location.');
+      return;
+    }
+
+    const controller = new AbortController();
+    setBoundaryStatus('checking');
+    setBoundaryError('');
+    void validateHaderCoordinates(haderCity.id, selectedCoordinates, controller.signal)
+      .then((status) => {
+        if (status === 'WITHIN_HADER_ZONE') {
+          setBoundaryStatus('valid');
+          setBoundaryError('');
+        } else {
+          setBoundaryStatus('invalid');
+          setBoundaryError(
+            'Please select a delivery location within the selected Hader City boundary.',
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setBoundaryStatus('invalid');
+        setBoundaryError(error instanceof Error ? error.message : 'Unable to validate the selected delivery location.');
+      });
+    return () => controller.abort();
+  }, [haderCity?.id, haderCity?.isHaderEnabled, selectedCoordinates, validateHaderCoordinates]);
 
   useEffect(() => {
     if (!selectedCoordinates || !isValidCoordinates(selectedCoordinates)) {
@@ -191,6 +258,16 @@ export function LocationPickerMap({
               />
               <MapInteractionHandler onSelect={selectCoordinates} />
               <MapCenterSync center={center} zoom={mapConfig.selectedZoom} />
+              <MapBoundarySync
+                positions={boundaryPositions}
+                selectedCoordinates={selectedCoordinates}
+              />
+              {boundaryPositions.length >= 3 && (
+                <Polygon
+                  positions={boundaryPositions}
+                  pathOptions={{ color: '#54247a', fillColor: '#8c4ab2', fillOpacity: 0.14, weight: 2 }}
+                />
+              )}
               {selectedCoordinates && (
                 <Marker
                   draggable
@@ -240,6 +317,12 @@ export function LocationPickerMap({
           </div>
         )}
 
+        {boundaryError && (
+          <div className="border-t border-red-100 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700 sm:px-6">
+            {boundaryError}
+          </div>
+        )}
+
         <div className="flex flex-col-reverse gap-3 border-t border-[#e5dfe5] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
           <button
             type="button"
@@ -251,7 +334,11 @@ export function LocationPickerMap({
           <button
             type="button"
             onClick={() => selectedLocation && onConfirm(selectedLocation)}
-            disabled={!selectedLocation || reverseGeocoding}
+            disabled={
+              !selectedLocation ||
+              reverseGeocoding ||
+              (Boolean(haderCity?.isHaderEnabled) && boundaryStatus !== 'valid')
+            }
             className="rounded-md bg-[#54247a] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#472066] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {reverseGeocoding ? 'Looking up address...' : 'Use This Location'}
@@ -271,6 +358,26 @@ function MapInteractionHandler({ onSelect }: { onSelect: (coordinates: Coordinat
       });
     },
   });
+
+  return null;
+}
+
+function MapBoundarySync({
+  positions,
+  selectedCoordinates,
+}: {
+  positions: [number, number][];
+  selectedCoordinates: Coordinates | null;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (positions.length < 3) return;
+    const visiblePoints = selectedCoordinates
+      ? [...positions, [selectedCoordinates.latitude, selectedCoordinates.longitude] as [number, number]]
+      : positions;
+    map.fitBounds(L.latLngBounds(visiblePoints), { padding: [24, 24] });
+  }, [map, positions, selectedCoordinates]);
 
   return null;
 }

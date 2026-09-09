@@ -1,4 +1,6 @@
 import type { RegistrationData, SubmittedApplication } from '../context/RegistrationContext';
+import type { Coordinates } from '../config/map';
+import type { GeoJsonPolygon } from './haderZoneService';
 
 const apiBaseUrl = import.meta.env.VITE_API_URL ?? '/api/v1';
 
@@ -44,6 +46,8 @@ export class RegistrationServiceError extends Error {
 export interface RegistrationCity {
   id: string;
   name: string;
+  isHaderEnabled: boolean;
+  boundary: GeoJsonPolygon | null;
 }
 
 export const getRegistrationCities = async () => {
@@ -56,6 +60,31 @@ export const getRegistrationCities = async () => {
     throw new RegistrationServiceError('Unable to load the city list.', response.status);
   }
   return data.data.cities;
+};
+
+export const validateRegistrationHaderZone = async (
+  cityId: string,
+  coordinates: Coordinates,
+  signal?: AbortSignal,
+) => {
+  const response = await fetch(`${apiBaseUrl}/registrations/validate-hader-zone`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ cityId, ...coordinates }),
+    ...(signal ? { signal } : {}),
+  });
+  const data = (await response.json().catch(() => ({}))) as {
+    data?: { status?: 'WITHIN_HADER_ZONE' | 'OUTSIDE_HADER_ZONE' };
+    error?: { message?: string };
+    message?: string;
+  };
+  if (!response.ok || !data.data?.status) {
+    throw new RegistrationServiceError(
+      data.error?.message ?? data.message ?? 'Unable to validate the delivery location.',
+      response.status,
+    );
+  }
+  return data.data.status;
 };
 
 const requestRegistration = async (

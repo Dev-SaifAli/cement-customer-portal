@@ -16,6 +16,7 @@ import {
   deleteCustomerLocation,
   getCustomerLocations,
   getCustomerLocationCities,
+  validateCustomerHaderZone,
   setPrimaryCustomerLocation,
   updateCustomerLocation,
   type CustomerLocation,
@@ -29,6 +30,8 @@ type LocationForm = {
   siteId: string;
   streetAddress: string;
   city: string;
+  haderCityId?: string | undefined;
+  validatedHaderCityId?: string | undefined;
   region: string;
   country: string;
   postalCode: string;
@@ -96,6 +99,15 @@ export function CustomerLocations() {
     () => locations.find((location) => location.id === editingId) ?? null,
     [editingId, locations],
   );
+  const selectedCity = useMemo(
+    () =>
+      cities.find((city) => city.id === form.haderCityId) ??
+      cities.find((city) => city.name === form.city) ??
+      null,
+    [cities, form.city, form.haderCityId],
+  );
+  const boundarySelectionValid =
+    !selectedCity?.isHaderEnabled || form.validatedHaderCityId === selectedCity.id;
 
   const loadLocations = async () => {
     setLoading(true);
@@ -134,6 +146,24 @@ export function CustomerLocations() {
     setFormErrors({});
   };
 
+  const updateCity = (value: string) => {
+    const city = cities.find((item) => item.name === value);
+    setForm((current) => ({
+      ...current,
+      city: value,
+      haderCityId: city?.isHaderEnabled ? city.id : undefined,
+      validatedHaderCityId: undefined,
+    }));
+    setFormErrors((current) => ({
+      ...current,
+      city: '',
+      coordinates:
+        city?.isHaderEnabled
+          ? 'Please select a delivery location within the selected Hader City boundary.'
+          : '',
+    }));
+  };
+
   const startEdit = (location: CustomerLocation) => {
     setEditingId(location.id);
     setForm({
@@ -141,6 +171,8 @@ export function CustomerLocations() {
       siteId: location.siteId,
       streetAddress: location.streetAddress,
       city: location.city,
+      haderCityId: location.haderCityId,
+      validatedHaderCityId: undefined,
       region: location.region,
       country: location.country,
       postalCode: location.postalCode,
@@ -174,6 +206,9 @@ export function CustomerLocations() {
     ) {
       next.coordinates = 'Selected map coordinates are invalid.';
     }
+    if (!boundarySelectionValid) {
+      next.coordinates = 'Please select a delivery location within the selected Hader City boundary.';
+    }
 
     setFormErrors(next);
     return Object.keys(next).length === 0;
@@ -198,7 +233,11 @@ export function CustomerLocations() {
       if (saveError instanceof CustomerLocationsApiError && saveError.errors) {
         setFormErrors(saveError.errors);
       }
-      setError('Unable to save delivery location. Please review the form and try again.');
+      setError(
+        saveError instanceof CustomerLocationsApiError
+          ? saveError.message
+          : 'Unable to save delivery location. Please review the form and try again.',
+      );
     } finally {
       setSaving(false);
     }
@@ -245,7 +284,9 @@ export function CustomerLocations() {
     latitude: Number(location.latitude),
     longitude: Number(location.longitude),
     streetAddress: location.street ?? location.formattedAddress ?? current.streetAddress,
-    city: resolveLocationCity(location.city, cityOptions) ?? current.city,
+    city: current.haderCityId
+      ? current.city
+      : resolveLocationCity(location.city, cityOptions) ?? current.city,
     region: location.region ?? current.region,
     country: location.country ?? (current.country || 'Saudi Arabia'),
     postalCode: location.postalCode?.replace(/\D/g, '').slice(0, 5) ?? current.postalCode,
@@ -302,7 +343,7 @@ export function CustomerLocations() {
             error={formErrors.city}
             options={cityOptions}
             placeholder="Select City"
-            onChange={(value) => updateField('city', value)}
+            onChange={updateCity}
             onBlur={() => validateField('city')}
           />
           <SelectInput
@@ -401,7 +442,7 @@ export function CustomerLocations() {
           <button
             type="button"
             onClick={() => void saveLocation()}
-            disabled={saving}
+            disabled={saving || !boundarySelectionValid}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#54247a] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#472066] disabled:opacity-60"
           >
             {!editingId && <Plus size={16} />}
@@ -449,6 +490,8 @@ export function CustomerLocations() {
         <LocationPickerMap
           initialCoordinates={formCoordinates ?? undefined}
           locationLabel={form.name || undefined}
+          haderCity={selectedCity}
+          validateHaderCoordinates={validateCustomerHaderZone}
           onCancel={() => setMapTarget(null)}
           onConfirm={(coordinates) => {
             const latitude = Number(coordinates.latitude);
@@ -469,9 +512,10 @@ export function CustomerLocations() {
               return;
             }
 
-            setForm((current) =>
-              applySelectedLocation(current, { ...coordinates, latitude, longitude }),
-            );
+            setForm((current) => ({
+              ...applySelectedLocation(current, { ...coordinates, latitude, longitude }),
+              validatedHaderCityId: selectedCity?.isHaderEnabled ? selectedCity.id : undefined,
+            }));
             setFormErrors((current) => ({
               ...current,
               coordinates: '',
@@ -490,6 +534,12 @@ export function CustomerLocations() {
         <LocationPickerMap
           initialCoordinates={getCoordinates(mapTarget.location) ?? undefined}
           locationLabel={mapTarget.location.name}
+          haderCity={
+            cities.find((city) => city.id === mapTarget.location.haderCityId) ??
+            cities.find((city) => city.name === mapTarget.location.city) ??
+            null
+          }
+          validateHaderCoordinates={validateCustomerHaderZone}
           onCancel={() => setMapTarget(null)}
           onConfirm={() => setMapTarget(null)}
         />
@@ -787,6 +837,7 @@ function toPayload(form: LocationForm): CustomerLocationPayload {
     name: form.name.trim(),
     streetAddress: form.streetAddress.trim(),
     city: form.city.trim(),
+    haderCityId: form.haderCityId,
     region: form.region.trim(),
     country: form.country.trim(),
     postalCode: form.postalCode.trim(),

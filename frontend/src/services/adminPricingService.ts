@@ -57,6 +57,14 @@ export interface ApprovalSettings {
     value: ListPriceDirectOrderApprovalMode;
     updatedAt: string | null;
   };
+  haderContractOrderCreation: BooleanSetting;
+  dispatchContractOrderCreation: BooleanSetting;
+}
+
+export interface BooleanSetting {
+  key: 'allow_hader_contract_order_creation' | 'allow_dispatch_contract_order_creation';
+  value: boolean;
+  updatedAt: string | null;
 }
 
 interface ApiErrorBody {
@@ -134,6 +142,14 @@ export async function saveListPriceDirectOrderApproval(
     method: 'PUT',
     body: JSON.stringify({ value }),
   });
+  return response.data.setting;
+}
+
+export async function saveContractOrderCreation(actor: 'hader' | 'dispatch', value: boolean) {
+  const response = await request<{ success: boolean; data: { setting: BooleanSetting } }>(
+    `/admin/product-prices/approval-settings/contract-order-creation/${actor}`,
+    { method: 'PUT', body: JSON.stringify({ value }) },
+  );
   return response.data.setting;
 }
 

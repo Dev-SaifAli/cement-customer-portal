@@ -4,6 +4,12 @@ export interface CustomerContractSummary {
   id: string;
   reference: string | null;
   sourceQuotation: { id: string; reference: string | null } | null;
+  sourceDocument: {
+    type: 'DIRECT_ORDER' | 'RFQ';
+    number: string | null;
+    directOrderId: string | null;
+    quotationId: string | null;
+  } | null;
   productCode: string | null;
   productName: string | null;
   packaging: string;
@@ -19,7 +25,10 @@ export interface CustomerContractSummary {
   endDate: string;
   status: 'ACTIVE';
   customerRate: number;
+  palletRequired: boolean;
+  palletType: string | null;
   activatedAt: string | null;
+  orderCount: number;
 }
 
 export interface CustomerContractDetails extends CustomerContractSummary {

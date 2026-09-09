@@ -4,6 +4,7 @@ import type { SalesAuthenticatedRequest } from '../sales-auth/sales-auth.types.j
 import { salesContractsService } from './sales-contracts.service.js';
 import {
   listSalesContractsSchema,
+  rejectSalesContractSchema,
   salesContractExtensionSchema,
   salesContractIdSchema,
   salesContractPayloadSchema,
@@ -49,10 +50,19 @@ export class SalesContractsController {
     response.status(200).json({ success: true, data: { contract } });
   }
 
-  async activate(request: SalesAuthenticatedRequest, response: Response) {
+  async approve(request: SalesAuthenticatedRequest, response: Response) {
     const salesUser = getSalesUser(request);
     const { id } = salesContractIdSchema.parse(request.params);
-    const contract = await salesContractsService.activate(id, salesUser);
+    const contract = await salesContractsService.approve(id, salesUser);
+
+    response.status(200).json({ success: true, data: { contract } });
+  }
+
+  async reject(request: SalesAuthenticatedRequest, response: Response) {
+    const salesUser = getSalesUser(request);
+    const { id } = salesContractIdSchema.parse(request.params);
+    const payload = rejectSalesContractSchema.parse(request.body);
+    const contract = await salesContractsService.reject(id, payload, salesUser);
 
     response.status(200).json({ success: true, data: { contract } });
   }

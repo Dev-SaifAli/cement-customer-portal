@@ -1,6 +1,6 @@
 import { AlertCircle, ArrowRight, Lock, Mail, Settings, ShieldCheck, Users } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import Logo from '../../components/Logo/Logo';
 import { useSalesAuth } from '../../context/SalesAuthContext';
 import { SalesApiError } from '../../services/salesService';
@@ -93,6 +93,7 @@ export function PortalAdminLogin() {
           <form className="space-y-5" onSubmit={handleSubmit}>
             <div><label className="customer-text mb-2 block text-sm font-semibold">Email address</label><div className="relative"><Mail size={18} className="customer-muted absolute left-3.5 top-1/2 -translate-y-1/2"/><input value={email} onChange={(event)=>setEmail(event.target.value)} type="email" autoComplete="email" className="customer-input customer-border customer-text h-12 w-full rounded-xl border pl-11 pr-3 text-sm outline-none transition focus:border-[var(--customer-primary)] focus:ring-4 focus:ring-[#54247a]/10" placeholder="admin@example.com" /></div>{fieldErrors.email && <p className="mt-2 text-xs text-red-600">{fieldErrors.email}</p>}</div>
             <div><label className="customer-text mb-2 block text-sm font-semibold">Password</label><div className="relative"><Lock size={18} className="customer-muted absolute left-3.5 top-1/2 -translate-y-1/2"/><input value={password} onChange={(event)=>setPassword(event.target.value)} type="password" autoComplete="current-password" className="customer-input customer-border customer-text h-12 w-full rounded-xl border pl-11 pr-3 text-sm outline-none transition focus:border-[var(--customer-primary)] focus:ring-4 focus:ring-[#54247a]/10" placeholder="Enter password" /></div>{fieldErrors.password && <p className="mt-2 text-xs text-red-600">{fieldErrors.password}</p>}</div>
+            <div className="flex justify-end"><Link to="/forgot-password" className="customer-primary text-sm font-semibold">Forgot password?</Link></div>
             <button type="submit" disabled={submitting || loading} className="customer-primary-bg flex h-12 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60">{submitting ? 'Signing in...' : 'Sign in'}{!submitting && <ArrowRight size={17}/>}</button>
           </form>
           <p className="customer-muted mt-6 flex items-center justify-center gap-2 text-center text-xs"><ShieldCheck size={14}/>Secure access for authorized administrators</p>

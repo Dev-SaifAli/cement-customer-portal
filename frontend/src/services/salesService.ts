@@ -64,6 +64,7 @@ export interface SalesQuotationDetails {
   };
   submittedBy: string | null;
   requestedDate: string | null;
+  specialPriceRequested: boolean;
   fulfilmentType: 'PICKUP' | 'DELIVERY';
   pricingCity: { id: string; name: string | null } | null;
   destination: {
@@ -151,11 +152,14 @@ export interface SalesContractDetails {
   customerAccountId: string;
   customerCompanyName: string | null;
   status: string;
+  productId: string;
   productCode?: string | null;
   productName?: string | null;
   packaging?: string;
   uom?: string;
   quantity?: number;
+  palletRequired?: boolean;
+  palletType?: string | null;
   startDate: string;
   endDate: string;
   fulfilment: 'PICKUP' | 'DELIVERY';
@@ -168,6 +172,9 @@ export interface SalesContractDetails {
     region: string | null;
   } | null;
   deliveryCity: string | null;
+  haderCity?: string | null;
+  shipToCity?: string | null;
+  orderCount?: number;
   totalQuantityTons: number | null;
   shippedQuantityTons?: number;
   remainingQuantityTons?: number;
@@ -210,6 +217,7 @@ export interface SalesContractDetails {
     action: string;
     reason: string | null;
     changedByName: string | null;
+    changedByRole?: string | null;
     createdAt: string;
   }>;
   salesUserId?: string | null;
@@ -611,11 +619,44 @@ export const getSalesContract = async (id: string) => {
   return response.data.contract;
 };
 
-export const activateSalesContract = async (id: string) => {
+const contractAction = async (id: string, action: string, body?: unknown) => {
   const response = await requestSales<{
     success: boolean;
     data: { contract: SalesContractDetails };
-  }>(`/sales/contracts/${id}/activate`, { method: 'POST' });
+  }>(`/sales/contracts/${id}/${action}`, {
+    method: 'POST',
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  return response.data.contract;
+};
+
+export const submitSalesContract = (id: string) => contractAction(id, 'submit');
+export const approveSalesContract = (id: string) => contractAction(id, 'approve');
+export const rejectSalesContract = (id: string, reason: string) =>
+  contractAction(id, 'reject', { reason });
+
+export interface SalesContractUpdatePayload {
+  customerAccountId: string;
+  productId: string;
+  quantity: number;
+  startDate: string;
+  endDate: string;
+  fulfilment: 'PICKUP' | 'DELIVERY';
+  pickupLocationId?: string;
+  deliveryLocationId?: string;
+  palletRequired: boolean;
+  palletType?: string;
+  productListPrice: number;
+  productPrice: number;
+  deliveryListPrice?: number;
+  deliveryPrice?: number;
+}
+
+export const updateSalesContract = async (id: string, payload: SalesContractUpdatePayload) => {
+  const response = await requestSales<{
+    success: boolean;
+    data: { contract: SalesContractDetails };
+  }>(`/sales/contracts/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
   return response.data.contract;
 };
 

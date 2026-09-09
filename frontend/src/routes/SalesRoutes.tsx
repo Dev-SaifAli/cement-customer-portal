@@ -36,14 +36,16 @@ export function SalesRoutes() {
               <Route path="dashboard" element={<SalesDashboard />} />
               <Route path="applications" element={<SalesApplicationsPage />} />
               <Route path="applications/:id" element={<SalesApplicationDetailsPage />} />
-              <Route path="contracts" element={<SalesContractsPage />} />
-              <Route path="contracts/:id" element={<SalesContractDetailsPage />} />
               <Route path="orders" element={<SalesOrdersPage />} />
               <Route path="orders/:id" element={<SalesOrderDetailsPage />} />
               <Route path="tickets" element={<SalesTicketsPage />} />
               <Route path="tickets/:id" element={<SalesTicketDetailsPage />} />
               <Route path="shipments" element={<HaderShipments audience="sales" />} />
               <Route path="shipments/:id" element={<HaderShipmentDetails audience="sales" />} />
+            </Route>
+            <Route element={<RequireSalesRoles roles={['SALES_REP', 'COMMERCIAL_DIRECTOR']} />}>
+              <Route path="contracts" element={<SalesContractsPage />} />
+              <Route path="contracts/:id" element={<SalesContractDetailsPage />} />
             </Route>
             <Route
               element={

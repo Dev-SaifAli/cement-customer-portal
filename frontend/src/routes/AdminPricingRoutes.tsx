@@ -111,7 +111,6 @@ function RequireInternalAdmin() {
       'PRICING_ADMIN',
       'HADER_MANAGER',
       'HADER_OPERATIONS',
-      'DISPATCH_USER',
       'LOADING_USER',
     ].includes(user.role)
   ) {

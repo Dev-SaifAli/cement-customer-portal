@@ -106,10 +106,20 @@ export class AdminPricingService {
   }
 
   async getApprovalSettings() {
+    const [listPriceDirectOrderApproval, haderContractOrderCreation, dispatchContractOrderCreation] = await Promise.all([
+      applicationSettingsService.getListPriceDirectOrderApprovalSetting(),
+      applicationSettingsService.getContractOrderCreationSetting('hader'),
+      applicationSettingsService.getContractOrderCreationSetting('dispatch'),
+    ]);
     return {
-      listPriceDirectOrderApproval:
-        await applicationSettingsService.getListPriceDirectOrderApprovalSetting(),
+      listPriceDirectOrderApproval,
+      haderContractOrderCreation,
+      dispatchContractOrderCreation,
     };
+  }
+
+  async setContractOrderCreation(actor: 'hader' | 'dispatch', value: boolean, user: SalesUser) {
+    return applicationSettingsService.setContractOrderCreationAllowed(actor, value, user.id);
   }
 
   async upsertProductPrice(productId: string, input: UpsertProductPrice, user: SalesUser) {

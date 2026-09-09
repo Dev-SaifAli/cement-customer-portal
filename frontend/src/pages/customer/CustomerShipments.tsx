@@ -17,6 +17,7 @@ const statuses: CustomerShipmentStatus[] = [
   'IN_TRANSIT',
   'DELIVERED',
   'CLOSED',
+  'CANCELLED',
 ];
 
 export function CustomerShipments() {
@@ -301,6 +302,7 @@ export function ShipmentStatus({ value }: { value: CustomerShipmentStatus }) {
     IN_TRANSIT: 'bg-cyan-500',
     DELIVERED: 'bg-emerald-500',
     CLOSED: 'bg-slate-500',
+    CANCELLED: 'bg-red-500',
   };
   return (
     <span className="customer-text inline-flex items-center gap-2 whitespace-nowrap text-xs font-semibold">

@@ -39,6 +39,7 @@ export function SalesLayout() {
       label: 'Ship-to Variance Approvals',
       icon: <MapPinned size={18} />,
     });
+    items.push({ to: '/sales/contracts', label: 'Contract Approvals', icon: <BriefcaseBusiness size={18} /> });
   }
   if (user?.role === 'SALES_REP') {
     items.push(
